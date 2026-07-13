@@ -116,21 +116,48 @@ fenêtre de grâce réseau, révocable serveur), **pour le web COMME pour le mob
 serveur et « couper toutes les sessions du compte » existent dès la V1. Un jeton
 auto-suffisant longue durée non révocable (le trou F8 de Scolaria) = **plan REFUSÉ**.
 
-### 3.7 Le cœur reste générique — test de commit
-Aucune colonne, aucun type, aucun identifiant ne porte un concept d'une verticale.
+### 3.7 Le cœur reste générique — garde CI bloquante (motifs contractuels)
+Aucune colonne, aucun type, aucun identifiant ne porte un concept d'une verticale. La règle ne
+dépend de la vigilance de personne : elle est une **garde CI bloquante dès le premier commit**
+(sur Payment-Core, la même garde a déjà bloqué l'Exécuteur ET l'Auditeur).
+
+**Motif A — périmètre `db/ src/ scripts/`, sensible à la casse :**
 ```
-grep -rE "student|pupil|teacher|school|class|academic|patient|doctor|clinic|property|tenant|order|cart" db/ src/
+git grep -rnE "student|pupil|teacher|school|academic|patient|doctor|clinic|property|tenant|order|cart|enrollment|classroom|classId|class_id|\bfee\b|\bfees\b" -- db/ src/ scripts/
 ```
-doit retourner **zéro ligne** hors exemples `metadata`. **Garde CI bloquante dès le premier
-commit** (elle a déjà bloqué l'Exécuteur ET l'Auditeur sur Payment-Core — une règle qui ne
-dépend de la vigilance de personne). Les rôles sont transverses (`ACCOUNT_HOLDER`,
-`PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où User-Core sait ce qu'est un enseignant, il
-est mort.
+**Motif B — le terme `class` seul, périmètre `db/` UNIQUEMENT :**
+```
+git grep -rnE "(^|[^_])class" -- db/
+```
+Les deux doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
+
+⚠️ **Pourquoi deux motifs, et pourquoi `class` est exclu de `src/`** (vérifié matériellement,
+14/07/2026) : `class` est un **mot-clé du langage**. Sur `payment-core/src`, le motif nu `class`
+matche **18 fichiers** (`export class AppModule`, `export class CryptoConfigError`…) — la garde
+échouerait sur le premier commit NestJS et serait désarmée dans la semaine. Le schéma vit dans
+`db/` : c'est là que « classe scolaire » doit être **non représentable**, et le SQL n'a pas de
+mot-clé `class`. Le préfixe `[^_]` laisse passer `pg_class` (catalogue Postgres), jamais
+`class_id`.
+
+**Deux contraintes que cette garde impose au code** (elles se paient une fois, elles ne se
+discutent pas) : les mots-clés SQL s'écrivent en **MAJUSCULES** (`ORDER BY`, jamais `order by`
+— la garde est sensible à la casse) et aucun identifiant `orderBy` n'entre dans `src/`.
+`tests/` est **hors périmètre** : les tests d'invariants doivent pouvoir interroger
+`pg_catalog` / `pg_class`, et ils ne définissent aucun schéma.
+
+Les rôles sont transverses (`ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où
+User-Core sait ce qu'est un enseignant, il est mort.
 
 ### 3.8 Le catalogue n'est PAS un moteur d'abonnement
 User-Core enregistre le **droit d'accès** (activé/désactivé, historisé). Prix, échéances,
 relances, suspension pour impayé : **ailleurs** (Payment-Core + futur module de facturation).
 Une colonne `price`, `billing_cycle`, `next_renewal` dans le catalogue = **plan REFUSÉ**.
+
+Comme en §3.7, la règle est **gravée en CI** (patron `garde-wallet` de Payment-Core) —
+périmètre `db/ src/ scripts/`, insensible à la casse, zéro ligne attendue :
+```
+git grep -rniE "price|billing_cycle|next_renewal|subscription|invoice|\bamount\b|currency" -- db/ src/ scripts/
+```
 
 ### 3.9 Exactement trois coutures réversibles
 1. **`AuthenticationProvider`** — le maison derrière, une brique branchable plus tard.
