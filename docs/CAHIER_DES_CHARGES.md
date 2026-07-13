@@ -1,0 +1,279 @@
+# User-Core — Cahier des charges (V1.0)
+
+> **Statut : socle fondateur, rédigé AVANT toute ligne de code** — comme pour Payment-Core,
+> et pour la même raison : c'est le document qui empêche le service de devenir « le backend
+> de la superApp ». Rédigé le 13/07/2026, sur la base de l'inventaire Scolaria
+> (`main` = `cce7e712`, production mesurée le 13/07/2026) **vérifié matériellement**
+> (6 faits contre-vérifiés fichier:ligne, zéro divergence).
+
+---
+
+## 1. Identité et raison d'être
+
+**User-Core est l'infrastructure de compte et d'identité de l'écosystème** (Scolaria, Mediyo,
+CheYo, Zando). **Scolaria en est le premier client, pas l'unique raison.** Ce n'est PAS un
+module de Scolaria.
+
+**Le point qui décide de tout** : l'actif business de l'écosystème, ce sont les **COMPTES
+PARENTS** — pas Scolaria. La cible est une **superApp** familiale : un catalogue de programmes
+qu'une famille active ou désactive. L'enfant finit l'école : Scolaria ne sert plus. **Le compte
+parent, lui, reste** — et il sert Mediyo, CheYo, le reste.
+
+User-Core possède donc **trois choses, et trois seulement** :
+1. **Le compte** : identité du titulaire, identifiants, secrets, session, MFA, récupération.
+2. **Le numéro de téléphone** de l'écosystème : **chiffré, vérifié UNE fois** (preuve de
+   possession de ligne), avec sa doctrine du numéro recyclé.
+3. **Le catalogue des programmes** activés/désactivés par compte (le cœur de la superApp) —
+   un **droit d'accès**, jamais un abonnement.
+
+**Ce qu'il ne saura jamais** : ce qu'un compte *fait* dans un programme. Il sait que le compte
+existe et que Scolaria est activé ; il ne sait pas qu'il y a un élève, une classe, une facture.
+
+### Un cœur est d'abord une FRONTIÈRE, pas un déploiement
+Six cœurs sont nommés dans l'écosystème ; **un seul est construit** (Payment-Core). User-Core
+est le deuxième. La protection ne vient pas d'avoir six serveurs : elle vient de ce que **le
+cœur ne connaît jamais son fournisseur ni ses consommateurs**. On extrait un composant quand
+une **métrique** le réclame, jamais par anticipation.
+
+### Stack (V1 — sobre, patron Payment-Core)
+- **1 service NestJS + TypeScript** · **PostgreSQL** (unique source de vérité) ·
+  **transactional outbox** (pas de broker) · Sentry · secrets hors du code (Vault/Infisical).
+- **Interdits en V1 sans qu'une métrique les réclame** : RabbitMQ/Kafka, Kubernetes,
+  read replicas, tout langage supplémentaire, et toute « flexibilité au cas où ».
+
+---
+
+## 2. La frontière (décision D1 — tranchée le 13/07/2026)
+
+**Règle de test, à appliquer à chaque cas douteux :**
+> *« Cette donnée a-t-elle encore un sens si l'enfant a fini ses études et que la famille
+> n'utilise plus que Mediyo ? »* — **Oui → User-Core. Non → elle reste dans le programme.**
+
+| ✅ User-Core POSSÈDE | ❌ N'entre JAMAIS |
+|---|---|
+| Le compte : identité du titulaire, identifiants, secrets | L'élève, la classe, l'école, l'année scolaire → **Scolaria** |
+| **Le téléphone (chiffré), vérifié UNE fois** + doctrine du recyclage | Le lien payeur ↔ bénéficiaire du paiement → **Payment-Core** |
+| La session, le MFA, la récupération de compte | Les frais, factures, imputations → **Scolaria Finance** |
+| **Le catalogue des programmes activés/désactivés** | Les écritures comptables → **Accounting-Core** |
+| Les rôles **transverses** (titulaire, staff plateforme, admin plateforme) | Les rôles **métier** (enseignant, directeur, comptable, médecin) |
+| Le profil de base (nom, langue, préférences) | L'envoi effectif SMS/WhatsApp/push → **dispatcher** |
+| *(v2)* Les **personnes / ayants droit** du foyer | Les conversations → **Plume** · le rendu de documents → **Document-Core** |
+
+### 2.1 Le cas des enfants — tranché, mais séquencé
+La personne est transverse (l'enfant devient patient chez Mediyo) ; le rôle « élève » reste
+chez Scolaria et pointe vers elle. **MAIS extraire les personnes oblige à casser l'`élève` de
+Scolaria en deux** (une personne + une scolarité) — chantier lourd. Séquence **imposée** :
+- **User-Core v1** : compte, identifiants, session, numéro vérifié, catalogue des programmes.
+- **User-Core v2** : les personnes / ayants droit. **Avant Mediyo, jamais après.**
+
+### 2.2 Deux pièges de frontière, nommés d'avance
+1. **Le catalogue de programmes ne devient JAMAIS un moteur d'abonnement.** User-Core dit
+   « activé / désactivé ». Si un programme est payant, le paiement vit dans **Payment-Core** ;
+   le recouvrement (relances, suspension pour impayé) vivra dans un module de facturation —
+   ni ici, ni dans le cœur de paiement. User-Core n'enregistre que le **droit d'accès**.
+2. **Seuls les rôles transverses entrent.** *Le jour où User-Core sait ce qu'est un enseignant,
+   il sait ce qu'est une école — et il est mort.* Une garde CI (grep des termes de verticales)
+   le rend non-négociable (cf. CLAUDE.md).
+
+### 2.3 Frontière avec Payment-Core — le cloisonnement reste inviolable
+Un parent qui paie via Scolaria **et** Mediyo restera **deux fiches payeur distinctes** dans
+Payment-Core (une par application). **Le lien « c'est la même personne » vit dans User-Core et
+n'en sort jamais.** On ne « globalise » jamais le payeur dans Payment-Core : c'est ce qui
+garantit que Mediyo ne peut rien voir des paiements Scolaria.
+
+### 2.4 Frontière avec Verification-Core
+La **preuve** (possession de ligne, email, KYC, compte bancaire) est un domaine à part entière,
+avec sa trace auditable — c'est ce que demandera le régulateur. En V1, la vérification de ligne
+vit **derrière une interface** (`LineOwnershipProver`) dans le service User-Core, **comme un
+module frontière** : le jour où un deuxième consommateur arrive (Payment-Core pour le KYC
+d'une école), elle s'extrait sans réécriture. Le cœur ne connaît jamais le fournisseur d'OTP.
+
+### 2.5 Le dispatcher d'envoi — plomberie, pas cœur, et ZÉRO cycle
+L'envoi brut (« ce contenu, à cette adresse, par ce canal ») **ne connaît aucune identité** et
+**ne dépend de personne**. Règle de dépendance inviolable :
+`Dispatcher ← Verification ← User-Core` · `Dispatcher ← Plume ← User-Core` · **zéro cycle.**
+Si l'envoi vivait dans Plume (qui a besoin de User-Core) et que User-Core devait envoyer un
+code : cycle, plus rien ne démarre seul. En V1 le dispatcher peut vivre comme simple module ;
+son interface est posée **dès le premier jour**.
+
+---
+
+## 3. Construire ou adopter ? (décision D2 — tranchée le 13/07/2026)
+
+**Décision : CONSTRUIRE MINCE, DERRIÈRE UNE COUTURE `AuthenticationProvider` — et ne pas faire
+de ce choix une porte à sens unique.** Cinq raisons, toutes vérifiées matériellement sur le
+code Scolaria (`cce7e712`) :
+
+1. **Il n'y a rien à débrancher ni à migrer.** Auth 100 % maison (`@nestjs/jwt` + `argon2`,
+   9 points de signature vérifiés dans `auth.service.ts`), production quasi vide (~13 lignes
+   d'identité au 13/07/2026). Le coût des deux options est aujourd'hui presque nul : **le choix
+   n'est pas urgent, la COUTURE l'est.**
+2. **Le modèle d'identité est exotique** : identifiant opaque à 10 chiffres (ni email, ni
+   téléphone — vérifié `auth.resolver.ts:31/40/78`), téléphone en alias secondaire. Les briques
+   du marché sont pensées email/mot de passe/social : les tordre est un combat permanent.
+3. **Le filtre qui élimine presque tout le marché** : le numéro de téléphone ne doit **JAMAIS**
+   être stocké en clair (discipline Payment-Core). La plupart des briques d'identité le
+   stockent en clair — c'est leur fonctionnement normal. Seule une brique acceptant un magasin
+   d'utilisateurs branchable / un identifiant opaque resterait candidate.
+4. **Le bon patron existe déjà** dans Scolaria : le trio mobile a des sessions **avec état, en
+   rotation, avec détection de rejeu (`jti`), fenêtre de grâce 3G, révocables** (vérifié :
+   3 tables credentials + migration `20260712150000_refresh_rotation_grace`). Il suffit de
+   l'appliquer **aussi au web** — ce qui ferme le trou de sécurité F8.
+5. **Ce qu'aucune brique ne donnera, c'est le produit** : la preuve de possession de ligne
+   (appel manqué/SMS), le catalogue de programmes, la doctrine du numéro recyclé.
+
+**Garde-fous de la décision :**
+- ⚠️ **« Construire mince » ≠ « écrire sa propre cryptographie ».** Bibliothèques éprouvées
+  (`argon2`, HMAC/AES du runtime Node) — **jamais** de crypto maison.
+- **Ce qui ferait tomber la décision** (à constater, pas à supposer) : une équipe qui ne tient
+  pas la discipline crypto/session, ou une surface « ennuyeuse » (gestion des appareils,
+  verrouillage, récupération, audit) qui explose. La couture rend alors la bascule vers une
+  brique possible **sans réécrire les consommateurs**.
+
+---
+
+## 4. Le modèle de compte (V1)
+
+- **Un compte = une personne titulaire, unique au niveau de l'écosystème.** Jamais « un compte
+  par programme » ni « un compte par école » — c'est précisément le défaut de Scolaria
+  (`Parent.schoolId` obligatoire) qu'on ne reconduit pas.
+- **Identifiant de connexion** : identifiant opaque (généré), avec **alias téléphone vérifié**
+  optionnel. L'email est un alias possible, jamais une obligation (le terrain RDC est
+  téléphone-d'abord).
+- **Un compte peut exister, naviguer, discuter SANS numéro vérifié** (vérification paresseuse,
+  cf. §6.3). Le numéro vérifié n'est requis qu'au moment où le compte veut **payer**.
+- **Le compte porte le catalogue** : `(account_id, program, status, granted_at, revoked_at…)`,
+  historisé, jamais supprimé physiquement.
+- **Rôles transverses uniquement** : `ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`.
+  Tout rôle qui nomme un métier d'une verticale est refusé à la conception.
+
+## 5. Sessions et secrets (V1)
+
+- **Un seul patron de session pour tout le monde** (web ET mobile) : jeton d'accès court +
+  **jeton de rafraîchissement avec état** (stocké haché, rotation à chaque usage, détection de
+  rejeu, fenêtre de grâce réseau, **révocable serveur**). Le patron asymétrique de Scolaria
+  (web auto-suffisant 30 jours, non révocable — trou F8) **n'entre pas** dans User-Core.
+- **`logout` serveur obligatoire** dès la V1, et une opération « couper toutes les sessions
+  d'un compte » (vol de poste, départ d'un staff).
+- Secrets : `argon2id`. Verrouillage progressif sur échecs. Mots de passe provisoires à
+  expiration (patron Scolaria conservé).
+- **Jamais de code OTP à la connexion de routine** (règle économique ET produit, cf. §6.4).
+  Le code sert à l'**amorçage** (première vérification du numéro) et à la **récupération**.
+
+## 6. Le téléphone et la preuve de possession de ligne
+
+### 6.1 Stockage — jamais en clair (patron Payment-Core, décidé maintenant)
+- **Empreinte HMAC déterministe** (clé dédiée) : indexée, sert la recherche d'unicité et la
+  limitation de débit. **Valeur chiffrée AES-256-GCM** (`key_id` porté par le jeton de
+  chiffrement, trousseau rotatif) pour l'affichage masqué et l'envoi.
+- ⚠️ **La clé HMAC a un cycle de vie DISTINCT du trousseau de chiffrement** : la tourner
+  oblige à déchiffrer et re-hacher toute la PII. Décision posée **avant** la première ligne :
+  clé HMAC versionnée (`hmac_key_id` en colonne), rotation = procédure exceptionnelle
+  documentée, jamais un réflexe.
+
+### 6.2 Deux besoins que tout le monde confond — la doctrine
+| | Ce qu'on veut savoir | Ce qui le prouve |
+|---|---|---|
+| **Joignabilité** | « Peut-on lui faire parvenir un message ? » | WhatsApp, push, email, SMS |
+| **🔒 Possession de la LIGNE** | « La SIM est-elle dans SON téléphone ? Sera-t-elle débitée ? » | **UNIQUEMENT SMS ou APPEL** |
+
+> **Une app ne prouvera jamais la possession d'une ligne. Seul le réseau de l'opérateur le
+> peut.** Un compte WhatsApp survit à la carte SIM (résiliée, voire réattribuée à un inconnu).
+> Or c'est la SIM qui reçoit la demande de paiement et qui est débitée. **WhatsApp est écarté
+> comme preuve de possession** — il reste le canal préféré pour *parler* aux gens.
+
+**Échelle de vérification** : 🥇 **appel manqué** (*flash call* — transite par la SIM, marche
+sur tout téléphone, imparable au guichet : le parent voit son propre téléphone sonner) ·
+🥈 **SMS** (repli rationné et plafonné) · ❌ WhatsApp (jamais pour cet usage) ·
+🔭 `Silent Network Authentication` / GSMA Open Gateway : la preuve la plus forte **si** les
+opérateurs RDC y participent — à vérifier, jamais à présumer.
+
+### 6.3 Vérification PARESSEUSE — le coût suit le revenu
+On vérifie le numéro **au premier paiement**, pas à l'inscription. Payment-Core exige déjà un
+numéro vérifié avant tout push : la contrainte existe, il suffit de ne pas la déclencher trop
+tôt. **Le coût des canaux devient proportionnel au nombre de PAYEURS, pas à la base.**
+
+### 6.4 L'économie des canaux (tarifs RDC, source Kevin, à re-valider par contrat)
+SMS ≈ 0,25 $ · WhatsApp entreprise-initie ≈ 0,009 $ · utilisateur-initie ≈ 0 $ · flash call :
+**prix à obtenir — c'est LE chiffre manquant**. Calcul posé (école à 500 $/an, 500 parents) :
+vérification par SMS = 175 $ = **35 % du revenu de l'école** ; code SMS à chaque connexion =
+3 000 $/an = **perte nette**. D'où les trois règles gravées : SMS = secours plafonné · jamais
+de code au login de routine · vérification paresseuse.
+
+### 6.5 Le numéro recyclé — la possession est EXCLUSIVE et au PRÉSENT
+Une preuve **fraîche** révoque d'office la revendication antérieure : deux personnes ne
+détiennent pas la même SIM au même instant, **la preuve la plus récente gagne, toujours**.
+Garde-fous : l'ancien détenteur est prévenu par un **autre** canal · la reprise est **tracée
+append-only** · aucune suppression. Risque résiduel assumé : le vol de SIM — on le détecte et
+on le ralentit (délais, plafonds), on ne l'élimine pas.
+
+### 6.6 Ce que le dispatcher doit porter (exigences de conception)
+Coût de chaque canal **en config** · escalade du moins cher au plus cher, arrêt dès délivrance ·
+**plafonds durs** (par type, par jour, global) avec refus d'envoyer + alerte au-delà ·
+**journalisation du coût** de chaque message payant (Accounting-Core en aura besoin).
+Un bug de boucle ne doit pas pouvoir coûter 10 000 $ dans la nuit.
+
+---
+
+## 7. Les invariants gravés dans PostgreSQL (patron Payment-Core)
+
+Un agent contourne une convention de code, jamais une contrainte Postgres sans laisser une
+migration signée. Sont **gravés en base** dès les premières migrations :
+- **Unicité mondiale de l'empreinte du numéro vérifié** : au plus UNE revendication ACTIVE par
+  ligne (index unique partiel sur `phone_hmac WHERE status = 'ACTIVE'`).
+- **Preuves de possession append-only** (trigger + `REVOKE UPDATE, DELETE` du rôle applicatif) ;
+  la révocation est une **nouvelle ligne**, jamais une mise à jour destructive.
+- **Historique du catalogue append-only** : l'activation/désactivation d'un programme est une
+  ligne datée, jamais un UPDATE d'écrasement.
+- **Le niveau de preuve ne descend jamais** (contrainte de transition, patron
+  `assurance_level` de Payment-Core).
+- **Jetons de rafraîchissement hachés** en base (jamais la valeur), avec unicité de `jti`.
+- **Aucun terme de verticale** dans le schéma — garde CI bloquante (condition de commit).
+
+## 8. Extraction depuis Scolaria — la méthode
+
+1. **Re-mesurer la production** avant la première étape qui touche aux données (le comptage du
+   13/07/2026 — ~13 lignes — est périssable ; chaque famille inscrite rapproche le chantier
+   d'une migration de PII, un ordre de grandeur plus cher).
+2. **Jamais de big bang** : extraction progressive, réversible à chaque étape ; Scolaria
+   consomme User-Core via une **API publique versionnée**, comme un client externe — aucun
+   accès privilégié, sinon l'abstraction multi-verticale meurt à la naissance.
+3. **Réconcilier les deux populations de parents** (chemin complet vs chemin d'inscription réel
+   sans compte ombre/alias/garde — défaut F5 vérifié) : la réconciliation est une étape du
+   plan, pas une surprise.
+4. **Le gel Scolaria reste en vigueur** jusqu'à la bascule : aucun ajout sur comptes, auth,
+   sessions, profils, vérification — corriger un bug : oui ; ajouter : non.
+5. Les ~10 back-relations scolaires de `User` (présences, discipline…) **restent chez
+   Scolaria** et pointeront vers une identité devenue externe — c'est LE point de conception
+   de l'extraction (v1 : Scolaria garde une table locale de correspondance).
+
+## 9. Les inconnues à obtenir — jamais à inventer
+
+| # | Inconnue | Qui la porte |
+|---|---|---|
+| 1 | Prix d'un flash call vers un mobile congolais + acceptation du trafic par les opérateurs | Kevin (terrain/contrat) |
+| 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
+| 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
+| 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
+
+**Un agent qui code une valeur « supposée » sur l'un de ces points = plan BLOQUÉ.** On
+paramètre (config/env), on ne fige pas une hypothèse.
+
+## 10. Décisions verrouillées (ne pas rouvrir sans Kevin)
+
+1. L'actif = les comptes parents ; User-Core survit aux programmes ; jamais « backend de la
+   superApp ».
+2. Frontière D1 (§2), séquence v1 → v2 (personnes avant Mediyo).
+3. D2 : construire mince derrière `AuthenticationProvider` ; bascule vers une brique possible,
+   jamais obligatoire ; zéro crypto maison.
+4. Téléphone : jamais en clair (HMAC + AES-256-GCM), cycle de vie HMAC distinct, décidé en V1.
+5. Possession de ligne : uniquement SMS/appel ; WhatsApp jamais ; preuve fraîche révoque
+   l'ancienne ; vérification paresseuse au premier paiement.
+6. Jamais de code OTP à la connexion de routine.
+7. Un seul patron de session (état + rotation + révocation), web et mobile.
+8. Catalogue = droit d'accès, jamais un moteur d'abonnement.
+9. Dispatcher sans dépendance ; zéro cycle entre cœurs.
+10. Le lien inter-programmes d'une personne vit dans User-Core et n'en sort jamais (pas de
+    payeur global dans Payment-Core).
+11. PostgreSQL unique source de vérité ; outbox, pas de broker ; invariants en base.
+12. Français pour docs + commits ; identifiants de code en anglais.
