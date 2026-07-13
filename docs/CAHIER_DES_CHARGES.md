@@ -232,9 +232,16 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 
 ## 8. Extraction depuis Scolaria — la méthode
 
-1. **Re-mesurer la production** avant la première étape qui touche aux données (le comptage du
-   13/07/2026 — ~13 lignes — est périssable ; chaque famille inscrite rapproche le chantier
-   d'une migration de PII, un ordre de grandeur plus cher).
+1. **Comptage pré-vol** (2 minutes, agrégats seuls) avant la première étape qui touche aux
+   données réelles. Le comptage du 13/07/2026 — ~13 lignes — est **périssable** : chaque famille
+   inscrite rapproche le chantier d'une migration de PII, un ordre de grandeur plus cher.
+   **Kevin a gelé les ajouts en production le 14/07/2026** (aucun recrutement d'ici la bascule)
+   — le pré-vol n'est donc **pas** une renégociation de calendrier, c'est une **vérification**.
+   Il reste obligatoire pour une raison qui ne dépend pas du recrutement : **une ligne
+   d'identité peut apparaître sans qu'aucune famille ne s'inscrive** — script de rattrapage
+   (précédent réel : `backfill-parent-user.ts`, exécuté en production le 04/07/2026), démo,
+   compte créé à la main, test joué sur la vraie base. **On ne re-mesure pas parce qu'on doute
+   de la parole : on re-mesure parce qu'un script ne demande la permission à personne.**
 2. **Jamais de big bang** : extraction progressive, réversible à chaque étape ; Scolaria
    consomme User-Core via une **API publique versionnée**, comme un client externe — aucun
    accès privilégié, sinon l'abstraction multi-verticale meurt à la naissance.
