@@ -24,6 +24,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
     expect(rows.rows.map((r) => r.version)).toEqual([
       '001_app_role.sql',
       '002_accounts.sql',
+      '003_account_secrets.sql',
     ]);
   });
 
