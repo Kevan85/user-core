@@ -4,7 +4,7 @@
 -- DOCTRINE (CDC §6.2, non négociable) : seule la SIM prouve la possession.
 -- Le canal est un ENUM à DEUX valeurs — 'SMS' et 'CALL'. WhatsApp n'est pas
 -- « interdit par une règle qu'on répète » : il est NON REPRÉSENTABLE. Un
--- compte WhatsApp survit à la carte SIM (résiliée, réattribuée à un inconnu),
+-- compte WhatsApp survit à la SIM elle-même (résiliée, réattribuée à un inconnu),
 -- et c'est la SIM qui recevra la demande de paiement et sera débitée.
 --
 -- CE QUE LE SERVICE NE PEUT PAS FAIRE, PAR CONSTRUCTION :
