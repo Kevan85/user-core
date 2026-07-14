@@ -65,6 +65,11 @@ CREATE TABLE session_refresh_tokens (
   expires_at     timestamptz NOT NULL,
   created_at     timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT uq_session_refresh_tokens_jti UNIQUE (jti),
+  -- C11 : deux jetons de même valeur sont NON REPRÉSENTABLES. Sans cette
+  -- contrainte, lookup_refresh_token (SELECT INTO non-STRICT) rendrait son
+  -- verdict sur une ligne arbitraire — le jeton révoqué de la session A
+  -- pourrait recevoir le verdict USABLE de la session B.
+  CONSTRAINT uq_srt_token_hash UNIQUE (token_hash),
   CONSTRAINT chk_srt_expires_future CHECK (expires_at > created_at),
   -- Une rotation porte TOUJOURS son horodatage et sa fenêtre de grâce.
   CONSTRAINT chk_srt_rotated_fields
@@ -83,8 +88,8 @@ CREATE UNIQUE INDEX uq_session_refresh_tokens_active
   ON session_refresh_tokens (session_id) WHERE status = 'ACTIVE';
 
 CREATE INDEX idx_srt_session ON session_refresh_tokens (session_id);
--- Le service retrouve un jeton par le hash de la valeur présentée.
-CREATE INDEX idx_srt_token_hash ON session_refresh_tokens (token_hash);
+-- La recherche par hash passe par l'index de la contrainte uq_srt_token_hash
+-- (C11) : pas d'index dédié redondant.
 
 -- -----------------------------------------------------------------------------
 -- sessions : identité immuable, révocation horodatée par la base, ligne

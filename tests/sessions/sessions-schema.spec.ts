@@ -391,6 +391,24 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
     expect(v.account_id).toBeNull();
   });
 
+  test('C11 — deux jetons de même token_hash (sessions différentes) → refus (unicité)', async () => {
+    const s1 = await createSession(await createAccount());
+    const s2 = await createSession(await createAccount());
+    const hash = `hash_${randomUUID()}`;
+    await app.query(
+      `INSERT INTO session_refresh_tokens (session_id, jti, token_hash, expires_at)
+       VALUES ($1, $2, $3, now() + interval '7 days')`,
+      [s1, randomUUID(), hash],
+    );
+    await expect(
+      app.query(
+        `INSERT INTO session_refresh_tokens (session_id, jti, token_hash, expires_at)
+         VALUES ($1, $2, $3, now() + interval '7 days')`,
+        [s2, randomUUID(), hash],
+      ),
+    ).rejects.toThrow(/uq_srt_token_hash/);
+  });
+
   test('C10-b — un jeton dont l\'échéance dépasse celle de sa session → refus à la naissance', async () => {
     const sessionId = await createSession(await createAccount(), "interval '30 days'");
     await expect(
