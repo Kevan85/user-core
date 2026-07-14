@@ -1,11 +1,11 @@
 import { Pool } from 'pg';
-import { decrypt } from '../crypto/aes-gcm';
 import type { CryptoAssembly } from '../crypto/keyring';
 import {
   OutboundFailed,
   type OutboundChannel,
   type OutboundDispatcher,
 } from '../dispatch/outbound-dispatcher';
+import { resolveVerifiedAddress } from '../phone/verified-address';
 
 export interface PublisherConfig {
   batchSize: number;
@@ -153,25 +153,18 @@ export class OutboxPublisher {
     return result.rows[0] ?? { allowed_channels: [], in_account: false };
   }
 
+  // Le publisher NE DÉCHIFFRE PAS lui-même (F4) : il passe par LE point unique
+  // de déchiffrement, qui re-dérive l'empreinte et refuse toute divergence.
+  // Une première version de ce fichier déchiffrait en direct — et avait
+  // « oublié » la re-dérivation. La faute se reproduit toute seule : elle doit
+  // être rendue impossible, pas surveillée.
   private async resolveAddress(claimId: string | null): Promise<string | null> {
     if (claimId === null) {
       return null;
     }
-    // La base REFUSE de résoudre une revendication non ACTIVE : l'événement de
-    // reprise de ligne porte justement la revendication révoquée.
-    const result = await this.pool.query<{ token: string | null }>(
-      'SELECT resolve_notification_address($1) AS token',
-      [claimId],
-    );
-    const token = result.rows[0]?.token ?? null;
-    if (token === null) {
-      return null;
-    }
-    try {
-      return decrypt(this.crypto.encryption, token);
-    } catch {
-      return null; // clé absente, jeton altéré : on n'envoie rien.
-    }
+    // requireActive : une ligne reprise n'a PLUS d'adresse — jamais.
+    const resolution = await resolveVerifiedAddress(this.pool, this.crypto, claimId, true);
+    return resolution.outcome === 'RESOLVED' ? resolution.phone : null;
   }
 
   private async failAttempt(event: OutboxRow, code: string): Promise<string> {

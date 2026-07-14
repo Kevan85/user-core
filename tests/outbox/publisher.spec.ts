@@ -273,6 +273,49 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
     expect(row.status).toBe('PENDING'); // il sera retenté, pas oublié
   });
 
+  test('F4/P4 — revendication piégée + canal externe : ZÉRO appel au dispatcher', async () => {
+    // La revendication ment : l'empreinte de la ligne A, la valeur chiffrée du
+    // numéro B. La base ne peut PAS le voir (elle n'a pas les clés). Sans la
+    // re-dérivation, le publisher enverrait un message de l'écosystème au
+    // numéro B — chez un inconnu.
+    const accountId = await newAccount();
+    const { encrypt } = await import('../../src/crypto/aes-gcm');
+    const { fingerprintOf } = await import('../../src/crypto/fingerprint');
+    const lineA = fingerprintOf(crypto.fingerprint, '+243867777777');
+    const claimId = firstRow(
+      await owner.query<{ id: string }>(
+        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted,
+                                   enc_key_id, status, assurance_level, verified_at)
+         VALUES ($1, $2, $3, $4, 'E1', 'ACTIVE', 'PROVEN', now()) RETURNING id`,
+        [accountId, lineA.value, lineA.hmacKeyId, encrypt(crypto.encryption, '+243868888888')],
+      ),
+    ).id;
+
+    // Un événement à canal EXTERNE : le chemin est armé.
+    await owner.query(
+      `INSERT INTO event_channel_policy (event_type, allowed_channels, in_account, note)
+       VALUES ('TEST_TRAP', '{SMS}', false, 'test')`,
+    );
+    await owner.query(
+      "INSERT INTO outbox (event_type, account_id, claim_id) VALUES ('TEST_TRAP', $1, $2)",
+      [accountId, claimId],
+    );
+
+    const report = await publisher.drain();
+
+    // LE POINT : rien n'est parti. Ni au numéro A, ni au numéro B, ni nulle part.
+    expect(dispatcher.calls).toBe(0);
+    expect(dispatcher.sent).toHaveLength(0);
+    // Et l'événement est tracé comme non notifiable, pas publié en silence.
+    expect(report.notNotifiable).toBe(1);
+    const row = firstRow(
+      await app.query<{ last_error_code: string }>(
+        "SELECT last_error_code FROM outbox WHERE event_type = 'TEST_TRAP'",
+      ),
+    );
+    expect(row.last_error_code).toBe('NOT_NOTIFIABLE');
+  });
+
   test('§3.13 — aucune transaction ouverte pendant l\'appel au dispatcher', async () => {
     const accountId = await newAccount();
     const claimId = await proveLine(accountId, '+243866666666');

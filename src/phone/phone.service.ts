@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
-import { decrypt, encrypt } from '../crypto/aes-gcm';
-import { fingerprintEquals, fingerprintUnder, fingerprintOf } from '../crypto/fingerprint';
+import { encrypt } from '../crypto/aes-gcm';
+import { fingerprintOf } from '../crypto/fingerprint';
 import type { CryptoAssembly } from '../crypto/keyring';
 import {
   DeliveryFailed,
@@ -14,6 +14,7 @@ import {
   type ProofCodeKeyring,
 } from '../proving/proof-code';
 import type { PhoneConfig } from './phone-config';
+import { resolveVerifiedAddress } from './verified-address';
 
 export type DeclareResult =
   | { outcome: 'DECLARED'; claimId: string }
@@ -167,24 +168,16 @@ export class PhoneService {
       return { outcome: 'NOT_FOUND' };
     }
 
-    // Le seul moment où l'on déchiffre : le numéro n'existe en clair que dans
-    // cette variable, pour la durée de l'appel.
-    const phone = await this.decryptPhone(claim);
-    if (phone === null) {
+    // LE POINT UNIQUE DE DÉCHIFFREMENT (P4/F4) : il résout, déchiffre,
+    // RE-DÉRIVE l'empreinte et refuse toute divergence. Le numéro n'existe en
+    // clair que dans cette variable, pour la durée de l'appel.
+    // requireActive = false : on ouvre une preuve sur une revendication
+    // PENDING — c'est précisément ce qui l'activera.
+    const resolution = await resolveVerifiedAddress(this.pool, this.crypto, claim.id, false);
+    if (resolution.outcome !== 'RESOLVED') {
       return { outcome: 'INTEGRITY_VIOLATION' };
     }
-
-    // P4 §2 — RE-DÉRIVATION À L'USAGE. Si l'empreinte stockée ne correspond
-    // pas au numéro chiffré, la ligne verrouillée n'est PAS celle qu'on
-    // s'apprête à appeler : on refuse, on alerte, on n'envoie rien.
-    const rederived = fingerprintUnder(this.crypto.fingerprint, claim.hmac_key_id, phone);
-    if (rederived === null || !fingerprintEquals(rederived.value, claim.phone_hmac)) {
-      // Log sans PII : identifiants techniques seulement (§3.2).
-      console.error(
-        `INTÉGRITÉ : empreinte et valeur chiffrée divergent (claim=${claim.id}) — aucun envoi`,
-      );
-      return { outcome: 'INTEGRITY_VIOLATION' };
-    }
+    const phone = resolution.phone;
 
     const code = generateProofCode(this.config.codeDigits);
     const hashed = hashProofCode(this.codeKeyring, code);
@@ -295,24 +288,4 @@ export class PhoneService {
     return result.rows[0] ?? null;
   }
 
-  // Le déchiffrement passe par l'owner de la base : phone_encrypted est hors
-  // du SELECT du rôle applicatif (C9/C10). En V1, le service lit la colonne
-  // via une fonction dédiée — le seul chemin, tracé, vers un numéro en clair.
-  private async decryptPhone(claim: ClaimRow): Promise<string | null> {
-    const row = await this.pool.query<{ phone_encrypted: string }>(
-      'SELECT read_phone_encrypted($1) AS phone_encrypted',
-      [claim.id],
-    );
-    const token = row.rows[0]?.phone_encrypted;
-    if (token === undefined || token === null) {
-      return null;
-    }
-    try {
-      return decrypt(this.crypto.encryption, token);
-    } catch {
-      // Clé absente du trousseau, jeton altéré : jamais le clair, jamais la clé.
-      console.error(`INTÉGRITÉ : déchiffrement impossible (claim=${claim.id}) — aucun envoi`);
-      return null;
-    }
-  }
 }

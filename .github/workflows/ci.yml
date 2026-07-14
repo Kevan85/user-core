@@ -134,6 +134,28 @@ jobs:
           fi
           echo "OK : zéro cycle — le dispatcher ne connaît que contenu, adresse, canal"
 
+  garde-dechiffrement-unique:
+    name: "Garde P4 : UN SEUL point de déchiffrement d'un numéro"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: decrypt( n'existe que dans src/crypto/ et src/phone/verified-address.ts
+        # P4 est le seul invariant que la base NE PEUT PAS tenir : elle n'a pas
+        # les clés, donc rien ne garantit que l'empreinte (qui verrouille la
+        # ligne) et la valeur chiffrée (qu'on appellera) parlent du même numéro.
+        # La parade est une discipline — et une discipline ne tient que si elle
+        # est mécanique : tout déchiffrement passe par le point unique, qui
+        # RE-DÉRIVE l'empreinte et refuse toute divergence.
+        # Un deuxième point de déchiffrement avait déjà réussi à naître (le
+        # publisher) et avait « oublié » la re-dérivation. Il ne peut plus.
+        run: |
+          if git grep -rn "decrypt(" -- src/ \
+               ':!src/crypto/' ':!src/phone/verified-address.ts'; then
+            echo "ÉCHEC : déchiffrement hors du point unique (P4) — passer par resolveVerifiedAddress()"
+            exit 1
+          fi
+          echo "OK : un seul point de déchiffrement, avec re-dérivation obligatoire"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
