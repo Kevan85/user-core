@@ -176,9 +176,11 @@ export class CatalogService {
 
   private async lastGrant(accountId: string, programId: string): Promise<{ id: string } | null> {
     const result = await this.pool.query<{ id: string }>(
+      // Ordre d'INSERTION (seq), jamais l'horloge : now() est l'horodatage de
+      // la transaction, deux lignes d'une même transaction sont ex æquo (F3).
       `SELECT id FROM program_grants
         WHERE account_id = $1 AND program_id = $2
-        ORDER BY granted_at DESC, id DESC LIMIT 1`,
+        ORDER BY seq DESC LIMIT 1`,
       [accountId, programId],
     );
     return result.rows[0] ?? null;

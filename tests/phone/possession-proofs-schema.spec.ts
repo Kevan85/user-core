@@ -277,15 +277,28 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
       'status',
       'occurred_at',
       'published_at',
+      'attempts',
+      'next_attempt_at',
+      'last_error_code',
+      'failed_at',
     ]);
     // Ni numéro, ni empreinte, ni valeur chiffrée : le dispatcher résoudra
     // l'adresse au moment d'envoyer, par le chemin de déchiffrement contrôlé.
-    const forbidden = ['phone', 'hmac', 'encrypted', 'payload', 'code'];
+    const forbidden = ['phone', 'hmac', 'encrypted', 'payload'];
     for (const name of columns.rows.map((r) => r.column_name)) {
       for (const marker of forbidden) {
         expect(name).not.toContain(marker);
       }
     }
+    // last_error_code EXISTE (009), et ce n'est PAS un code de possession :
+    // c'est un marqueur applicatif dont la FORME est bornée en base — un
+    // numéro, un code ou un message n'y entrent pas.
+    const guard = await owner.query<{ definition: string }>(
+      `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
+        WHERE conname = 'chk_outbox_error_code_short'`,
+    );
+    expect(guard.rows).toHaveLength(1);
+    expect(guard.rows[0]?.definition).toContain('A-Z_');
   });
 
   test('la révocation et sa ligne d\'outbox sont ATOMIQUES (rollback → ni l\'une ni l\'autre)', async () => {

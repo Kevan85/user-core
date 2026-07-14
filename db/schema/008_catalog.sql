@@ -75,6 +75,15 @@ CREATE TYPE program_grant_revoke_reason AS ENUM (
 
 CREATE TABLE program_grants (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- ORDRE MONOTONE, indépendant de l'horloge ET du hasard (F3).
+  -- Pourquoi pas granted_at : now() est l'horodatage de la TRANSACTION, pas de
+  -- l'instruction — deux lignes insérées dans une même transaction (un outil
+  -- de staff qui révoque puis réaccorde, le chemin PROGRAM du LOT 4) portent
+  -- le MÊME granted_at. Le départage tomberait alors sur l'id, un
+  -- gen_random_uuid() : le verdict « qui a retiré cet accès en dernier »
+  -- reposerait sur un tirage au sort, et une famille exclue par l'école
+  -- pourrait se rouvrir l'accès une fois sur deux.
+  seq           bigint GENERATED ALWAYS AS IDENTITY,
   account_id    uuid NOT NULL REFERENCES accounts(id),
   program_id    uuid NOT NULL REFERENCES programs(id),
   granted_by    program_grant_actor NOT NULL,
@@ -139,10 +148,11 @@ BEGIN
   -- silence.
   -- =========================================================================
   IF p.access_mode = 'GRANTED' AND NEW.granted_by = 'SELF' THEN
+    -- Le plus récent au sens de l'ORDRE D'INSERTION (seq), jamais de l'horloge.
     SELECT * INTO last_grant FROM program_grants g
      WHERE g.account_id = NEW.account_id
        AND g.program_id = NEW.program_id
-     ORDER BY g.granted_at DESC, g.id DESC
+     ORDER BY g.seq DESC
      LIMIT 1;
 
     IF NOT FOUND THEN

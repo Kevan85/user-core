@@ -140,6 +140,54 @@ describe('CatalogService', () => {
     expect((await catalog.activate(family, 'scolarite-3')).outcome).toBe('REVOKED_BY_THIRD_PARTY');
   });
 
+  test('F3 — révoquer et réaccorder DANS LA MÊME TRANSACTION : le verdict ne dépend pas du hasard', async () => {
+    // now() est l'horodatage de la TRANSACTION : les deux lignes ci-dessous
+    // portent le MÊME granted_at. Un départage par id (uuid aléatoire) ferait
+    // du verdict « qui a retiré cet accès en dernier » un tirage au sort — et
+    // une famille exclue par l'école pourrait se rouvrir l'accès une fois sur
+    // deux. L'ordre monotone (seq) supprime le dé.
+    for (let round = 0; round < 20; round++) {
+      const family = await newAccount();
+      const staff = await newAccount('PLATFORM_STAFF');
+      const programId = await newProgram(`ecole-${round}`, 'GRANTED');
+      await catalog.grantAsStaff(staff, family, `ecole-${round}`);
+
+      const client = await app.connect();
+      try {
+        await client.query('BEGIN');
+        // La famille se coupe…
+        await client.query(
+          `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
+            WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+          [family, programId],
+        );
+        // …le staff la remet dans la MÊME transaction…
+        await client.query(
+          `INSERT INTO program_grants (account_id, program_id, granted_by)
+           VALUES ($1, $2, 'PLATFORM_STAFF')`,
+          [family, programId],
+        );
+        // …puis l'école la coupe pour de bon, toujours dans la même transaction.
+        await client.query(
+          `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
+            WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+          [family, programId],
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      // Les trois lignes ont le même granted_at. Le dernier retrait est ADMIN :
+      // la famille NE PEUT PAS se remettre — systématiquement, sans exception.
+      const retry = await catalog.activate(family, `ecole-${round}`);
+      expect(retry.outcome).toBe('REVOKED_BY_THIRD_PARTY');
+    }
+  });
+
   test('BOLA — un compte n\'active/désactive que POUR LUI-MÊME ; le staff seul peut ouvrir pour autrui', async () => {
     const victim = await newAccount();
     const attacker = await newAccount();
