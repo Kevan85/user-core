@@ -18,6 +18,8 @@ export const DB_ERROR = {
   DEAD_PARENT: 'P0108',
   /** Empreinte calculée sous une clé d'empreinte qui n'est plus l'active (006). */
   STALE_FINGERPRINT_KEY: 'P0109',
+  /** Le mode d'accès du programme interdit cette ouverture (008). */
+  ACCESS_MODE_VIOLATION: 'P0110',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];

@@ -12,7 +12,9 @@
     "start:dev": "ts-node src/main.ts",
     "migrate": "ts-node scripts/migrate.ts",
     "lint": "eslint .",
-    "test": "jest"
+    "test": "jest",
+    "start:worker": "node dist/src/worker.js",
+    "start:worker:dev": "ts-node src/worker.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

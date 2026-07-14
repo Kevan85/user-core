@@ -8,6 +8,7 @@ import { LocalAuthenticationProvider } from './auth/local-authentication-provide
 import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
+import { CatalogService } from './catalog/catalog.service';
 import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
@@ -62,8 +63,16 @@ async function bootstrap(): Promise<void> {
     phoneConfig,
   );
 
+  const catalogService = new CatalogService(assembly.pool);
+
   const app = await NestFactory.create(
-    AppModule.register(assembly, { authService, sessionService, provider, phoneService }),
+    AppModule.register(assembly, {
+      authService,
+      sessionService,
+      provider,
+      phoneService,
+      catalogService,
+    }),
   );
 
   // Arrêt propre — on cesse d'accepter, on finit, on ferme le pool.
