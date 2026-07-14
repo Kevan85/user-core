@@ -251,7 +251,10 @@ session · catalogue = droit d'accès · v2 (personnes) avant Mediyo.
 user-core/
 ├── CLAUDE.md                    ← ce fichier (mode d'emploi des agents)
 ├── docs/
-│   └── CAHIER_DES_CHARGES.md    ← le quoi/pourquoi complet (V1.0)
+│   ├── CAHIER_DES_CHARGES.md    ← le quoi/pourquoi complet (V1.0)
+│   └── CONTRAT_D_INTEGRATION.md ← ce qu'un programme peut demander, et ce qui lui est
+│                                   refusé pour toujours (catalogue = liste OUVERTE :
+│                                   un code programme est une DONNÉE, jamais un enum SQL)
 └── (code : posé par l'Exécuteur, plan par plan — rien sans validation Auditeur)
 ```
 
