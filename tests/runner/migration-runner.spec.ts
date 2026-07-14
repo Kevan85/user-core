@@ -25,6 +25,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '001_app_role.sql',
       '002_accounts.sql',
       '003_account_secrets.sql',
+      '004_sessions.sql',
     ]);
   });
 
