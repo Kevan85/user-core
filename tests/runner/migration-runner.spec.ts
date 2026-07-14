@@ -32,6 +32,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '008_catalog.sql',
       '009_outbox_retry.sql',
       '010_program_clients.sql',
+      '011_create_account.sql',
     ]);
   });
 

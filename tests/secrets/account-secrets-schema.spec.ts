@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Invariants de la migration 003, prouvés sous le rôle bridé et hors
@@ -26,12 +27,11 @@ describe('account_secrets — invariants en base', () => {
 
   async function createAccount(): Promise<string> {
     accountSeq += 1;
-    const identifier = String(2000000000 + accountSeq);
-    const r = await app.query<{ id: string }>(
-      "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-      [identifier],
-    );
-    return firstRow(r).id;
+    // Chemin unique (011) ; le secret de naissance est retiré car cette suite
+    // pose les SIENS (au plus un ACTIVE par compte).
+    return createAccountFixture(app, String(2000000000 + accountSeq), {
+      retireInitialSecret: true,
+    });
   }
 
   async function insertSecret(accountId: string, hash = HASH): Promise<string> {

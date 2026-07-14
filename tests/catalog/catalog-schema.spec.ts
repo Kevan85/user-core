@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Invariants de 008, sous rôle bridé ET sous owner. Le catalogue est un DROIT
@@ -34,12 +35,8 @@ describe('catalogue — invariants en base', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7600000000 + seq)],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7600000000 + seq));
   }
 
   // Le programme est une DONNÉE : on l'ajoute par un INSERT (acte

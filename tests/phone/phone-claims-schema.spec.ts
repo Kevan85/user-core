@@ -4,6 +4,7 @@ import { encrypt } from '../../src/crypto/aes-gcm';
 import { fingerprintOf } from '../../src/crypto/fingerprint';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Invariants de 006, sous rôle bridé ET sous owner (le standard du dépôt).
@@ -44,12 +45,8 @@ describe('phone_claims — invariants en base', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7100000000 + seq)],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7100000000 + seq));
   }
 
   function phoneFields(phone: string): [string, string, string, string] {

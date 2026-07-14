@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { AuthService } from '../../src/auth/auth.service';
 import { LocalAuthenticationProvider } from '../../src/auth/local-authentication-provider';
 import { LoginThrottle } from '../../src/auth/login-throttle';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
@@ -52,26 +53,26 @@ describe('AuthService.login', () => {
   ): Promise<Fixture> {
     accountSeq += 1;
     const identifier = String(4000000000 + accountSeq);
-    const account = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [identifier],
-      ),
-    );
-    const hash = await provider.hashSecret(secret);
     const temporary = options.temporary ?? false;
+    // Chemin unique (011) : compte + premier secret naissent ensemble — la
+    // fixture emprunte exactement le chemin du service.
+    const accountId = await createAccountFixture(app, identifier, {
+      secretHash: await provider.hashSecret(secret),
+      isTemporary: temporary,
+      expiresAt: temporary
+        ? new Date(Date.now() + (options.expired ? -3600 : 3600) * 1000)
+        : null,
+    });
     const secretRow = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO account_secrets (account_id, secret_hash, is_temporary, expires_at)
-         VALUES ($1, $2, $3, CASE WHEN $3 THEN now() + make_interval(secs => $4) ELSE NULL END)
-         RETURNING id`,
-        [account.id, hash, temporary, options.expired ? -3600 : 3600],
+        "SELECT id FROM account_secrets WHERE account_id = $1",
+        [accountId],
       ),
     );
     if (options.deactivated) {
-      await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [account.id]);
+      await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
     }
-    return { accountId: account.id, identifier, secretId: secretRow.id };
+    return { accountId, identifier, secretId: secretRow.id };
   }
 
   test('login OK → jetons émis, refresh HACHÉ en base (jamais la valeur), session ouverte', async () => {

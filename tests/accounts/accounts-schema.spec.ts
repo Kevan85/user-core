@@ -1,10 +1,16 @@
 import { Pool } from 'pg';
+import { createAccount as createAccountFixture, FIXTURE_ARGON2ID } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
-// Invariants de la migration 002, prouvés SOUS LE RÔLE BRIDÉ et hors
+// Invariants des migrations 002 et 011, prouvés SOUS LE RÔLE BRIDÉ et hors
 // transaction de test (CLAUDE.md §5). Les preuves « sous owner » vérifient
 // que les TRIGGERS tiennent même quand les grants de colonne ne s'appliquent
 // plus — la ceinture au-delà des bretelles.
+//
+// Depuis 011 : le rôle applicatif n'a PLUS AUCUN droit d'insertion dans
+// accounts — create_account() est LE chemin (réponse au défaut F5 de
+// Scolaria). Les contraintes de 002 (forme, unicité) se prouvent désormais À
+// TRAVERS lui : elles s'appliquent dedans comme partout.
 describe('accounts — invariants en base', () => {
   let app: Pool;
   let owner: Pool;
@@ -22,14 +28,10 @@ describe('accounts — invariants en base', () => {
   });
 
   async function insertAccount(identifier: string): Promise<string> {
-    const r = await app.query<{ id: string }>(
-      "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-      [identifier],
-    );
-    return firstRow(r).id;
+    return createAccountFixture(app, identifier);
   }
 
-  test('INSERT valide sous rôle bridé → compte ACTIVE', async () => {
+  test('F5 — create_account sous rôle bridé → compte ACTIVE et premier secret, nés ENSEMBLE', async () => {
     const id = await insertAccount('1000000001');
     const row = firstRow(
       await app.query<{ status: string; deactivated_at: string | null }>(
@@ -39,6 +41,48 @@ describe('accounts — invariants en base', () => {
     );
     expect(row.status).toBe('ACTIVE');
     expect(row.deactivated_at).toBeNull();
+
+    // Un compte ne naît JAMAIS sans secret : la ligne de 003 existe déjà.
+    const secrets = await app.query<{ status: string }>(
+      'SELECT status FROM account_secrets WHERE account_id = $1',
+      [id],
+    );
+    expect(secrets.rows).toHaveLength(1);
+    expect(secrets.rows[0]?.status).toBe('ACTIVE');
+  });
+
+  test('F5 — INSERT direct sous rôle bridé → permission denied (niveau table ET colonne)', async () => {
+    // Le REVOKE de 011 vise LES COLONNES accordées par 002 (un REVOKE de
+    // table seul ne retire pas un grant de colonne en Postgres).
+    await expect(
+      app.query(
+        "INSERT INTO accounts (public_identifier, role) VALUES ('1000000098', 'ACCOUNT_HOLDER')",
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  test('F5 — atomicité : un secret refusé ANNULE le compte (aucun orphelin)', async () => {
+    // Hash non argon2id → le CHECK de 003 refuse LE SECRET ; le compte déjà
+    // inséré dans la même transaction disparaît avec elle.
+    await expect(
+      createAccountFixture(app, '1000000099', { secretHash: 'motdepasseenclair' }),
+    ).rejects.toThrow(/chk_account_secrets_argon2id/);
+    const count = firstRow(
+      await app.query<{ n: string }>(
+        "SELECT count(*) AS n FROM accounts WHERE public_identifier = '1000000099'",
+      ),
+    );
+    expect(Number(count.n)).toBe(0);
+  });
+
+  test('F5 — un provisoire sans échéance est refusé PAR LE MÊME CHEMIN (la paire de 003 tient)', async () => {
+    await expect(
+      createAccountFixture(app, '1000000097', {
+        secretHash: FIXTURE_ARGON2ID,
+        isTemporary: true,
+        expiresAt: null,
+      }),
+    ).rejects.toThrow(/chk_account_secrets_temporary_pair/);
   });
 
   test('doublon de public_identifier → refus base (unicité écosystème)', async () => {
@@ -140,15 +184,15 @@ describe('accounts — invariants en base', () => {
     ).rejects.toThrow(/ne se réécrit jamais/);
   });
 
-  test('D2 — INSERT explicitant created_at sous rôle bridé → permission denied', async () => {
+  test('D2/F5 — AUCUNE variante d\'INSERT direct ne passe sous le rôle bridé', async () => {
+    // Avant 011, D2 prouvait les grants COLONNE PAR COLONNE ; depuis 011, le
+    // rôle n'a plus AUCUN droit d'insertion — toutes les formes échouent, y
+    // compris celles qui explicitent id, status ou created_at.
     await expect(
       app.query(
         "INSERT INTO accounts (public_identifier, role, created_at) VALUES ('1000000012', 'ACCOUNT_HOLDER', '2019-01-01')",
       ),
     ).rejects.toThrow(/permission denied/);
-  });
-
-  test('D2 — INSERT explicitant status ou id sous rôle bridé → permission denied', async () => {
     await expect(
       app.query(
         "INSERT INTO accounts (public_identifier, role, status) VALUES ('1000000013', 'ACCOUNT_HOLDER', 'DEACTIVATED')",

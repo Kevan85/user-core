@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Invariants de la migration 004, prouvés sous le rôle bridé et hors
@@ -24,11 +25,8 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
 
   async function createAccount(): Promise<string> {
     accountSeq += 1;
-    const r = await app.query<{ id: string }>(
-      "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-      [String(3000000000 + accountSeq)],
-    );
-    return firstRow(r).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(3000000000 + accountSeq));
   }
 
   async function createSession(accountId: string, expiry = "interval '30 days'"): Promise<string> {

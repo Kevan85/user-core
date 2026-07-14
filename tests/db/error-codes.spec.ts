@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Pool } from 'pg';
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Chaque famille de garde lève SON code (migration 005). Les tests assertent
@@ -36,12 +37,9 @@ describe('Codes d\'erreur des gardes (005)', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(6000000000 + seq)],
-      ),
-    ).id;
+    // Chemin unique (011) ; le secret de naissance est retiré car cette suite
+    // pose les SIENS (au plus un ACTIVE par compte, 003).
+    return createAccountFixture(app, String(6000000000 + seq), { retireInitialSecret: true });
   }
 
   test('P0101 — identité/contenu immuable', async () => {
