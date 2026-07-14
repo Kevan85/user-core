@@ -251,7 +251,16 @@ export class PhoneService {
     );
     const keyId = proof.rows[0]?.proof_code_key_id;
     if (keyId === undefined) {
-      return { outcome: 'NOT_FOUND' };
+      // Aucune preuve EN COURS. Deux situations très différentes pour
+      // l'exploitation : rien n'a jamais été demandé (NOT_FOUND), ou tout a
+      // été tranché (ALREADY_SETTLED — code déjà utilisé, essais épuisés,
+      // délai dépassé). La réponse au client reste la MÊME (refus unique) ;
+      // seul le verdict interne diffère, et il vaut de l'or au support.
+      const settled = await this.pool.query(
+        'SELECT id FROM possession_proofs WHERE claim_id = $1 LIMIT 1',
+        [claimId],
+      );
+      return { outcome: settled.rows.length > 0 ? 'ALREADY_SETTLED' : 'NOT_FOUND' };
     }
     const hmac = hashProofCodeUnder(this.codeKeyring, keyId, code);
     if (hmac === null) {

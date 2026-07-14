@@ -87,6 +87,29 @@ jobs:
           fi
           echo "OK : zéro marqueur d'abonnement"
 
+  garde-pii:
+    name: "Garde PII (CDC §6.1/§6.2) : zéro numéro en clair, zéro canal non probant"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motif sensible à la casse, périmètre db/ src/
+        # Deux dangers, un seul motif :
+        #  · phone_plain / phoneNumber / msisdn : un numéro en clair aurait un
+        #    nom — celui-là. La colonne, la variable, le champ : aucun n'entre.
+        #  · WHATSAPP / whatsapp / whats_app : un canal de messagerie survit à
+        #    la SIM ; il ne prouve JAMAIS la possession d'une ligne (CDC §6.2).
+        #    On attrape les formes de CODE (valeur d'enum, identifiant, chaîne).
+        # SENSIBLE À LA CASSE, délibérément : « WhatsApp » en PROSE reste
+        # permis — c'est la doctrine écrite dans les commentaires qui explique
+        # POURQUOI le canal est exclu. Une garde qui efface son propre motif
+        # d'exister se retourne contre la règle qu'elle défend.
+        run: |
+          if git grep -rnE "phone_plain|phoneNumber|msisdn|WHATSAPP|whatsapp|whats_app" -- db/ src/; then
+            echo "ÉCHEC : numéro en clair ou canal non probant détecté (CDC §6.1/§6.2)"
+            exit 1
+          fi
+          echo "OK : zéro PII en clair, zéro canal non probant"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

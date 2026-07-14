@@ -27,7 +27,8 @@ interface VerifyBody {
 }
 
 // Les canaux acceptés par l'API sont ceux de la DOCTRINE : SMS ou appel.
-// « whatsapp » n'est pas refusé par une liste — il n'existe pas dans le type.
+// WhatsApp n'est pas refusé par une liste — il n'existe ni dans ce type, ni
+// dans l'ENUM de la base : il est non représentable.
 const CHANNELS: readonly ProofChannel[] = ['SMS', 'CALL'];
 
 @Controller('phone')
