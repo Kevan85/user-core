@@ -84,6 +84,18 @@ absente de l'autre.) Gravés en base dès les premières migrations :
 - le **niveau de preuve ne descend jamais** ;
 - jetons de rafraîchissement **hachés**, `jti` unique.
 
+**Le test qui tranche, à s'appliquer à SOI (Auditeur compris) :**
+> **Une API est par nature du code applicatif. La tentation sera de valider dans le code ce que
+> la base devrait refuser. L'API valide pour rendre une erreur PROPRE — jamais pour PROTÉGER
+> l'invariant.**
+
+Devant chaque garde proposée, une seule question : *« si un autre chemin d'appel écrit
+directement en base — un job, un script, un endpoint d'admin, la v2 de cet endpoint — que
+se passe-t-il ? »* Si la réponse est « l'invariant tombe », la garde est **au mauvais étage**.
+La validation applicative reste **utile et attendue** (un `400` explicite vaut mieux qu'une
+violation de contrainte brute remontée au client) — mais elle est la **façade**, jamais le mur
+porteur. Un plan dont le mur porteur est un `if` = **plan REFUSÉ**.
+
 ### 3.2 ZÉRO PII en clair — le téléphone d'abord
 **Le numéro de téléphone n'existe JAMAIS en clair en base ni en log.** Patron Payment-Core :
 **empreinte HMAC déterministe** (indexée) + **valeur AES-256-GCM** (`key_id`, trousseau
