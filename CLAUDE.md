@@ -141,7 +141,23 @@ git grep -rnE "student|pupil|teacher|school|academic|patient|doctor|clinic|prope
 ```
 git grep -rnE "(^|[^_])class" -- db/
 ```
-Les deux doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
+**Motif D — PII et canal de preuve (LOT 2), périmètre `db/ src/`, SENSIBLE à la casse :**
+```
+git grep -rnE "phone_plain|phoneNumber|msisdn|WHATSAPP|whatsapp|whats_app" -- db/ src/
+```
+Ces motifs doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
+
+⚠️ **Pourquoi le motif D est sensible à la casse** (arbitrage tranché le 14/07/2026, contre la
+forme d'abord demandée par l'Auditeur — l'Exécuteur a refusé **avec preuve**, et il avait
+raison) : la forme insensible à la casse ne matchait **que des commentaires de doctrine** —
+ceux qui expliquent *pourquoi* un compte WhatsApp survit à la SIM et ne prouve donc **rien**.
+Elle aurait obligé à **effacer la raison d'être de la règle qu'elle protège**. La forme retenue
+attrape toutes les formes de **code** (`WHATSAPP` en valeur d'enum, `whatsapp` en identifiant,
+`whats_app` en colonne) et laisse vivre la **prose**. **Une garde qui supprime son propre
+« pourquoi » se retourne contre elle.**
+Le jour où le dispatcher aura besoin de WhatsApp comme canal de **joignabilité** (jamais de
+**preuve** — §3.3), c'est **l'Auditeur** qui amendera ce motif, jamais l'Exécuteur de sa propre
+initiative.
 
 ⚠️ **Pourquoi deux motifs, et pourquoi `class` est exclu de `src/`** (vérifié matériellement,
 14/07/2026) : `class` est un **mot-clé du langage**. Sur `payment-core/src`, le motif nu `class`
