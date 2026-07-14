@@ -31,6 +31,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '007_possession_proofs.sql',
       '008_catalog.sql',
       '009_outbox_retry.sql',
+      '010_program_clients.sql',
     ]);
   });
 
