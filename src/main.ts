@@ -6,6 +6,7 @@ import { assembleAuthFromEnv } from './auth/auth-config';
 import { AuthService } from './auth/auth.service';
 import { LocalAuthenticationProvider } from './auth/local-authentication-provider';
 import { LoginThrottle } from './auth/login-throttle';
+import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 
 // Le service ne migre JAMAIS la base au démarrage : les migrations sont un
@@ -27,8 +28,18 @@ async function bootstrap(): Promise<void> {
     authConfig,
     new LoginThrottle(authConfig.throttleMaxAttempts, authConfig.throttleWindowSeconds),
   );
+  const sessionService = new SessionService(
+    assembly.pool,
+    provider,
+    authConfig,
+    // Throttle DISTINCT de celui du login : les deux surfaces ne partagent
+    // pas leur budget de tentatives.
+    new LoginThrottle(authConfig.throttleMaxAttempts, authConfig.throttleWindowSeconds),
+  );
 
-  const app = await NestFactory.create(AppModule.register(assembly, authService));
+  const app = await NestFactory.create(
+    AppModule.register(assembly, { authService, sessionService, provider }),
+  );
 
   // Arrêt propre — on cesse d'accepter, on finit, on ferme le pool.
   const shutdown = async (): Promise<void> => {

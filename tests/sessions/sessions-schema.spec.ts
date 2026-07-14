@@ -446,16 +446,23 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
     expect(v.verdict).toBe('DEAD');
   });
 
-  test('C13 (ceinture) — une session créée APRÈS la désactivation reste inutilisable', async () => {
+  test('C13 — aucune session ne NAÎT sous un compte désactivé (le registre ne ment pas)', async () => {
     const accountId = await createAccount();
     await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
-    // Le chemin oublieux : ouvrir une session sous un compte désactivé reste
-    // représentable (rien ne l'interdit à l'INSERT) — mais ses jetons sont
-    // morts-nés pour lookup_refresh_token, qui joint accounts.
+    await expect(createSession(accountId)).rejects.toThrow(/aucune session ne naît/);
+  });
+
+  test('C13 (ceinture) — même une session ouverte AVANT et forcée sous owner rend DEAD', async () => {
+    // Le chemin oublieux, poussé au maximum : la session existe (ouverte
+    // avant la désactivation), le compte meurt, la cascade la révoque — et
+    // même si un chemin la ressuscitait, la jointure compte du verdict tient.
+    const accountId = await createAccount();
     const sessionId = await createSession(accountId);
     const { hash } = await insertTokenWithHash(sessionId);
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
     const v = await lookup(hash);
     expect(v.verdict).toBe('DEAD');
+    expect(v.session_id).toBe(sessionId);
   });
 
   test('C10-b — un jeton dont l\'échéance dépasse celle de sa session → refus à la naissance', async () => {

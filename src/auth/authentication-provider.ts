@@ -28,3 +28,4 @@ export interface AuthenticationProvider {
 }
 
 export const AUTH_SERVICE = 'AUTH_SERVICE';
+export const AUTH_PROVIDER = 'AUTH_PROVIDER';

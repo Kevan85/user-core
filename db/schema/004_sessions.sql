@@ -53,6 +53,28 @@ CREATE TABLE sessions (
 
 CREATE INDEX idx_sessions_account ON sessions (account_id);
 
+-- Le registre ne porte JAMAIS une ligne qui ment : pas de session ACTIVE
+-- sous un compte non actif. Sans ça, une session « active » d'un compte mort
+-- existe (ses jetons sont morts-nés, mais le registre affirme le faux).
+-- FOR SHARE : sérialise avec une désactivation concurrente (le verrou force
+-- l'INSERT à voir le statut committé), symétrique de guard_refresh_token_insert.
+CREATE FUNCTION guard_session_insert() RETURNS trigger AS $$
+DECLARE
+  account_status account_status;
+BEGIN
+  SELECT status INTO account_status FROM accounts WHERE id = NEW.account_id FOR SHARE;
+  IF account_status <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'sessions : aucune session ne naît sous un compte % (C13)', account_status;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
+
+CREATE TRIGGER trg_sessions_guard_insert
+  BEFORE INSERT ON sessions
+  FOR EACH ROW EXECUTE FUNCTION guard_session_insert();
+
 CREATE TABLE session_refresh_tokens (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id     uuid NOT NULL REFERENCES sessions(id),
