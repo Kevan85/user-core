@@ -198,6 +198,49 @@ CREATE TRIGGER trg_outbox_no_delete
   BEFORE DELETE ON outbox
   FOR EACH ROW EXECUTE FUNCTION forbid_delete();
 
+-- P5 — l'outbox est un REGISTRE, pas un tableau de bord. Sans cette garde :
+--   · PUBLISHED -> PENDING rejouerait l'événement — et l'ancien détenteur
+--     d'une ligne recyclée serait re-prévenu en boucle (demain : un SMS, un
+--     coût, à chaque tour) ;
+--   · published_at, fourni par le client, permettrait de MAQUILLER l'heure à
+--     laquelle on a prévenu quelqu'un qu'on lui retirait sa ligne — la même
+--     falsification que celle fermée sur deactivated_at.
+CREATE FUNCTION guard_outbox_update() RETURNS trigger AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.event_type IS DISTINCT FROM OLD.event_type
+     OR NEW.account_id IS DISTINCT FROM OLD.account_id
+     OR NEW.claim_id IS DISTINCT FROM OLD.claim_id
+     OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at THEN
+    RAISE EXCEPTION 'outbox : contenu immuable — un événement survenu ne se réécrit pas'
+      USING ERRCODE = 'P0101';
+  END IF;
+
+  IF OLD.status = 'PUBLISHED' THEN
+    RAISE EXCEPTION 'outbox : un événement publié est figé — il ne se rejoue jamais'
+      USING ERRCODE = 'P0103';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF NEW.status <> 'PUBLISHED' THEN
+      RAISE EXCEPTION 'outbox : % -> % interdit', OLD.status, NEW.status
+        USING ERRCODE = 'P0102';
+    END IF;
+    NEW.published_at := now();   -- la base horodate, jamais le client
+  ELSIF NEW.published_at IS DISTINCT FROM OLD.published_at THEN
+    RAISE EXCEPTION 'outbox : published_at est posé par la base à la publication et ne se réécrit jamais'
+      USING ERRCODE = 'P0104';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
+
+CREATE TRIGGER trg_outbox_guard_update
+  BEFORE UPDATE ON outbox
+  FOR EACH ROW EXECUTE FUNCTION guard_outbox_update();
+
 -- -----------------------------------------------------------------------------
 -- P3-bis — OUVRIR une preuve : le plafond par LIGNE vit ICI, pas dans le
 -- service. Le service n'a AUCUN droit d'insertion : il ne peut donc pas
@@ -255,10 +298,14 @@ BEGIN
 
   -- Le plafond par LIGNE : toutes revendications confondues, tous comptes
   -- confondus — c'est la ligne physique qu'on protège.
+  -- Le COUPLE (clé, empreinte), par cohérence avec l'unicité mondiale : deux
+  -- empreintes de clés différentes ne désignent pas « la même ligne » du
+  -- point de vue de la base.
   SELECT count(*) INTO sent_in_window
     FROM possession_proofs p
     JOIN phone_claims pc ON pc.id = p.claim_id
-   WHERE pc.phone_hmac = c.phone_hmac
+   WHERE pc.hmac_key_id = c.hmac_key_id
+     AND pc.phone_hmac = c.phone_hmac
      AND p.created_at > now() - make_interval(secs => p_cap_window_seconds);
 
   IF sent_in_window >= p_line_cap THEN
@@ -373,14 +420,28 @@ $$;
 
 -- Le fournisseur n'a pas pu livrer (muet, erreur) : on clôt proprement. Le
 -- service ne peut pas le faire à la main (aucun GRANT UPDATE (status)).
-CREATE FUNCTION abandon_possession_proof(p_proof_id uuid) RETURNS void
+--
+-- BOLA EN BASE : l'appelant doit nommer le COMPTE propriétaire, et la preuve
+-- doit lui appartenir. Sans ce paramètre, quiconque connaît un identifiant de
+-- preuve pourrait clore celle d'un autre compte — une autorisation laissée au
+-- seul service est une autorisation qu'un prochain chemin oubliera.
+-- Rend true si la preuve a bien été close, false sinon (rien à révéler).
+CREATE FUNCTION abandon_possession_proof(p_proof_id uuid, p_account_id uuid)
+RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  closed integer;
 BEGIN
-  UPDATE possession_proofs SET status = 'FAILED'
-   WHERE id = p_proof_id AND status = 'PENDING';
+  UPDATE possession_proofs p SET status = 'FAILED'
+   WHERE p.id = p_proof_id
+     AND p.status = 'PENDING'
+     AND EXISTS (SELECT 1 FROM phone_claims c
+                  WHERE c.id = p.claim_id AND c.account_id = p_account_id);
+  GET DIAGNOSTICS closed = ROW_COUNT;
+  RETURN closed > 0;
 END;
 $$;
 
@@ -404,7 +465,7 @@ REVOKE INSERT, DELETE, TRUNCATE ON outbox FROM user_core_app;
 
 REVOKE ALL ON FUNCTION open_possession_proof(uuid, proof_channel, text, text, integer, integer, integer, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION verify_possession_code(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION abandon_possession_proof(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION abandon_possession_proof(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION open_possession_proof(uuid, proof_channel, text, text, integer, integer, integer, integer) TO user_core_app;
 GRANT EXECUTE ON FUNCTION verify_possession_code(uuid, text) TO user_core_app;
-GRANT EXECUTE ON FUNCTION abandon_possession_proof(uuid) TO user_core_app;
+GRANT EXECUTE ON FUNCTION abandon_possession_proof(uuid, uuid) TO user_core_app;

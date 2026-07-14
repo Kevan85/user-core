@@ -357,6 +357,64 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     expect(refused.verdict).toBe('REFUSED_CLAIM');
   });
 
+  test('P5 — l\'outbox est un REGISTRE : publication set-once, jamais rejouée, jamais re-datée', async () => {
+    // Un recyclage produit l'événement à prévenir.
+    const phone = '+243820000012';
+    const ancien = await declare(await newAccount(), phone);
+    await open(ancien, 'code-a');
+    await verify(ancien, 'code-a');
+    const nouveau = await declare(await newAccount(), phone);
+    await open(nouveau, 'code-b');
+    await verify(nouveau, 'code-b');
+
+    const eventId = firstRow(
+      await app.query<{ id: string }>('SELECT id FROM outbox'),
+    ).id;
+
+    // Publication : la base horodate elle-même (valeur du client écrasée).
+    await app.query("UPDATE outbox SET status = 'PUBLISHED' WHERE id = $1", [eventId]);
+    const published = firstRow(
+      await app.query<{ age: number }>(
+        'SELECT EXTRACT(EPOCH FROM (now() - published_at))::float AS age FROM outbox WHERE id = $1',
+        [eventId],
+      ),
+    );
+    expect(published.age).toBeLessThan(60);
+
+    // PUBLISHED -> PENDING : refusé. Sans cette garde, l'ancien détenteur
+    // serait re-prévenu en boucle — et chaque tour coûtera un SMS.
+    await expect(
+      codeOf(() => app.query("UPDATE outbox SET status = 'PENDING' WHERE id = $1", [eventId])),
+    ).resolves.toBe(DB_ERROR.FROZEN_ROW);
+
+    // Re-datation : refusée aux deux étages.
+    await expect(
+      app.query("UPDATE outbox SET published_at = '2019-01-01' WHERE id = $1", [eventId]),
+    ).rejects.toThrow(/permission denied|figé/);
+    await expect(
+      codeOf(() =>
+        owner.query("UPDATE outbox SET published_at = '2019-01-01' WHERE id = $1", [eventId]),
+      ),
+    ).resolves.toBe(DB_ERROR.FROZEN_ROW);
+
+    // Contenu immuable, sur un événement encore PENDING.
+    const third = await declare(await newAccount(), '+243820000013');
+    await open(third, 'code-c');
+    await verify(third, 'code-c');
+    const pendingEvent = await owner.query<{ id: string }>(
+      "SELECT id FROM outbox WHERE status = 'PENDING' LIMIT 1",
+    );
+    if (pendingEvent.rows[0] !== undefined) {
+      await expect(
+        codeOf(() =>
+          owner.query("UPDATE outbox SET event_type = 'AUTRE' WHERE id = $1", [
+            pendingEvent.rows[0]?.id,
+          ]),
+        ),
+      ).resolves.toBe(DB_ERROR.IMMUTABLE);
+    }
+  });
+
   test('append-only : preuve close figée, refus immuables, aucun DELETE nulle part', async () => {
     const claimId = await declare(await newAccount(), '+243820000011');
     const opened = await open(claimId, 'code');
