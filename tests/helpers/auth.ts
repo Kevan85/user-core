@@ -20,6 +20,9 @@ export function testAuthAssembly(overrides: Partial<AuthAssembly> = {}): AuthAss
     graceWindowSeconds: 30,
     throttleMaxAttempts: 1000,
     throttleWindowSeconds: 60,
+    secretMinLength: 8,
+    registerThrottleMaxAttempts: 1000,
+    registerThrottleWindowSeconds: 60,
     ...overrides,
   };
 }

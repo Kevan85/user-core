@@ -29,6 +29,16 @@ export class LoginThrottle {
     return ipAllowed && idAllowed;
   }
 
+  /**
+   * Une seule dimension (LOT 4 — l'inscription publique se borne par IP
+   * SEULE : il n'existe pas encore d'identifiant à viser, et une clé
+   * partagée entre toutes les IP serait un plafond GLOBAL, c'est-à-dire un
+   * levier de déni de service offert à n'importe qui).
+   */
+  allowByKey(key: string): boolean {
+    return this.consume(`k:${key}`);
+  }
+
   private consume(key: string): boolean {
     const now = this.nowMs();
     const windowMs = this.windowSeconds * 1000;

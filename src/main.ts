@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { ProfileService } from './accounts/profile.service';
+import { RegistrationService } from './accounts/registration.service';
 import { AppModule } from './app.module';
 import { assembleAuthFromEnv } from './auth/auth-config';
+import { AccountInvitationsService } from './invitations/account-invitations.service';
 import { AuthService } from './auth/auth.service';
 import { LocalAuthenticationProvider } from './auth/local-authentication-provider';
 import { LoginThrottle } from './auth/login-throttle';
@@ -65,6 +68,21 @@ async function bootstrap(): Promise<void> {
 
   const catalogService = new CatalogService(assembly.pool);
 
+  // LOT 4 — l'inscription publique : throttle DÉDIÉ (par IP seule, budget
+  // distinct du login), et la première session naît par le chemin du login.
+  const registrationService = new RegistrationService(
+    assembly.pool,
+    provider,
+    authService,
+    authConfig,
+    new LoginThrottle(
+      authConfig.registerThrottleMaxAttempts,
+      authConfig.registerThrottleWindowSeconds,
+    ),
+  );
+  const profileService = new ProfileService(assembly.pool);
+  const accountInvitationsService = new AccountInvitationsService(assembly.pool);
+
   const app = await NestFactory.create(
     AppModule.register(assembly, {
       authService,
@@ -72,6 +90,9 @@ async function bootstrap(): Promise<void> {
       provider,
       phoneService,
       catalogService,
+      registrationService,
+      profileService,
+      accountInvitationsService,
     }),
   );
 

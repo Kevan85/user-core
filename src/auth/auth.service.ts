@@ -135,7 +135,9 @@ export class AuthService {
     }
   }
 
-  private async openSession(
+  // Public depuis le LOT 4 : l'inscription (RegistrationService) ouvre la
+  // première session par CE chemin — jamais une deuxième écriture du patron.
+  async openSession(
     accountId: string,
   ): Promise<{ sessionId: string; refreshToken: string }> {
     // La valeur du jeton ne touche JAMAIS la base : seul son SHA-256 y entre
