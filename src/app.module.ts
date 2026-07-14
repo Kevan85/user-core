@@ -11,6 +11,8 @@ import { SESSION_SERVICE, type SessionService } from './auth/session.service';
 import type { ApiAssembly } from './bootstrap/assembly';
 import { PG_POOL } from './db/pool';
 import { HealthController } from './health/health.controller';
+import { CatalogController } from './catalog/catalog.controller';
+import { CATALOG_SERVICE, type CatalogService } from './catalog/catalog.service';
 import { PhoneController } from './phone/phone.controller';
 import { PHONE_SERVICE, type PhoneService } from './phone/phone.service';
 
@@ -19,6 +21,7 @@ export interface AuthWiring {
   sessionService: SessionService;
   provider: AuthenticationProvider;
   phoneService: PhoneService;
+  catalogService: CatalogService;
 }
 
 /**
@@ -31,13 +34,20 @@ export class AppModule {
   static register(assembly: ApiAssembly, auth: AuthWiring): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, SessionController, PhoneController],
+      controllers: [
+        HealthController,
+        AuthController,
+        SessionController,
+        PhoneController,
+        CatalogController,
+      ],
       providers: [
         { provide: PG_POOL, useValue: assembly.pool },
         { provide: AUTH_SERVICE, useValue: auth.authService },
         { provide: SESSION_SERVICE, useValue: auth.sessionService },
         { provide: AUTH_PROVIDER, useValue: auth.provider },
         { provide: PHONE_SERVICE, useValue: auth.phoneService },
+        { provide: CATALOG_SERVICE, useValue: auth.catalogService },
       ],
     };
   }

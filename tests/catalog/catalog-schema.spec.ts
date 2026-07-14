@@ -47,8 +47,8 @@ describe('catalogue — invariants en base', () => {
   async function newProgram(code: string): Promise<string> {
     return firstRow(
       await owner.query<{ id: string }>(
-        'INSERT INTO programs (code, label) VALUES ($1, $2) RETURNING id',
-        [code, `Programme ${code}`],
+        'INSERT INTO programs (code, label, access_mode) VALUES ($1, $2, $3) RETURNING id',
+        [code, `Programme ${code}`, 'SELF_SERVICE'],
       ),
     ).id;
   }
@@ -56,7 +56,7 @@ describe('catalogue — invariants en base', () => {
   async function grant(accountId: string, programId: string): Promise<string> {
     return firstRow(
       await app.query<{ id: string }>(
-        'INSERT INTO program_grants (account_id, program_id) VALUES ($1, $2) RETURNING id',
+        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'SELF') RETURNING id",
         [accountId, programId],
       ),
     ).id;
@@ -86,7 +86,7 @@ describe('catalogue — invariants en base', () => {
   test('le service ne peut PAS créer, modifier ni supprimer un programme (acte d\'administration)', async () => {
     const id = await newProgram('delta');
     await expect(
-      app.query("INSERT INTO programs (code, label) VALUES ('pirate', 'x')"),
+      app.query("INSERT INTO programs (code, label, access_mode) VALUES ('pirate', 'x', 'SELF_SERVICE')"),
     ).rejects.toThrow(/permission denied/);
     await expect(
       app.query("UPDATE programs SET code = 'autre' WHERE id = $1", [id]),

@@ -29,13 +29,23 @@ CREATE TYPE program_status AS ENUM (
   'RETIRED'   -- le programme n'est plus proposé ; les droits déjà accordés survivent
 );
 
+-- Le MODE D'ACCÈS est une propriété DU PROGRAMME, donc une DONNÉE (décision
+-- Kevin, 14/07/2026) : la règle d'un programme change sans toucher au code.
+-- Transverse, comme tout ici : aucun nom de verticale n'apparaît.
+CREATE TYPE program_access_mode AS ENUM (
+  'SELF_SERVICE',  -- la famille l'active elle-même, comme on installe une app
+  'GRANTED'        -- un TIERS l'ouvre (le programme lui-même, ou le staff) :
+                   -- c'est l'école qui inscrit, pas le parent
+);
+
 CREATE TABLE programs (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  code       text NOT NULL,
-  label      text NOT NULL,
-  status     program_status NOT NULL DEFAULT 'ACTIVE',
-  retired_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code        text NOT NULL,
+  label       text NOT NULL,
+  access_mode program_access_mode NOT NULL,
+  status      program_status NOT NULL DEFAULT 'ACTIVE',
+  retired_at  timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT uq_programs_code UNIQUE (code),
   -- Forme d'un code : minuscules, chiffres, tirets. Stable, dictable, et sans
   -- surprise dans une URL.
@@ -46,8 +56,19 @@ CREATE TABLE programs (
 
 CREATE TYPE program_grant_status AS ENUM ('ACTIVE', 'REVOKED');
 
+-- QUI a ouvert ce droit ? La question décide de qui peut le rouvrir (voir le
+-- trigger de réactivation, plus bas). PROGRAM est posé DÈS MAINTENANT :
+-- l'identité cliente des programmes arrive au LOT 4, et ce jour-là aucune
+-- migration ne sera nécessaire.
+CREATE TYPE program_grant_actor AS ENUM (
+  'SELF',            -- la famille, depuis son compte
+  'PROGRAM',         -- le programme via son identité cliente (LOT 4)
+  'PLATFORM_STAFF'
+);
+
 CREATE TYPE program_grant_revoke_reason AS ENUM (
-  'SELF',                 -- la famille a désactivé le programme
+  'SELF',                 -- la famille a désactivé le programme — elle le peut TOUJOURS
+  'PROGRAM',              -- le programme a retiré l'accès (LOT 4)
   'ADMIN',
   'ACCOUNT_DEACTIVATED'   -- cascade : le compte est mort
 );
@@ -56,6 +77,7 @@ CREATE TABLE program_grants (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id    uuid NOT NULL REFERENCES accounts(id),
   program_id    uuid NOT NULL REFERENCES programs(id),
+  granted_by    program_grant_actor NOT NULL,
   status        program_grant_status NOT NULL DEFAULT 'ACTIVE',
   granted_at    timestamptz NOT NULL DEFAULT now(),
   revoked_at    timestamptz,
@@ -80,7 +102,8 @@ CREATE INDEX idx_program_grants_program ON program_grants (program_id);
 CREATE FUNCTION guard_program_grant_insert() RETURNS trigger AS $$
 DECLARE
   account_status account_status;
-  program_state program_status;
+  p programs%ROWTYPE;
+  last_grant program_grants%ROWTYPE;
 BEGIN
   SELECT status INTO account_status FROM accounts WHERE id = NEW.account_id FOR SHARE;
   IF account_status <> 'ACTIVE' THEN
@@ -91,10 +114,47 @@ BEGIN
   -- On n'accorde pas l'accès à un programme retiré du catalogue. (Les droits
   -- DÉJÀ accordés, eux, survivent au retrait : on ne coupe pas une famille
   -- parce qu'un programme cesse d'être proposé aux nouveaux.)
-  SELECT status INTO program_state FROM programs WHERE id = NEW.program_id FOR SHARE;
-  IF program_state <> 'ACTIVE' THEN
-    RAISE EXCEPTION 'program_grants : le programme n''est plus proposé (%)', program_state
+  SELECT * INTO p FROM programs WHERE id = NEW.program_id FOR SHARE;
+  IF p.status <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'program_grants : le programme n''est plus proposé (%)', p.status
       USING ERRCODE = 'P0108';
+  END IF;
+
+  -- =========================================================================
+  -- LE MODE D'ACCÈS, ET LE PIÈGE DE LA RÉACTIVATION.
+  --
+  -- Un programme GRANTED s'ouvre par un TIERS (l'école inscrit ; le parent ne
+  -- s'inscrit pas tout seul). Mais la famille peut TOUJOURS se désactiver —
+  -- c'est son compte — et elle doit pouvoir revenir sur SA décision.
+  --
+  -- D'où la règle exacte, gravée ici et nulle part ailleurs : sur un
+  -- programme GRANTED, une réactivation par la famille (SELF) n'est permise
+  -- QUE SI le droit le plus récent de ce couple (compte, programme) a été
+  -- révoqué avec le motif SELF — c'est-à-dire par elle-même.
+  --
+  -- Si l'école a coupé (PROGRAM/ADMIN), la famille ne peut PAS se remettre :
+  -- sinon le retrait par le tiers ne vaudrait rien, et n'importe quel parent
+  -- exclu se ré-inscrirait seul. Ce n'est pas un « if » dans le service : un
+  -- service se réécrit, une contrainte de base se contourne rarement en
+  -- silence.
+  -- =========================================================================
+  IF p.access_mode = 'GRANTED' AND NEW.granted_by = 'SELF' THEN
+    SELECT * INTO last_grant FROM program_grants g
+     WHERE g.account_id = NEW.account_id
+       AND g.program_id = NEW.program_id
+     ORDER BY g.granted_at DESC, g.id DESC
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'program_grants : un programme sur accès accordé ne s''ouvre pas soi-même'
+        USING ERRCODE = 'P0110';
+    END IF;
+
+    IF last_grant.revoke_reason IS DISTINCT FROM 'SELF' THEN
+      RAISE EXCEPTION 'program_grants : accès retiré par un tiers (motif %) — la famille ne peut pas le rouvrir',
+        last_grant.revoke_reason
+        USING ERRCODE = 'P0110';
+    END IF;
   END IF;
 
   RETURN NEW;
@@ -116,6 +176,7 @@ BEGIN
   IF NEW.id IS DISTINCT FROM OLD.id
      OR NEW.account_id IS DISTINCT FROM OLD.account_id
      OR NEW.program_id IS DISTINCT FROM OLD.program_id
+     OR NEW.granted_by IS DISTINCT FROM OLD.granted_by
      OR NEW.granted_at IS DISTINCT FROM OLD.granted_at THEN
     RAISE EXCEPTION 'program_grants : contenu immuable — réactiver = une NOUVELLE ligne'
       USING ERRCODE = 'P0101';
@@ -195,6 +256,6 @@ GRANT SELECT ON programs TO user_core_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON programs FROM user_core_app;
 
 GRANT SELECT ON program_grants TO user_core_app;
-GRANT INSERT (account_id, program_id) ON program_grants TO user_core_app;
+GRANT INSERT (account_id, program_id, granted_by) ON program_grants TO user_core_app;
 GRANT UPDATE (status, revoke_reason) ON program_grants TO user_core_app;
 REVOKE DELETE, TRUNCATE ON program_grants FROM user_core_app;
