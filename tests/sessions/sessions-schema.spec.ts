@@ -342,6 +342,17 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
     expect(v.successor_id).toBe(successor);
   });
 
+  test('C15 — verdict STALE : ROTATED dans la grâce mais successeur DÉJÀ consommé', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { id, hash } = await insertTokenWithHash(sessionId);
+    const successor = await rotate(id, sessionId);
+    // Le successeur est consommé à son tour : le premier jeton n'a plus rien
+    // à offrir, même dans sa fenêtre de grâce.
+    await rotate(successor, sessionId);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('STALE');
+  });
+
   test('C10 — verdict REPLAY : ROTATED hors grâce sous session vivante', async () => {
     const sessionId = await createSession(await createAccount());
     const { id, hash } = await insertTokenWithHash(sessionId);

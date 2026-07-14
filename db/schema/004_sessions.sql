@@ -318,7 +318,14 @@ REVOKE DELETE, TRUNCATE ON session_refresh_tokens FROM user_core_app;
 -- la fonction lit token_hash avec les droits de son propriétaire ; le rôle
 -- bridé n'a que EXECUTE. L'API n'agit que sur le verdict :
 --   USABLE  → jeton ACTIVE non expiré, session ACTIVE dans son échéance ;
---   GRACE   → ROTATED dans sa fenêtre : rendre le successeur DÉJÀ émis ;
+--   GRACE   → ROTATED dans sa fenêtre ET successeur ENCORE ACTIVE : c'est le
+--             vrai cas « la réponse s'est perdue sur le réseau » — le client
+--             n'a jamais reçu le successeur ;
+--   STALE   → ROTATED dans sa fenêtre mais successeur DÉJÀ CONSOMMÉ (C15) :
+--             doublon réseau tardif. Refus SEC — on ne coupe pas la session
+--             d'une famille, mais on n'offre RIEN. Sans ce verdict, un
+--             voleur rejouant un vieux jeton dans la fenêtre repartait avec
+--             un jeton d'accès neuf, sans qu'aucune alarme ne sonne ;
 --   REPLAY  → ROTATED hors grâce ou REVOKED sous session vivante :
 --             révoquer la session (REPLAY_DETECTED) ;
 --   DEAD    → session révoquée ou hors échéance (ou jeton ACTIVE expiré :
@@ -336,6 +343,7 @@ DECLARE
   t session_refresh_tokens%ROWTYPE;
   s sessions%ROWTYPE;
   a accounts%ROWTYPE;
+  successor_status refresh_token_status;
 BEGIN
   SELECT * INTO t FROM session_refresh_tokens srt
    WHERE srt.token_hash = p_token_hash;
@@ -362,7 +370,14 @@ BEGIN
   ELSIF t.status = 'ACTIVE' AND t.expires_at > now() THEN
     verdict := 'USABLE';
   ELSIF t.status = 'ROTATED' AND t.grace_until > now() THEN
-    verdict := 'GRACE';
+    -- C15 : la grâce ne vaut QUE si le successeur n'a jamais été consommé.
+    SELECT srt.status INTO successor_status
+      FROM session_refresh_tokens srt WHERE srt.id = t.replaced_by_id;
+    IF successor_status = 'ACTIVE' THEN
+      verdict := 'GRACE';
+    ELSE
+      verdict := 'STALE';
+    END IF;
   ELSIF t.status = 'ACTIVE' THEN
     -- ACTIVE mais expiré : un client resté longtemps hors ligne, pas une
     -- preuve de vol — refus simple, jamais une sanction de session.

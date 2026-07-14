@@ -254,6 +254,64 @@ describe('SessionService', () => {
     expect(dead.outcome).toBe('REFUSED');
   });
 
+  test('C15 — successeur DÉJÀ consommé (STALE) → refus sec : aucun jeton d\'accès offert', async () => {
+    const s = await loginFresh();
+    // Le client reçoit le successeur et l'utilise (successeur → ROTATED).
+    const first = await sessions.refresh(s.refreshToken, '10.0.0.1');
+    if (first.outcome !== 'OK' || first.refreshToken === undefined) {
+      throw new Error('rotation initiale attendue');
+    }
+    const second = await sessions.refresh(first.refreshToken, '10.0.0.1');
+    expect(second.outcome).toBe('OK');
+
+    // Le scénario du voleur : rejouer le TOUT premier jeton, encore dans sa
+    // fenêtre de grâce (30 s). Il ne doit RIEN obtenir.
+    const stolen = await sessions.refresh(s.refreshToken, '10.0.0.1');
+    expect(stolen.outcome).toBe('REFUSED');
+
+    // Et la session de la famille n'est pas coupée pour autant (pas REPLAY).
+    const session = firstRow(
+      await app.query<{ status: string }>('SELECT status FROM sessions WHERE id = $1', [
+        s.sessionId,
+      ]),
+    );
+    expect(session.status).toBe('ACTIVE');
+  });
+
+  test('C16 — deux refresh CONCURRENTS du même jeton : réponses propres, zéro exception, un seul ACTIVE', async () => {
+    const s = await loginFresh();
+
+    const [a, b] = await Promise.all([
+      sessions.refresh(s.refreshToken, '10.0.0.1'),
+      sessions.refresh(s.refreshToken, '10.0.0.1'),
+    ]);
+
+    // Aucune des deux n'a levé : Promise.all aurait rejeté. Les deux rendent
+    // une réponse du domaine (jamais une erreur serveur).
+    for (const result of [a, b]) {
+      expect(['OK', 'REFUSED', 'REPLAY_DETECTED']).toContain(result.outcome);
+    }
+    // Le gagnant tourne ; le perdant, sérialisé par le verrou, tombe sur la
+    // grâce et repart vivant — la famille n'est jamais déconnectée.
+    expect(a.outcome).toBe('OK');
+    expect(b.outcome).toBe('OK');
+
+    // L'invariant qui compte : la session porte EXACTEMENT un jeton ACTIVE.
+    const actives = await app.query(
+      "SELECT id FROM session_refresh_tokens WHERE session_id = $1 AND status = 'ACTIVE'",
+      [s.sessionId],
+    );
+    expect(actives.rows).toHaveLength(1);
+
+    // Et la session n'a pas été coupée par une fausse détection de rejeu.
+    const session = firstRow(
+      await app.query<{ status: string }>('SELECT status FROM sessions WHERE id = $1', [
+        s.sessionId,
+      ]),
+    );
+    expect(session.status).toBe('ACTIVE');
+  });
+
   test('jeton inconnu → refus sec (UNKNOWN), sans rien révéler', async () => {
     const result = await sessions.refresh('jamais-emis', '10.0.0.1');
     expect(result.outcome).toBe('REFUSED');

@@ -77,6 +77,22 @@ export class SessionService {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+
+      // C16 : deux refresh concurrents portant le MÊME jeton (retry d'un
+      // mobile sur réseau instable — le cas le plus banal en RDC) se
+      // sérialisent sur la ligne de session. Sans ce verrou, le perdant
+      // rejouait sa rotation sur une ligne déjà ROTATED et prenait une
+      // exception du trigger — 500 au client, bruit dans Sentry, sur le
+      // chemin le plus fréquenté du service.
+      //
+      // Le premier lookup ne sert QU'À trouver la session à verrouiller ; le
+      // verdict qui décide est celui d'APRÈS le verrou.
+      const located = await this.lookup(client, presentedToken);
+      if (located.session_id !== null) {
+        await client.query('SELECT id FROM sessions WHERE id = $1 FOR UPDATE', [
+          located.session_id,
+        ]);
+      }
       const verdict = await this.lookup(client, presentedToken);
 
       switch (verdict.verdict) {
@@ -94,34 +110,24 @@ export class SessionService {
           // grâce expirerait, et son PROCHAIN refresh serait classé REPLAY —
           // on tuerait la session d'une famille pour une réponse perdue.
           //
-          // Donc : on TOURNE le successeur orphelin (jamais reçu, encore
-          // ACTIVE) et on rend cette nouvelle valeur. Aucun jeton n'est
-          // « fabriqué » en plus : à tout instant la session garde EXACTEMENT
-          // un jeton ACTIVE (l'index unique partiel l'impose). Et la
-          // détection de vol reste intacte : quiconque présenterait le
-          // successeur hors grâce tomberait sur REPLAY.
-          const successor = await this.readTokenStatus(client, verdict.successor_id);
-          if (successor === 'ACTIVE' && verdict.successor_id !== null) {
-            const rotated = await this.rotate(
-              client,
-              { ...verdict, token_id: verdict.successor_id },
-            );
-            await client.query('COMMIT');
-            return rotated;
-          }
-          // Le successeur a déjà vécu (le client l'a bien reçu et tourné) :
-          // ce rejeu-là est un doublon réseau bénin — jeton d'accès neuf sur
-          // la session vivante, aucun nouveau jeton de rafraîchissement.
-          const access = await this.provider.issueAccessToken({
-            sub: verdict.account_id!,
-            sid: verdict.session_id!,
+          // Donc : on TOURNE le successeur orphelin — la base garantit
+          // (C15) qu'il est encore ACTIVE, sinon elle aurait rendu STALE.
+          // Aucun jeton n'est « fabriqué » en plus : à tout instant la
+          // session garde EXACTEMENT un jeton ACTIVE (index unique partiel).
+          const rotated = await this.rotate(client, {
+            ...verdict,
+            token_id: verdict.successor_id,
           });
           await client.query('COMMIT');
-          return {
-            outcome: 'OK',
-            accessToken: access.token,
-            accessTokenExpiresAt: access.expiresAt,
-          };
+          return rotated;
+        }
+        case 'STALE': {
+          // C15 : doublon réseau tardif — le successeur a déjà été consommé.
+          // Le client légitime détient déjà un jeton vivant : il n'a besoin
+          // de rien. Refus SEC : sans lui, un voleur rejouant un vieux jeton
+          // dans la fenêtre de grâce repartait avec 15 min d'accès gratuit.
+          await client.query('COMMIT');
+          return { outcome: 'REFUSED' };
         }
         case 'REPLAY': {
           // Un jeton mort présenté sous une session vivante : le porteur
@@ -148,27 +154,13 @@ export class SessionService {
     }
   }
 
-  // Lecture d'état SANS le hash (C10 : token_hash reste illisible ; status
-  // l'est). Ce n'est pas un filtre de sécurité — la décision de sécurité est
-  // déjà tranchée par le verdict de la base.
-  private async readTokenStatus(
-    client: PoolClient,
-    tokenId: string | null,
-  ): Promise<string | null> {
-    if (tokenId === null) {
-      return null;
-    }
-    const result = await client.query<{ status: string }>(
-      'SELECT status FROM session_refresh_tokens WHERE id = $1',
-      [tokenId],
-    );
-    return result.rows[0]?.status ?? null;
-  }
-
   // Rotation ATOMIQUE (§3.13 : transaction locale, zéro appel réseau dedans) :
   // l'ancien passe ROTATED (libère le créneau ACTIVE unique) → le successeur
   // naît → le chaînage se pose. L'ordre est imposé par l'index unique partiel.
   private async rotate(client: PoolClient, verdict: Verdict): Promise<RefreshResult> {
+    if (verdict.token_id === null || verdict.session_id === null || verdict.account_id === null) {
+      throw new Error('rotation : verdict incomplet (la base garantit ces champs sur USABLE/GRACE)');
+    }
     const successorToken = randomBytes(32).toString('base64url');
 
     await client.query(
