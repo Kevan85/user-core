@@ -115,15 +115,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Le répertoire du dispatcher ne mentionne AUCUNE notion d'identité
+      - name: Le CODE du dispatcher ne touche à AUCUNE notion d'identité
         # La règle de dépendance du CDC §2.5 :
         #   Dispatcher ← Verification ← User-Core   ·   zéro cycle.
-        # Un dispatcher qui connaîtrait un titulaire, un numéro, une
-        # revendication ou une connexion dépendrait de l'identité — et le jour
-        # où l'identité doit envoyer un message, le cycle se referme : plus
-        # rien ne démarre seul. La règle cesse ici d'être une intention.
+        # Un dispatcher qui connaîtrait un compte, un numéro, une revendication
+        # ou une session dépendrait de l'identité — et le jour où l'identité
+        # doit envoyer un message, le cycle se referme : plus rien ne démarre
+        # seul. La règle cesse ici d'être une intention.
+        #
+        # Le motif vise le CODE (identifiants et imports), pas la prose : les
+        # commentaires de doctrine, eux, EXPLIQUENT pourquoi ce répertoire ne
+        # doit rien connaître — une garde qui les efface se retourne contre la
+        # règle qu'elle défend (même arbitrage que la garde PII).
         run: |
-          if git grep -rniE "account|phone|claim|session|titulaire|compte" -- src/dispatch/; then
+          if git grep -rnE "account|phone|claim|session|from '\.\./(auth|phone|catalog|outbox|accounts)" -- src/dispatch/; then
             echo "ÉCHEC : le dispatcher touche à une notion d'identité (CDC §2.5)"
             exit 1
           fi
