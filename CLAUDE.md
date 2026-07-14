@@ -145,7 +145,24 @@ git grep -rnE "(^|[^_])class" -- db/
 ```
 git grep -rnE "phone_plain|phoneNumber|msisdn|WHATSAPP|whatsapp|whats_app" -- db/ src/
 ```
+**Motif E — zéro cycle (LOT 3), périmètre `src/dispatch/` :** le dispatcher ne connaît **aucune
+identité** et ne dépend de personne (CDC §2.5).
+```
+git grep -rnE "account|phone|claim|session|from '\.\./(auth|phone|catalog|outbox|accounts)" -- src/dispatch/
+```
+**Motif F — UN SEUL point de déchiffrement (LOT 3) :**
+```
+git grep -rn "decrypt(" -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts'
+```
 Ces motifs doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
+
+⚠️ **Pourquoi le motif F existe** — c'est la leçon la plus dure du dépôt. `phone_hmac` (qui
+verrouille la ligne) et `phone_encrypted` (qu'on appellera) peuvent **mentir l'un sur l'autre** :
+la base **n'a pas les clés**, elle ne peut donc **pas** tenir cet invariant (c'est délibéré). La
+parade — déchiffrer, **re-dériver l'empreinte**, comparer — a été posée au LOT 2… puis **un
+deuxième point de déchiffrement est né trois lots plus tard (le publisher) et l'a « oublié » »**,
+sans qu'aucun test ne rougisse. **Une discipline ne tient que si elle est mécanique** : tout
+déchiffrement passe par le point unique, et la CI refuse qu'un second naisse.
 
 ⚠️ **Pourquoi le motif D est sensible à la casse** (arbitrage tranché le 14/07/2026, contre la
 forme d'abord demandée par l'Auditeur — l'Exécuteur a refusé **avec preuve**, et il avait
