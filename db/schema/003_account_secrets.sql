@@ -107,9 +107,31 @@ CREATE TRIGGER trg_account_secrets_no_delete
 
 -- Standard 002 : tout ce que la base pose elle-même (id, status, retired_at,
 -- failed_attempts initial, created_at) n'est JAMAIS accordé au client.
-GRANT SELECT ON account_secrets TO user_core_app;
+--
+-- C9 : le service ne peut PAS lire un hash inutilisable. secret_hash est
+-- EXCLU du SELECT de la table ; l'unique chemin vers un hash est la vue
+-- authenticable_secrets ci-dessous. Un WHERE oublié dans un futur chemin
+-- d'appel (login v2, récupération, job) ne peut donc plus authentifier un
+-- secret retiré ou expiré : l'erreur est non représentable, pas filtrée.
+GRANT SELECT (id, account_id, is_temporary, expires_at, status, retired_at,
+              failed_attempts, locked_until, created_at)
+  ON account_secrets TO user_core_app;
 GRANT INSERT (account_id, secret_hash, is_temporary, expires_at)
   ON account_secrets TO user_core_app;
 GRANT UPDATE (status, failed_attempts, locked_until)
   ON account_secrets TO user_core_app;
 REVOKE DELETE, TRUNCATE ON account_secrets FROM user_core_app;
+
+-- Le SEUL chemin vers le hash : ACTIVE, non expiré, non verrouillé. La vue
+-- s'exécute avec les droits de son PROPRIÉTAIRE (non security_invoker) —
+-- c'est ce qui permet au rôle bridé de lire le hash par elle, et par elle
+-- seule. Effet structurel voulu : un compte verrouillé n'a AUCUN secret
+-- authentifiable — le « if » de l'étape 7 devient une propriété du schéma.
+CREATE VIEW authenticable_secrets AS
+  SELECT id, account_id, secret_hash, is_temporary
+    FROM account_secrets
+   WHERE status = 'ACTIVE'
+     AND (expires_at   IS NULL OR expires_at   > now())
+     AND (locked_until IS NULL OR locked_until <= now());
+
+GRANT SELECT ON authenticable_secrets TO user_core_app;

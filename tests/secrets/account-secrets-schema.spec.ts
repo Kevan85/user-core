@@ -216,6 +216,68 @@ describe('account_secrets — invariants en base', () => {
     await expect(app.query('TRUNCATE account_secrets')).rejects.toThrow(/permission denied/);
   });
 
+  test('C9a — lire secret_hash dans la TABLE sous rôle bridé → permission denied', async () => {
+    await expect(app.query('SELECT secret_hash FROM account_secrets')).rejects.toThrow(
+      /permission denied/,
+    );
+    // SELECT * embarque la colonne interdite : refusé aussi.
+    await expect(app.query('SELECT * FROM account_secrets')).rejects.toThrow(
+      /permission denied/,
+    );
+  });
+
+  test('C9b/c — la vue authenticable_secrets ne montre que le vivant (nombre ET contenu)', async () => {
+    // Quatre comptes : sain, retiré, provisoire expiré, verrouillé.
+    const sain = await createAccount();
+    await insertSecret(sain);
+
+    const retire = await createAccount();
+    const sRetire = await insertSecret(retire);
+    await app.query("UPDATE account_secrets SET status = 'RETIRED' WHERE id = $1", [sRetire]);
+
+    const expire = await createAccount();
+    await app.query(
+      "INSERT INTO account_secrets (account_id, secret_hash, is_temporary, expires_at) VALUES ($1, $2, true, now() - interval '1 hour')",
+      [expire, HASH2],
+    );
+
+    const verrouille = await createAccount();
+    const sVerrouille = await insertSecret(verrouille);
+    await app.query(
+      "UPDATE account_secrets SET locked_until = now() + interval '15 minutes' WHERE id = $1",
+      [sVerrouille],
+    );
+
+    const rows = await app.query<{ account_id: string; secret_hash: string }>(
+      'SELECT account_id, secret_hash FROM authenticable_secrets WHERE account_id = ANY($1)',
+      [[sain, retire, expire, verrouille]],
+    );
+    // Le NOMBRE de lignes d'abord (un filtre qui rend zéro ligne « passe »
+    // aussi un mauvais test), puis le contenu.
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]?.account_id).toBe(sain);
+    expect(rows.rows[0]?.secret_hash).toBe(HASH);
+  });
+
+  test('C9 — le verrouillage retire structurellement le secret de la vue', async () => {
+    const accountId = await createAccount();
+    const id = await insertSecret(accountId);
+    const before = await app.query(
+      'SELECT id FROM authenticable_secrets WHERE account_id = $1',
+      [accountId],
+    );
+    expect(before.rows).toHaveLength(1);
+    await app.query(
+      "UPDATE account_secrets SET locked_until = now() + interval '15 minutes' WHERE id = $1",
+      [id],
+    );
+    const after = await app.query(
+      'SELECT id FROM authenticable_secrets WHERE account_id = $1',
+      [accountId],
+    );
+    expect(after.rows).toHaveLength(0);
+  });
+
   test('standard D2 — INSERT explicitant status, created_at ou failed_attempts → permission denied', async () => {
     const accountId = await createAccount();
     await expect(
