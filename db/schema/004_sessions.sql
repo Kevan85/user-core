@@ -168,6 +168,10 @@ BEGIN
   IF session_row.absolute_expires_at <= now() THEN
     RAISE EXCEPTION 'session_refresh_tokens : la session a dépassé son échéance absolue (C5)';
   END IF;
+  -- C10-b : un jeton ne survit JAMAIS à sa session.
+  IF NEW.expires_at > session_row.absolute_expires_at THEN
+    RAISE EXCEPTION 'session_refresh_tokens : un jeton ne survit jamais à sa session (échéance absolue dépassée)';
+  END IF;
 
   RETURN NEW;
 END;
@@ -243,9 +247,81 @@ GRANT INSERT (account_id, absolute_expires_at) ON sessions TO user_core_app;
 GRANT UPDATE (status, revoke_reason) ON sessions TO user_core_app;
 REVOKE DELETE, TRUNCATE ON sessions FROM user_core_app;
 
-GRANT SELECT ON session_refresh_tokens TO user_core_app;
+-- C10 : token_hash n'est PAS lisible par le service — pas de GRANT SELECT au
+-- niveau table (un REVOKE de colonne ne soustrait rien à un grant de table en
+-- Postgres : on accorde la liste SANS token_hash). Retrouver un jeton par son
+-- hash exigerait le privilège SELECT sur la colonne, même dans un WHERE :
+-- c'est donc la BASE qui compare et rend un VERDICT (lookup_refresh_token).
+-- Un « WHERE status = 'ACTIVE' » oublié dans une v2 du refresh n'existe
+-- plus : il n'y a plus de WHERE à écrire dans le service.
+GRANT SELECT (id, session_id, jti, status, rotated_at, grace_until,
+              replaced_by_id, expires_at, created_at)
+  ON session_refresh_tokens TO user_core_app;
 GRANT INSERT (session_id, jti, token_hash, expires_at)
   ON session_refresh_tokens TO user_core_app;
 GRANT UPDATE (status, grace_until, replaced_by_id)
   ON session_refresh_tokens TO user_core_app;
 REVOKE DELETE, TRUNCATE ON session_refresh_tokens FROM user_core_app;
+
+-- -----------------------------------------------------------------------------
+-- C10 : LE verdict, calculé à un seul endroit, en base. SECURITY DEFINER :
+-- la fonction lit token_hash avec les droits de son propriétaire ; le rôle
+-- bridé n'a que EXECUTE. L'API n'agit que sur le verdict :
+--   USABLE  → jeton ACTIVE non expiré, session ACTIVE dans son échéance ;
+--   GRACE   → ROTATED dans sa fenêtre : rendre le successeur DÉJÀ émis ;
+--   REPLAY  → ROTATED hors grâce ou REVOKED sous session vivante :
+--             révoquer la session (REPLAY_DETECTED) ;
+--   DEAD    → session révoquée ou hors échéance (ou jeton ACTIVE expiré :
+--             refus simple, pas une preuve de vol) ;
+--   UNKNOWN → aucun jeton ne porte ce hash.
+-- -----------------------------------------------------------------------------
+CREATE FUNCTION lookup_refresh_token(p_token_hash text)
+RETURNS TABLE (token_id uuid, session_id uuid, account_id uuid,
+               successor_id uuid, verdict text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  t session_refresh_tokens%ROWTYPE;
+  s sessions%ROWTYPE;
+BEGIN
+  SELECT * INTO t FROM session_refresh_tokens srt
+   WHERE srt.token_hash = p_token_hash;
+  IF NOT FOUND THEN
+    token_id := NULL; session_id := NULL; account_id := NULL;
+    successor_id := NULL; verdict := 'UNKNOWN';
+    RETURN NEXT;
+    RETURN;
+  END IF;
+
+  SELECT * INTO s FROM sessions se WHERE se.id = t.session_id;
+
+  token_id := t.id;
+  session_id := t.session_id;
+  account_id := s.account_id;
+  successor_id := t.replaced_by_id;
+
+  IF s.status <> 'ACTIVE' OR s.absolute_expires_at <= now() THEN
+    verdict := 'DEAD';
+  ELSIF t.status = 'ACTIVE' AND t.expires_at > now() THEN
+    verdict := 'USABLE';
+  ELSIF t.status = 'ROTATED' AND t.grace_until > now() THEN
+    verdict := 'GRACE';
+  ELSIF t.status = 'ACTIVE' THEN
+    -- ACTIVE mais expiré : un client resté longtemps hors ligne, pas une
+    -- preuve de vol — refus simple, jamais une sanction de session.
+    verdict := 'DEAD';
+  ELSE
+    -- ROTATED hors grâce ou REVOKED, sous une session vivante : rejeu.
+    verdict := 'REPLAY';
+  END IF;
+
+  RETURN NEXT;
+END;
+$$;
+
+-- EXECUTE est accordé à PUBLIC par défaut sur toute fonction : on ferme, puis
+-- on rouvre pour le seul rôle applicatif.
+REVOKE ALL ON FUNCTION lookup_refresh_token(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION lookup_refresh_token(text) TO user_core_app;

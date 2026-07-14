@@ -277,6 +277,131 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
     ).rejects.toThrow(/contenu immuable/);
   });
 
+  // ---------------------------------------------------------------------------
+  // C10 : le hash n'est lisible par personne ; la base compare et rend un
+  // verdict. L'API n'agit que sur le verdict.
+  // ---------------------------------------------------------------------------
+  async function insertTokenWithHash(
+    sessionId: string,
+    expiry = "interval '7 days'",
+  ): Promise<{ id: string; hash: string }> {
+    const hash = `hash_${randomUUID()}`;
+    const r = await app.query<{ id: string }>(
+      `INSERT INTO session_refresh_tokens (session_id, jti, token_hash, expires_at)
+       VALUES ($1, $2, $3, now() + ${expiry}) RETURNING id`,
+      [sessionId, randomUUID(), hash],
+    );
+    return { id: firstRow(r).id, hash };
+  }
+
+  interface Verdict {
+    token_id: string | null;
+    session_id: string | null;
+    account_id: string | null;
+    successor_id: string | null;
+    verdict: string;
+  }
+
+  async function lookup(hash: string): Promise<Verdict> {
+    return firstRow(
+      await app.query<Verdict>('SELECT * FROM lookup_refresh_token($1)', [hash]),
+    );
+  }
+
+  test('C10a — token_hash est illisible sous rôle bridé (colonne et SELECT *)', async () => {
+    await expect(
+      app.query('SELECT token_hash FROM session_refresh_tokens'),
+    ).rejects.toThrow(/permission denied/);
+    await expect(app.query('SELECT * FROM session_refresh_tokens')).rejects.toThrow(
+      /permission denied/,
+    );
+    // Les colonnes de gestion restent lisibles.
+    await expect(
+      app.query('SELECT id, status, grace_until FROM session_refresh_tokens'),
+    ).resolves.toBeDefined();
+  });
+
+  test('C10 — verdict USABLE : jeton vivant, session vivante, identifiants complets', async () => {
+    const accountId = await createAccount();
+    const sessionId = await createSession(accountId);
+    const { id, hash } = await insertTokenWithHash(sessionId);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('USABLE');
+    expect(v.token_id).toBe(id);
+    expect(v.session_id).toBe(sessionId);
+    expect(v.account_id).toBe(accountId);
+    expect(v.successor_id).toBeNull();
+  });
+
+  test('C10 — verdict GRACE : ROTATED dans la fenêtre, le successeur DÉJÀ émis est rendu', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { id, hash } = await insertTokenWithHash(sessionId);
+    const successor = await rotate(id, sessionId);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('GRACE');
+    expect(v.successor_id).toBe(successor);
+  });
+
+  test('C10 — verdict REPLAY : ROTATED hors grâce sous session vivante', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { id, hash } = await insertTokenWithHash(sessionId);
+    await app.query(
+      `UPDATE session_refresh_tokens SET status = 'ROTATED', grace_until = now() + interval '0.3 seconds' WHERE id = $1`,
+      [id],
+    );
+    await app.query('SELECT pg_sleep(0.6)');
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('REPLAY');
+  });
+
+  test('C10 — verdict REPLAY : jeton RÉVOQUÉ présenté sous session vivante, aucune ressuscitation', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { id, hash } = await insertTokenWithHash(sessionId);
+    await app.query("UPDATE session_refresh_tokens SET status = 'REVOKED' WHERE id = $1", [id]);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('REPLAY');
+    await expect(
+      app.query("UPDATE session_refresh_tokens SET status = 'ACTIVE' WHERE id = $1", [id]),
+    ).rejects.toThrow(/figé/);
+  });
+
+  test('C10 — verdict DEAD : session révoquée (prime sur l\'état du jeton)', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { hash } = await insertTokenWithHash(sessionId);
+    await app.query(
+      "UPDATE sessions SET status = 'REVOKED', revoke_reason = 'LOGOUT' WHERE id = $1",
+      [sessionId],
+    );
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('DEAD');
+  });
+
+  test('C10 — jeton ACTIVE mais expiré → DEAD (client hors ligne, pas une preuve de vol)', async () => {
+    const sessionId = await createSession(await createAccount());
+    const { hash } = await insertTokenWithHash(sessionId, "interval '0.3 seconds'");
+    await app.query('SELECT pg_sleep(0.6)');
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('DEAD');
+  });
+
+  test('C10 — verdict UNKNOWN : aucun jeton ne porte ce hash', async () => {
+    const v = await lookup('hash_inexistant');
+    expect(v.verdict).toBe('UNKNOWN');
+    expect(v.token_id).toBeNull();
+    expect(v.account_id).toBeNull();
+  });
+
+  test('C10-b — un jeton dont l\'échéance dépasse celle de sa session → refus à la naissance', async () => {
+    const sessionId = await createSession(await createAccount(), "interval '30 days'");
+    await expect(
+      app.query(
+        `INSERT INTO session_refresh_tokens (session_id, jti, token_hash, expires_at)
+         VALUES ($1, $2, 'h_survivant', now() + interval '60 days')`,
+        [sessionId, randomUUID()],
+      ),
+    ).rejects.toThrow(/ne survit jamais à sa session/);
+  });
+
   test('DELETE : rôle bridé → permission denied ; owner → forbid_delete (les 2 tables)', async () => {
     const sessionId = await createSession(await createAccount());
     const tokenId = await insertToken(sessionId);
