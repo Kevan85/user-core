@@ -27,9 +27,13 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://user_core:user_core_ci@localhost:5432/user_core
+      # LE SERVICE : rôle bridé, et lui seul (le boot refuse tout autre rôle).
+      DATABASE_URL: postgres://user_core_app:user_core_app_ci@localhost:5432/user_core
+      # ADMINISTRATION : migrations + harnais de test UNIQUEMENT.
+      DATABASE_ADMIN_URL: postgres://user_core:user_core_ci@localhost:5432/user_core
       # Mot de passe du rôle applicatif : posé par le globalSetup Jest via
       # ALTER ROLE (jamais par une migration). Base de CI jetable.
+      # Doit rester cohérent avec DATABASE_URL ci-dessus.
       USER_CORE_APP_PASSWORD: user_core_app_ci
     steps:
       - uses: actions/checkout@v4

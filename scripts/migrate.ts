@@ -144,9 +144,12 @@ export async function runMigrations(connectionString: string): Promise<void> {
 }
 
 if (require.main === module) {
-  const connectionString = process.env.DATABASE_URL;
+  // Migrer est un acte d'ADMINISTRATION : URL propriétaire, jamais celle du
+  // service (le rôle bridé n'a pas le droit de toucher au schéma — et c'est
+  // exactement le but).
+  const connectionString = process.env.DATABASE_ADMIN_URL;
   if (!connectionString) {
-    console.error('DATABASE_URL manquant (voir .env.example)');
+    console.error('DATABASE_ADMIN_URL manquant (voir .env.example)');
     process.exit(1);
   }
   runMigrations(connectionString).catch((err: unknown) => {

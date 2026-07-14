@@ -10,10 +10,12 @@ export function firstRow<T>(result: { rows: T[] }): T {
   return row;
 }
 
+// URL propriétaire : migrations et outillage de test UNIQUEMENT. Le service,
+// lui, ne lit que DATABASE_URL (rôle bridé) — voir src/bootstrap/assembly.ts.
 export function adminUrl(): string {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_ADMIN_URL;
   if (!url) {
-    throw new Error('DATABASE_URL manquant (voir .env.example)');
+    throw new Error('DATABASE_ADMIN_URL manquant (voir .env.example)');
   }
   return url;
 }
