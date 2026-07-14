@@ -52,12 +52,18 @@ CREATE FUNCTION forbid_delete() RETURNS trigger AS $$
 BEGIN
   RAISE EXCEPTION '% : suppression interdite — corriger par statut (§3.10)', TG_TABLE_NAME;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
 
 -- L'identité d'un compte est IMMUABLE (id, identifiant public, rôle, date de
 -- création). Un changement de rôle n'est pas une transition posée en V1 : si
 -- le besoin arrive (promotion staff), ce sera une migration signée qui ouvre
 -- la transition — jamais un UPDATE qui passe parce que personne ne regardait.
+--
+-- deactivated_at est un REGISTRE, pas un champ de commentaire (D1) : la date
+-- est posée par la BASE (now()) à la transition — jamais fournie par le
+-- client — et ne se réécrit plus ensuite. Un horodatage que l'application
+-- choisit ou peut réécrire ne prouve rien.
 CREATE FUNCTION guard_account_update() RETURNS trigger AS $$
 BEGIN
   IF NEW.id IS DISTINCT FROM OLD.id
@@ -67,15 +73,21 @@ BEGIN
     RAISE EXCEPTION 'accounts : identité immuable (id, public_identifier, role, created_at)';
   END IF;
 
-  IF NEW.status IS DISTINCT FROM OLD.status
-     AND NOT (OLD.status = 'ACTIVE' AND NEW.status = 'DEACTIVATED') THEN
-    RAISE EXCEPTION 'accounts : % -> % interdit — la réactivation n''est pas une transition posée en V1',
-      OLD.status, NEW.status;
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF NOT (OLD.status = 'ACTIVE' AND NEW.status = 'DEACTIVATED') THEN
+      RAISE EXCEPTION 'accounts : % -> % interdit — la réactivation n''est pas une transition posée en V1',
+        OLD.status, NEW.status;
+    END IF;
+    -- La base horodate elle-même : toute valeur envoyée est écrasée.
+    NEW.deactivated_at := now();
+  ELSIF NEW.deactivated_at IS DISTINCT FROM OLD.deactivated_at THEN
+    RAISE EXCEPTION 'accounts : deactivated_at est posé par la base à la désactivation et ne se réécrit jamais';
   END IF;
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
 
 CREATE TRIGGER trg_accounts_guard
   BEFORE UPDATE ON accounts
@@ -86,8 +98,11 @@ CREATE TRIGGER trg_accounts_no_delete
   FOR EACH ROW EXECUTE FUNCTION forbid_delete();
 
 -- Le strict nécessaire (patron 001 : chaque table apporte SES droits dans SA
--- migration). L'UPDATE est accordé COLONNE PAR COLONNE : le service peut
--- désactiver, jamais toucher l'identité — même sans le trigger.
-GRANT SELECT, INSERT ON accounts TO user_core_app;
-GRANT UPDATE (status, deactivated_at) ON accounts TO user_core_app;
+-- migration). INSERT et UPDATE accordés COLONNE PAR COLONNE (D2) : id,
+-- status, created_at, deactivated_at viennent de leurs DEFAULT ou du trigger,
+-- JAMAIS du client — un compte ne peut pas naître avec une date d'ouverture
+-- arbitraire, ni être re-daté.
+GRANT SELECT ON accounts TO user_core_app;
+GRANT INSERT (public_identifier, role) ON accounts TO user_core_app;
+GRANT UPDATE (status) ON accounts TO user_core_app;
 REVOKE DELETE, TRUNCATE ON accounts FROM user_core_app;

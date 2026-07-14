@@ -93,36 +93,79 @@ describe('accounts — invariants en base', () => {
     ).rejects.toThrow(/identité immuable/);
   });
 
-  test('désactivation (statut + horodatage) sous rôle bridé → acceptée', async () => {
+  test('désactivation sous rôle bridé (statut seul) → la BASE pose l\'horodatage', async () => {
     const id = await insertAccount('1000000008');
-    await app.query(
-      "UPDATE accounts SET status = 'DEACTIVATED', deactivated_at = now() WHERE id = $1",
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [id]);
+    const row = firstRow(
+      await app.query<{ status: string; age_seconds: number }>(
+        `SELECT status, EXTRACT(EPOCH FROM (now() - deactivated_at))::float AS age_seconds
+         FROM accounts WHERE id = $1`,
+        [id],
+      ),
+    );
+    expect(row.status).toBe('DEACTIVATED');
+    expect(row.age_seconds).toBeLessThan(60);
+  });
+
+  test('D1a — date fantaisiste envoyée à la désactivation → ÉCRASÉE par now() (sous owner)', async () => {
+    const id = await insertAccount('1000000009');
+    await owner.query(
+      "UPDATE accounts SET status = 'DEACTIVATED', deactivated_at = '2019-01-01' WHERE id = $1",
       [id],
     );
     const row = firstRow(
-      await app.query<{ status: string }>('SELECT status FROM accounts WHERE id = $1', [id]),
+      await owner.query<{ age_seconds: number }>(
+        `SELECT EXTRACT(EPOCH FROM (now() - deactivated_at))::float AS age_seconds
+         FROM accounts WHERE id = $1`,
+        [id],
+      ),
     );
-    expect(row.status).toBe('DEACTIVATED');
+    // La ligne porte now(), pas 2019 : l'écrasement du trigger a eu lieu.
+    expect(row.age_seconds).toBeLessThan(60);
   });
 
-  test('désactivation SANS horodatage → refus CHECK (le couple vit ensemble)', async () => {
-    const id = await insertAccount('1000000009');
+  test('D1b — re-datation d\'un compte désactivé sous rôle bridé → permission denied (colonne non accordée)', async () => {
+    const id = await insertAccount('1000000010');
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [id]);
     await expect(
-      app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [id]),
-    ).rejects.toThrow(/chk_accounts_deactivation_pair/);
+      app.query("UPDATE accounts SET deactivated_at = '2019-01-01' WHERE id = $1", [id]),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  test('D1b — re-datation sous OWNER → le trigger tient (jamais réécrit)', async () => {
+    const id = await insertAccount('1000000011');
+    await owner.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [id]);
+    await expect(
+      owner.query("UPDATE accounts SET deactivated_at = '2019-01-01' WHERE id = $1", [id]),
+    ).rejects.toThrow(/ne se réécrit jamais/);
+  });
+
+  test('D2 — INSERT explicitant created_at sous rôle bridé → permission denied', async () => {
+    await expect(
+      app.query(
+        "INSERT INTO accounts (public_identifier, role, created_at) VALUES ('1000000012', 'ACCOUNT_HOLDER', '2019-01-01')",
+      ),
+    ).rejects.toThrow(/permission denied/);
+  });
+
+  test('D2 — INSERT explicitant status ou id sous rôle bridé → permission denied', async () => {
+    await expect(
+      app.query(
+        "INSERT INTO accounts (public_identifier, role, status) VALUES ('1000000013', 'ACCOUNT_HOLDER', 'DEACTIVATED')",
+      ),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      app.query(
+        "INSERT INTO accounts (id, public_identifier, role) VALUES (gen_random_uuid(), '1000000014', 'ACCOUNT_HOLDER')",
+      ),
+    ).rejects.toThrow(/permission denied/);
   });
 
   test('réactivation DEACTIVATED → ACTIVE → refus trigger (transition non posée)', async () => {
-    const id = await insertAccount('1000000010');
-    await app.query(
-      "UPDATE accounts SET status = 'DEACTIVATED', deactivated_at = now() WHERE id = $1",
-      [id],
-    );
+    const id = await insertAccount('1000000015');
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [id]);
     await expect(
-      app.query(
-        "UPDATE accounts SET status = 'ACTIVE', deactivated_at = NULL WHERE id = $1",
-        [id],
-      ),
+      app.query("UPDATE accounts SET status = 'ACTIVE' WHERE id = $1", [id]),
     ).rejects.toThrow(/interdit/);
   });
 });
