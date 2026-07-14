@@ -21,7 +21,10 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
     const rows = await pool.query<{ version: string }>(
       'SELECT version FROM schema_migrations ORDER BY version',
     );
-    expect(rows.rows.map((r) => r.version)).toEqual(['001_app_role.sql']);
+    expect(rows.rows.map((r) => r.version)).toEqual([
+      '001_app_role.sql',
+      '002_accounts.sql',
+    ]);
   });
 
   test('checksum divergent — une migration modifiée après application est REFUSÉE', async () => {
