@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Pool } from 'pg';
+import { DB_ERROR, isDbError } from '../db/errors';
 import type { AuthAssembly } from './auth-config';
 import type { AuthenticationProvider } from './authentication-provider';
 import type { LocalAuthenticationProvider } from './local-authentication-provider';
@@ -125,9 +126,10 @@ export class AuthService {
       );
     } catch (err) {
       // Course rarissime : un verrou futur plus long existe déjà — le trigger
-      // C8 refuse le recul, et c'est exactement ce qu'on veut. Tout autre
-      // refus remonte.
-      if (!(err instanceof Error && err.message.includes('ne recule jamais'))) {
+      // C8 refuse le recul, et c'est exactement ce qu'on veut. On reconnaît
+      // ce refus par son CODE (migration 005), jamais par son message : un
+      // message se reformule, un code est un contrat.
+      if (!isDbError(err, DB_ERROR.LOCK_WOULD_RECEDE)) {
         throw err;
       }
     }
