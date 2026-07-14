@@ -36,12 +36,17 @@ CREATE TYPE proof_status AS ENUM (
   'EXPIRED'
 );
 
--- CHAQUE LIGNE DE CETTE TABLE = UN CODE RÉELLEMENT PARTI = UN COÛT.
--- C'est le critère qui a décidé de tout ici : Accounting-Core doit pouvoir
--- compter les SMS émis SANS jamais les confondre avec des refus. Un refus ne
--- crée donc AUCUNE ligne ici (il va dans possession_proof_refusals) : sinon,
--- toute requête de comptage devrait « penser » à exclure un statut — et un
--- WHERE qu'on oublie est exactement la faute que ce dépôt combat.
+-- ⚠️ UNE LIGNE ICI = UNE PREUVE RÉSERVÉE. **PAS** UN ENVOI FACTURABLE.
+-- La réservation précède l'appel au fournisseur (§3.13 : réserve → commit →
+-- appelle) : si le fournisseur échoue franchement, la ligne existe et rien
+-- n'est parti. Compter les SMS payés ICI SUR-COMPTE — et c'est Kevin qui
+-- piloterait sa marge sur un chiffre faux.
+--
+-- Les envois réellement acceptés par le fournisseur — LES SEULS FACTURABLES —
+-- vivent dans proof_dispatches (plus bas) : une ligne = un envoi = un coût,
+-- comptable sans aucun WHERE à ne pas oublier. Les refus vivent encore
+-- ailleurs (possession_proof_refusals). Trois tables, trois faits distincts,
+-- zéro confusion possible pour Accounting-Core.
 CREATE TABLE possession_proofs (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   claim_id          uuid NOT NULL REFERENCES phone_claims(id),
@@ -92,6 +97,33 @@ CREATE TABLE possession_proof_refusals (
 );
 
 CREATE INDEX idx_proof_refusals_hmac ON possession_proof_refusals (phone_hmac, created_at);
+
+-- -----------------------------------------------------------------------------
+-- P6 — LES ENVOIS FACTURABLES, et EUX SEULS.
+--
+-- Une ligne est écrite QUAND le fournisseur a ACCEPTÉ la livraison (il a rendu
+-- sa référence). C'est le seul moment où un coût existe :
+--   · fournisseur en erreur franche → aucune ligne ici (rien n'est parti,
+--     rien n'est facturé — la preuve, elle, existe et sera close FAILED) ;
+--   · fournisseur muet (il accepte, encaisse, ne livre rien) → une ligne ici,
+--     car il y a bien un coût. C'est exactement ce qu'on veut voir.
+--
+-- Accounting-Core comptera : SELECT count(*) FROM proof_dispatches WHERE
+-- channel = 'SMS'. Aucun statut à exclure, aucun WHERE à oublier — la faute
+-- que ce dépôt combat depuis la première migration.
+-- -----------------------------------------------------------------------------
+CREATE TABLE proof_dispatches (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  proof_id     uuid NOT NULL REFERENCES possession_proofs(id),
+  channel      proof_channel NOT NULL,
+  provider_ref text NOT NULL,   -- le fournisseur a accepté : la preuve du coût
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  -- Une double livraison du fournisseur ne double PAS notre comptabilité :
+  -- nous n'avons demandé qu'un envoi, nous n'en enregistrons qu'un.
+  CONSTRAINT uq_proof_dispatches_proof UNIQUE (proof_id)
+);
+
+CREATE INDEX idx_proof_dispatches_created ON proof_dispatches (created_at);
 
 -- -----------------------------------------------------------------------------
 -- Outbox transactionnelle (Q1) — MÉCANISME DE FIABILITÉ, JAMAIS UN BROKER
@@ -192,6 +224,15 @@ CREATE TRIGGER trg_refusals_no_update
 
 CREATE TRIGGER trg_refusals_no_delete
   BEFORE DELETE ON possession_proof_refusals
+  FOR EACH ROW EXECUTE FUNCTION forbid_delete();
+
+-- Le registre du coût est append-only : une facture ne se réécrit pas.
+CREATE TRIGGER trg_dispatches_no_update
+  BEFORE UPDATE ON proof_dispatches
+  FOR EACH ROW EXECUTE FUNCTION forbid_update();
+
+CREATE TRIGGER trg_dispatches_no_delete
+  BEFORE DELETE ON proof_dispatches
   FOR EACH ROW EXECUTE FUNCTION forbid_delete();
 
 CREATE TRIGGER trg_outbox_no_delete
@@ -418,6 +459,62 @@ BEGIN
 END;
 $$;
 
+-- L'UNIQUE chemin vers la valeur chiffrée d'un numéro (C9/C10 : la colonne est
+-- hors du SELECT du rôle applicatif). Le service ne lit un numéro que pour le
+-- LIVRER — jamais « au cas où », jamais pour l'afficher en masse. La base ne
+-- déchiffre rien (elle n'a pas les clés) : elle ne fait que remettre le jeton
+-- chiffré, à celui qui a le droit de le demander.
+-- SECURITY DEFINER : le rôle applicatif ne peut PAS lire la colonne en direct.
+CREATE FUNCTION read_phone_encrypted(p_claim_id uuid) RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  token text;
+BEGIN
+  SELECT phone_encrypted INTO token FROM phone_claims WHERE id = p_claim_id;
+  RETURN token;
+END;
+$$;
+
+-- P6 — Le fournisseur a ACCEPTÉ : on enregistre l'envoi (le coût) et on trace
+-- sa référence sur la preuve. Appelée APRÈS l'appel réseau, dans une
+-- transaction NEUVE (§3.13). BOLA en base : la preuve doit appartenir au
+-- compte nommé. Idempotente : un rappel (retry réseau) ne double pas la
+-- facture — l'unicité (proof_id) est en base, pas dans un « if » du service.
+CREATE FUNCTION record_proof_dispatch(
+  p_proof_id    uuid,
+  p_account_id  uuid,
+  p_provider_ref text
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  p possession_proofs%ROWTYPE;
+BEGIN
+  SELECT pr.* INTO p FROM possession_proofs pr
+    JOIN phone_claims c ON c.id = pr.claim_id
+   WHERE pr.id = p_proof_id
+     AND c.account_id = p_account_id
+   FOR UPDATE OF pr;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO proof_dispatches (proof_id, channel, provider_ref)
+  VALUES (p.id, p.channel, p_provider_ref)
+  ON CONFLICT (proof_id) DO NOTHING;
+
+  UPDATE possession_proofs SET provider_ref = p_provider_ref
+   WHERE id = p.id AND provider_ref IS NULL;
+
+  RETURN true;
+END;
+$$;
+
 -- Le fournisseur n'a pas pu livrer (muet, erreur) : on clôt proprement. Le
 -- service ne peut pas le faire à la main (aucun GRANT UPDATE (status)).
 --
@@ -450,14 +547,20 @@ $$;
 -- après l'appel au fournisseur, §3.13). Il EXÉCUTE, il obéit au verdict.
 -- code_hmac est ABSENT du SELECT : le service ne compare aucun code (C9/C10).
 -- -----------------------------------------------------------------------------
+-- Le service n'écrit RIEN ici : ni preuve, ni référence, ni statut. Il
+-- EXÉCUTE les fonctions, il obéit aux verdicts. (provider_ref est posé par
+-- record_proof_dispatch, en même temps que la ligne de coût — les deux faits
+-- ne peuvent plus diverger.)
 GRANT SELECT (id, claim_id, channel, proof_code_key_id, attempts, max_attempts,
               expires_at, status, provider_ref, settled_at, created_at)
   ON possession_proofs TO user_core_app;
-GRANT UPDATE (provider_ref) ON possession_proofs TO user_core_app;
-REVOKE INSERT, DELETE, TRUNCATE ON possession_proofs FROM user_core_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON possession_proofs FROM user_core_app;
 
 GRANT SELECT ON possession_proof_refusals TO user_core_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON possession_proof_refusals FROM user_core_app;
+
+GRANT SELECT ON proof_dispatches TO user_core_app;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON proof_dispatches FROM user_core_app;
 
 GRANT SELECT ON outbox TO user_core_app;
 GRANT UPDATE (status, published_at) ON outbox TO user_core_app;
@@ -466,6 +569,10 @@ REVOKE INSERT, DELETE, TRUNCATE ON outbox FROM user_core_app;
 REVOKE ALL ON FUNCTION open_possession_proof(uuid, proof_channel, text, text, integer, integer, integer, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION verify_possession_code(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION abandon_possession_proof(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION record_proof_dispatch(uuid, uuid, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION record_proof_dispatch(uuid, uuid, text) TO user_core_app;
+REVOKE ALL ON FUNCTION read_phone_encrypted(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION read_phone_encrypted(uuid) TO user_core_app;
 GRANT EXECUTE ON FUNCTION open_possession_proof(uuid, proof_channel, text, text, integer, integer, integer, integer) TO user_core_app;
 GRANT EXECUTE ON FUNCTION verify_possession_code(uuid, text) TO user_core_app;
 GRANT EXECUTE ON FUNCTION abandon_possession_proof(uuid, uuid) TO user_core_app;

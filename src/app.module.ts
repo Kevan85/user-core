@@ -11,11 +11,14 @@ import { SESSION_SERVICE, type SessionService } from './auth/session.service';
 import type { ApiAssembly } from './bootstrap/assembly';
 import { PG_POOL } from './db/pool';
 import { HealthController } from './health/health.controller';
+import { PhoneController } from './phone/phone.controller';
+import { PHONE_SERVICE, type PhoneService } from './phone/phone.service';
 
 export interface AuthWiring {
   authService: AuthService;
   sessionService: SessionService;
   provider: AuthenticationProvider;
+  phoneService: PhoneService;
 }
 
 /**
@@ -28,12 +31,13 @@ export class AppModule {
   static register(assembly: ApiAssembly, auth: AuthWiring): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, SessionController],
+      controllers: [HealthController, AuthController, SessionController, PhoneController],
       providers: [
         { provide: PG_POOL, useValue: assembly.pool },
         { provide: AUTH_SERVICE, useValue: auth.authService },
         { provide: SESSION_SERVICE, useValue: auth.sessionService },
         { provide: AUTH_PROVIDER, useValue: auth.provider },
+        { provide: PHONE_SERVICE, useValue: auth.phoneService },
       ],
     };
   }
