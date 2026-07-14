@@ -50,13 +50,16 @@ CREATE TABLE program_clients (
     CHECK ((status = 'REVOKED') = (revoked_at IS NOT NULL))
 );
 
--- Au plus UNE identité cliente ACTIVE par programme : la révocation d'un
--- client ne laisse aucune porte jumelle oubliée, et « couper Scolaria » est
--- UNE écriture. Si un besoin réel de clients multiples arrive un jour
--- (métrique, pas anticipation), lever cet index sera une migration signée.
-CREATE UNIQUE INDEX uq_program_clients_active
-  ON program_clients (program_id) WHERE status = 'ACTIVE';
-
+-- DEUX identités clientes ACTIVES peuvent coexister pour un même programme,
+-- et c'est VOULU (arbitrage Auditeur, 15/07/2026) : le jour où la clé d'un
+-- programme fuite, on émet une identité neuve, le programme bascule ses
+-- appels dessus, PUIS on révoque l'ancienne — un recouvrement de quelques
+-- minutes, sans coupure de service. Un « au plus un actif » gravé ici
+-- forcerait révoquer d'abord (le programme tombe) puis créer (il remonte) :
+-- une rotation propre deviendrait une interruption, en pleine journée de
+-- paiements. Même logique que la fenêtre de grâce des sessions (LOT 1).
+-- Si le nombre de clients actifs doit se borner un jour : règle en config,
+-- jamais un index.
 CREATE INDEX idx_program_clients_program ON program_clients (program_id);
 
 CREATE TABLE program_client_keys (

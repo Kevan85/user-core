@@ -98,12 +98,25 @@ describe('program_clients / program_client_keys — invariants en base', () => {
     ).rejects.toMatchObject({ code: 'P0108' });
   });
 
-  test('au plus UNE identité cliente ACTIVE par programme (index unique partiel)', async () => {
+  test('recouvrement de compromission : DEUX clients ACTIFS coexistent, puis l\'ancien tombe', async () => {
+    // La clé du programme fuite : identité neuve ÉMISE PENDANT que l'ancienne
+    // vit encore (le programme bascule sans coupure), puis l'ancienne se
+    // révoque. Un « au plus un actif » interdirait ce recouvrement.
     await insertProgram('prog-c');
-    await registerProgramClient(owner, 'prog-c', 'K1', publicKeyB64());
-    await expect(registerProgramClient(owner, 'prog-c', 'K1', publicKeyB64())).rejects.toThrow(
-      /uq_program_clients_active/,
+    const compromised = await registerProgramClient(owner, 'prog-c', 'K1', publicKeyB64());
+    const replacement = await registerProgramClient(owner, 'prog-c', 'K1', publicKeyB64());
+
+    const active = await owner.query(
+      "SELECT client_id FROM program_clients WHERE status = 'ACTIVE'",
     );
+    expect(active.rows).toHaveLength(2);
+
+    await revokeProgramClient(owner, compromised.clientId);
+    const after = await owner.query<{ client_id: string }>(
+      "SELECT client_id FROM program_clients WHERE status = 'ACTIVE'",
+    );
+    expect(after.rows).toHaveLength(1);
+    expect(after.rows[0]?.client_id).toBe(replacement.clientId);
   });
 
   test('révoquer le client puis en enregistrer un neuf → permis (la ligne morte reste)', async () => {
