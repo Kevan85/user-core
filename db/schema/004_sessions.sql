@@ -149,6 +149,29 @@ CREATE TRIGGER trg_sessions_cascade_revocation
   AFTER UPDATE ON sessions
   FOR EACH ROW EXECUTE FUNCTION cascade_session_revocation();
 
+-- C13 : désactiver un compte COUPE TOUT — le mur porteur est en base, patron
+-- C1. Au passage à DEACTIVATED, la base révoque toutes les sessions du
+-- compte (motif ADMIN), ce qui déclenche à son tour la cascade C1 sur les
+-- jetons. Une seule écriture, tout tombe — aucun chemin d'appel à se
+-- souvenir de rien. (Le trigger vit dans 004 : c'est ici que sessions
+-- existe ; 002 ne la connaît pas.)
+CREATE FUNCTION cascade_account_deactivation() RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = 'DEACTIVATED' AND OLD.status IS DISTINCT FROM NEW.status THEN
+    UPDATE sessions
+       SET status = 'REVOKED', revoke_reason = 'ADMIN'
+     WHERE account_id = NEW.id
+       AND status = 'ACTIVE';
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
+
+CREATE TRIGGER trg_accounts_cascade_deactivation
+  AFTER UPDATE ON accounts
+  FOR EACH ROW EXECUTE FUNCTION cascade_account_deactivation();
+
 CREATE TRIGGER trg_sessions_no_delete
   BEFORE DELETE ON sessions
   FOR EACH ROW EXECUTE FUNCTION forbid_delete();
@@ -290,6 +313,7 @@ AS $$
 DECLARE
   t session_refresh_tokens%ROWTYPE;
   s sessions%ROWTYPE;
+  a accounts%ROWTYPE;
 BEGIN
   SELECT * INTO t FROM session_refresh_tokens srt
    WHERE srt.token_hash = p_token_hash;
@@ -301,13 +325,17 @@ BEGIN
   END IF;
 
   SELECT * INTO s FROM sessions se WHERE se.id = t.session_id;
+  SELECT * INTO a FROM accounts ac WHERE ac.id = s.account_id;
 
   token_id := t.id;
   session_id := t.session_id;
   account_id := s.account_id;
   successor_id := t.replaced_by_id;
 
-  IF s.status <> 'ACTIVE' OR s.absolute_expires_at <= now() THEN
+  -- C13 (ceinture) : un compte non actif rend TOUT DEAD — même une session
+  -- qu'un chemin oublieux aurait ouverte après la désactivation.
+  IF a.status <> 'ACTIVE'
+     OR s.status <> 'ACTIVE' OR s.absolute_expires_at <= now() THEN
     verdict := 'DEAD';
   ELSIF t.status = 'ACTIVE' AND t.expires_at > now() THEN
     verdict := 'USABLE';

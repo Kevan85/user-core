@@ -122,16 +122,19 @@ GRANT UPDATE (status, failed_attempts, locked_until)
   ON account_secrets TO user_core_app;
 REVOKE DELETE, TRUNCATE ON account_secrets FROM user_core_app;
 
--- Le SEUL chemin vers le hash : ACTIVE, non expiré, non verrouillé. La vue
--- s'exécute avec les droits de son PROPRIÉTAIRE (non security_invoker) —
--- c'est ce qui permet au rôle bridé de lire le hash par elle, et par elle
--- seule. Effet structurel voulu : un compte verrouillé n'a AUCUN secret
--- authentifiable — le « if » de l'étape 7 devient une propriété du schéma.
+-- Le SEUL chemin vers le hash : COMPTE ACTIF (C12), secret ACTIVE, non
+-- expiré, non verrouillé. La vue s'exécute avec les droits de son
+-- PROPRIÉTAIRE (non security_invoker) — c'est ce qui permet au rôle bridé de
+-- lire le hash par elle, et par elle seule. Effets structurels voulus : un
+-- compte verrouillé OU désactivé n'a AUCUN secret authentifiable — le WHERE
+-- du service est une façade, l'invariant vit ici.
 CREATE VIEW authenticable_secrets AS
-  SELECT id, account_id, secret_hash, is_temporary
-    FROM account_secrets
-   WHERE status = 'ACTIVE'
-     AND (expires_at   IS NULL OR expires_at   > now())
-     AND (locked_until IS NULL OR locked_until <= now());
+  SELECT s.id, s.account_id, s.secret_hash, s.is_temporary
+    FROM account_secrets s
+    JOIN accounts a ON a.id = s.account_id
+   WHERE a.status = 'ACTIVE'
+     AND s.status = 'ACTIVE'
+     AND (s.expires_at   IS NULL OR s.expires_at   > now())
+     AND (s.locked_until IS NULL OR s.locked_until <= now());
 
 GRANT SELECT ON authenticable_secrets TO user_core_app;

@@ -259,6 +259,22 @@ describe('account_secrets — invariants en base', () => {
     expect(rows.rows[0]?.secret_hash).toBe(HASH);
   });
 
+  test('C12 — un compte DÉSACTIVÉ n\'a aucun secret authentifiable (zéro ligne dans la vue)', async () => {
+    const accountId = await createAccount();
+    await insertSecret(accountId);
+    const before = await app.query(
+      'SELECT id FROM authenticable_secrets WHERE account_id = $1',
+      [accountId],
+    );
+    expect(before.rows).toHaveLength(1);
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
+    const after = await app.query(
+      'SELECT id FROM authenticable_secrets WHERE account_id = $1',
+      [accountId],
+    );
+    expect(after.rows).toHaveLength(0);
+  });
+
   test('C9 — le verrouillage retire structurellement le secret de la vue', async () => {
     const accountId = await createAccount();
     const id = await insertSecret(accountId);

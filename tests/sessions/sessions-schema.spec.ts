@@ -409,6 +409,55 @@ describe('sessions & session_refresh_tokens — invariants en base', () => {
     ).rejects.toThrow(/uq_srt_token_hash/);
   });
 
+  test('C13 — désactiver le compte révoque TOUTES ses sessions (nombre, statuts, motif) et leurs jetons', async () => {
+    const accountId = await createAccount();
+    const s1 = await createSession(accountId);
+    const s2 = await createSession(accountId);
+    await insertTokenWithHash(s1);
+    const t2 = await insertTokenWithHash(s2);
+    await rotate(t2.id, s2); // s2 porte 1 ROTATED + 1 ACTIVE
+
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
+
+    const sessions = await app.query<{ status: string; revoke_reason: string }>(
+      'SELECT status, revoke_reason FROM sessions WHERE account_id = $1',
+      [accountId],
+    );
+    expect(sessions.rows).toHaveLength(2);
+    expect(sessions.rows.map((r) => r.status)).toEqual(['REVOKED', 'REVOKED']);
+    expect(sessions.rows.map((r) => r.revoke_reason)).toEqual(['ADMIN', 'ADMIN']);
+
+    const tokens = await app.query<{ status: string }>(
+      `SELECT srt.status FROM session_refresh_tokens srt
+        JOIN sessions se ON se.id = srt.session_id
+       WHERE se.account_id = $1`,
+      [accountId],
+    );
+    expect(tokens.rows).toHaveLength(3);
+    expect(tokens.rows.map((r) => r.status)).toEqual(['REVOKED', 'REVOKED', 'REVOKED']);
+  });
+
+  test('C13 — le jeton d\'un compte désactivé reçoit le verdict DEAD', async () => {
+    const accountId = await createAccount();
+    const sessionId = await createSession(accountId);
+    const { hash } = await insertTokenWithHash(sessionId);
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('DEAD');
+  });
+
+  test('C13 (ceinture) — une session créée APRÈS la désactivation reste inutilisable', async () => {
+    const accountId = await createAccount();
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
+    // Le chemin oublieux : ouvrir une session sous un compte désactivé reste
+    // représentable (rien ne l'interdit à l'INSERT) — mais ses jetons sont
+    // morts-nés pour lookup_refresh_token, qui joint accounts.
+    const sessionId = await createSession(accountId);
+    const { hash } = await insertTokenWithHash(sessionId);
+    const v = await lookup(hash);
+    expect(v.verdict).toBe('DEAD');
+  });
+
   test('C10-b — un jeton dont l\'échéance dépasse celle de sa session → refus à la naissance', async () => {
     const sessionId = await createSession(await createAccount(), "interval '30 days'");
     await expect(
