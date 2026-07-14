@@ -16,6 +16,8 @@ export const DB_ERROR = {
   ILLEGAL_ATTEMPT_COUNTER: 'P0106',
   DELETE_FORBIDDEN: 'P0107',
   DEAD_PARENT: 'P0108',
+  /** Empreinte calculée sous une clé d'empreinte qui n'est plus l'active (006). */
+  STALE_FINGERPRINT_KEY: 'P0109',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];
