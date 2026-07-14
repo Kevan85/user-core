@@ -1,0 +1,102 @@
+# CI = gate de merge (CLAUDE.md §4) : aucun merge sans elle verte.
+# Les tests d'invariants tournent contre un VRAI postgres:15 — la borne basse
+# annoncée par les docs (gen_random_uuid natif) : on teste ce qu'on promet.
+name: CI
+
+# Tout push déclenche : le rapport d'étape exige une CI verte AVANT l'ouverture
+# de la PR, et les checks attachés au SHA s'affichent ensuite dans la PR (pas de
+# double run push+pull_request).
+on: push
+
+jobs:
+  tests:
+    name: Tests d'invariants (Postgres 15 réel)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user_core
+          POSTGRES_PASSWORD: user_core_ci
+          POSTGRES_DB: user_core
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user_core -d user_core"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # LE SERVICE : rôle bridé, et lui seul (le boot refuse tout autre rôle).
+      DATABASE_URL: postgres://user_core_app:user_core_app_ci@localhost:5432/user_core
+      # ADMINISTRATION : migrations + harnais de test UNIQUEMENT.
+      DATABASE_ADMIN_URL: postgres://user_core:user_core_ci@localhost:5432/user_core
+      # Mot de passe du rôle applicatif : posé par le globalSetup Jest via
+      # ALTER ROLE (jamais par une migration). Base de CI jetable.
+      # Doit rester cohérent avec DATABASE_URL ci-dessus.
+      USER_CORE_APP_PASSWORD: user_core_app_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+      - name: Typecheck strict
+        run: npx tsc -p tsconfig.json --noEmit
+      - name: Tests (globalSetup migre + pose le mot de passe, puis matrice)
+        run: npm test
+
+  garde-genericite-a:
+    name: "Garde généricité — motif A (CLAUDE.md §3.7) : zéro terme de verticale"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motif contractuel A, périmètre db/ src/ scripts/, sensible à la casse
+        run: |
+          if git grep -rnE "student|pupil|teacher|school|academic|patient|doctor|clinic|property|tenant|order|cart|enrollment|classroom|classId|class_id|\bfee\b|\bfees\b" -- db/ src/ scripts/; then
+            echo "ÉCHEC : terme de verticale détecté dans le cœur (CLAUDE.md §3.7, motif A)"
+            exit 1
+          fi
+          echo "OK : zéro terme de verticale (motif A)"
+
+  garde-genericite-b:
+    name: "Garde généricité — motif B (CLAUDE.md §3.7) : zéro class dans db/"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motif contractuel B, périmètre db/ uniquement
+        run: |
+          if git grep -rnE "(^|[^_])class" -- db/; then
+            echo "ÉCHEC : terme class détecté dans le schéma (CLAUDE.md §3.7, motif B)"
+            exit 1
+          fi
+          echo "OK : zéro class dans db/ (motif B)"
+
+  garde-abonnement:
+    name: "Garde anti-abonnement (CLAUDE.md §3.8) : le catalogue reste un droit d'accès"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motif contractuel §3.8, périmètre db/ src/ scripts/, insensible à la casse
+        run: |
+          if git grep -rniE "price|billing_cycle|next_renewal|subscription|invoice|\bamount\b|currency" -- db/ src/ scripts/; then
+            echo "ÉCHEC : marqueur d'abonnement/facturation détecté (CLAUDE.md §3.8)"
+            exit 1
+          fi
+          echo "OK : zéro marqueur d'abonnement"
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Dépendances
+        run: npm ci
+      - name: ESLint
+        run: npm run lint

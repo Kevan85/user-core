@@ -1,0 +1,26 @@
+# Postgres de DÉVELOPPEMENT local uniquement — jamais utilisé en prod.
+# Version 15 = borne basse annoncée par les docs (gen_random_uuid natif) :
+# on teste ce qu'on promet.
+services:
+  postgres:
+    image: postgres:15
+    container_name: user-core-postgres
+    environment:
+      POSTGRES_USER: user_core
+      POSTGRES_PASSWORD: user_core_dev
+      POSTGRES_DB: user_core
+    ports:
+      # 5434 côté hôte : User-Core est une infrastructure séparée — il ne
+      # partage jamais le Postgres d'une verticale ni d'un autre cœur
+      # (Scolaria occupe 5432 en dev, payment-core 5433).
+      - "5434:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_core -d user_core"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
