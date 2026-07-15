@@ -27,6 +27,12 @@ import { CatalogController } from './catalog/catalog.controller';
 import { CATALOG_SERVICE, type CatalogService } from './catalog/catalog.service';
 import { PhoneController } from './phone/phone.controller';
 import { PHONE_SERVICE, type PhoneService } from './phone/phone.service';
+import { PROGRAM_JWKS, type PublicJwk } from './programs/jwks';
+import { ProgramAuthController } from './programs/program-auth.controller';
+import {
+  PROGRAM_AUTH_SERVICE,
+  type ProgramAuthService,
+} from './programs/program-auth.service';
 
 export interface AuthWiring {
   authService: AuthService;
@@ -37,6 +43,8 @@ export interface AuthWiring {
   registrationService: RegistrationService;
   profileService: ProfileService;
   accountInvitationsService: AccountInvitationsService;
+  programAuthService: ProgramAuthService;
+  jwks: { keys: PublicJwk[] };
 }
 
 /**
@@ -58,6 +66,7 @@ export class AppModule {
         CatalogController,
         ProfileController,
         AccountInvitationsController,
+        ProgramAuthController,
       ],
       providers: [
         { provide: PG_POOL, useValue: assembly.pool },
@@ -69,6 +78,8 @@ export class AppModule {
         { provide: REGISTRATION_SERVICE, useValue: auth.registrationService },
         { provide: PROFILE_SERVICE, useValue: auth.profileService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
+        { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
+        { provide: PROGRAM_JWKS, useValue: auth.jwks },
       ],
     };
   }

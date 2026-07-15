@@ -15,6 +15,9 @@ import { CatalogService } from './catalog/catalog.service';
 import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
+import { buildJwks } from './programs/jwks';
+import { assembleProgramAuthFromEnv } from './programs/program-auth-config';
+import { ProgramAuthService } from './programs/program-auth.service';
 import { assembleProofCodeKeyring } from './proving/proof-code';
 import { LyingProver } from './proving/simulator/lying-prover';
 
@@ -83,6 +86,20 @@ async function bootstrap(): Promise<void> {
   const profileService = new ProfileService(assembly.pool);
   const accountInvitationsService = new AccountInvitationsService(assembly.pool);
 
+  // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
+  // (pid = LA frontière de /v1), throttle dédié par IP et par client visé.
+  const programAuthConfig = assembleProgramAuthFromEnv();
+  const programAuthService = new ProgramAuthService(
+    assembly.pool,
+    authConfig,
+    programAuthConfig,
+    new LoginThrottle(
+      programAuthConfig.throttleMaxAttempts,
+      programAuthConfig.throttleWindowSeconds,
+    ),
+  );
+  const jwks = buildJwks(authConfig);
+
   const app = await NestFactory.create(
     AppModule.register(assembly, {
       authService,
@@ -93,6 +110,8 @@ async function bootstrap(): Promise<void> {
       registrationService,
       profileService,
       accountInvitationsService,
+      programAuthService,
+      jwks,
     }),
   );
 
