@@ -5,6 +5,7 @@ import { assemblePhoneConfig } from '../../src/phone/phone-config';
 import { PhoneService } from '../../src/phone/phone.service';
 import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 /**
@@ -63,12 +64,8 @@ describe('ZÉRO PII — cycle complet du lot', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7500000000 + seq)],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7500000000 + seq));
   }
 
   test('le cycle complet ne laisse NI numéro NI code, ni en log ni en base', async () => {

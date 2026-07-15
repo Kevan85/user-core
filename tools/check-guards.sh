@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # NB : ce fichier vit dans tools/, HORS du périmètre des gardes (db/ src/
 # scripts/) — il contient les motifs, il se ferait attraper lui-même.
-# Les TROIS gardes contractuelles (CLAUDE.md §3.7, §3.8), jouées sur l'INDEX
-# git — exactement comme la CI les jouera sur le commit poussé.
+# Les SIX gardes contractuelles (CLAUDE.md §3.7, §3.8), jouées sur l'INDEX
+# git — exactement comme la CI les jouera sur le commit poussé. Les motifs
+# sont recopiés VERBATIM de .github/workflows/ci.yml : si l'un des deux
+# fichiers change, l'autre suit dans le même commit.
 #
 # Pourquoi ce script existe : les gardes ont attrapé deux fois du texte écrit
 # dans un COMMENTAIRE (« la classe P0 » → motif B ; « la carte SIM » → motif A,
@@ -34,5 +36,17 @@ run_guard "Motif B (class dans le schéma)" -nE \
 run_guard "Garde anti-abonnement" -niE \
   "price|billing_cycle|next_renewal|subscription|invoice|\bamount\b|currency" \
   -- db/ src/ scripts/
+
+run_guard "Motif D (PII + canal de preuve, sensible à la casse)" -nE \
+  "phone_plain|phoneNumber|msisdn|WHATSAPP|whatsapp|whats_app" \
+  -- db/ src/
+
+run_guard "Motif E (zéro cycle — le dispatcher ne connaît aucune identité)" -nE \
+  "account|phone|claim|session|from '\.\./(auth|phone|catalog|outbox|accounts)" \
+  -- src/dispatch/
+
+run_guard "Motif F (un seul point de déchiffrement)" -n \
+  "decrypt(" \
+  -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts'
 
 exit $status

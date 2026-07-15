@@ -4,6 +4,7 @@ import { AuthService } from '../../src/auth/auth.service';
 import { LocalAuthenticationProvider } from '../../src/auth/local-authentication-provider';
 import { LoginThrottle } from '../../src/auth/login-throttle';
 import { SessionService } from '../../src/auth/session.service';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
@@ -46,23 +47,17 @@ describe('SessionService', () => {
   async function loginFresh(): Promise<Logged> {
     accountSeq += 1;
     const identifier = String(5000000000 + accountSeq);
-    const account = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [identifier],
-      ),
-    );
-    await app.query(
-      'INSERT INTO account_secrets (account_id, secret_hash) VALUES ($1, $2)',
-      [account.id, await provider.hashSecret(SECRET)],
-    );
+    // Depuis 011, le chemin unique : compte + premier secret naissent ensemble.
+    const accountId = await createAccountFixture(app, identifier, {
+      secretHash: await provider.hashSecret(SECRET),
+    });
     const result = await auth.login(identifier, SECRET, '10.0.0.1');
     if (result.outcome !== 'OK') {
       throw new Error(`login OK attendu, reçu ${result.outcome}`);
     }
     const claims = await provider.verifyAccessToken(result.accessToken);
     return {
-      accountId: account.id,
+      accountId,
       sessionId: claims!.sid,
       refreshToken: result.refreshToken,
     };

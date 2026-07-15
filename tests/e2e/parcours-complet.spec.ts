@@ -14,6 +14,7 @@ import { PhoneService } from '../../src/phone/phone.service';
 import { generateProofCode } from '../../src/proving/proof-code';
 import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
@@ -81,18 +82,13 @@ describe('Parcours complet — trois lots, une famille', () => {
     const dispatcher = new CountingDispatcher();
     const publisher = new OutboxPublisher(app, dispatcher, crypto, assemblePublisherConfig({}));
 
-    // --- 1. Un compte naît (identifiant opaque, secret argon2id).
+    // --- 1. Un compte naît par LE chemin unique (011) : compte + premier
+    //        secret dans la même transaction — un compte incomplet est
+    //        non représentable.
     const identifier = '9100000001';
-    const famille = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [identifier],
-      ),
-    ).id;
-    await app.query('INSERT INTO account_secrets (account_id, secret_hash) VALUES ($1, $2)', [
-      famille,
-      await provider.hashSecret(SECRET),
-    ]);
+    const famille = await createAccountFixture(app, identifier, {
+      secretHash: await provider.hashSecret(SECRET),
+    });
 
     // --- 2. Elle se connecte : session révocable, refresh haché.
     const login = await auth.login(identifier, SECRET, '10.0.0.1');
@@ -130,11 +126,7 @@ describe('Parcours complet — trois lots, une famille', () => {
 
     // --- 7. LA SIM CHANGE DE MAINS. Un inconnu — pardon : un NOUVEAU compte —
     //        prouve la même ligne.
-    const inconnu = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ('9100000002', 'ACCOUNT_HOLDER') RETURNING id",
-      ),
-    ).id;
+    const inconnu = await createAccountFixture(app, '9100000002');
     const claim2 = await phone.declare(inconnu, LINE);
     if (claim2.outcome !== 'DECLARED') throw new Error('déclaration attendue');
     await phone.requestProof(inconnu, claim2.claimId, 'CALL');

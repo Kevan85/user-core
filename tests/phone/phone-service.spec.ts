@@ -10,6 +10,7 @@ import { PhoneService } from '../../src/phone/phone.service';
 import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { ConfigViolations } from '../../src/bootstrap/assembly';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
@@ -61,12 +62,8 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7400000000 + seq)],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7400000000 + seq));
   }
 
   test('VÉRIFICATION PARESSEUSE — déclarer n\'envoie RIEN (comptage d\'appels, pas de résultat)', async () => {
@@ -98,16 +95,9 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
 
     seq += 1;
     const identifier = String(7450000000 + seq);
-    const accountId = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [identifier],
-      ),
-    ).id;
-    await app.query('INSERT INTO account_secrets (account_id, secret_hash) VALUES ($1, $2)', [
-      accountId,
-      await provider.hashSecret('S3cret!'),
-    ]);
+    const accountId = await createAccountFixture(app, identifier, {
+      secretHash: await provider.hashSecret('S3cret!'),
+    });
     await phone.declare(accountId, '+243840000002');
 
     // Login réussi, login raté : le chemin d'authentification ne connaît même

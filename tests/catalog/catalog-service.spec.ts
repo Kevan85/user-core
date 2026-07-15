@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import { CatalogService } from '../../src/catalog/catalog.service';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // Le mode d'accès et la règle de réactivation vivent EN BASE : ces tests
@@ -25,14 +26,12 @@ describe('CatalogService', () => {
     await owner.end();
   });
 
-  async function newAccount(role = 'ACCOUNT_HOLDER'): Promise<string> {
+  async function newAccount(
+    role: 'ACCOUNT_HOLDER' | 'PLATFORM_STAFF' | 'PLATFORM_ADMIN' = 'ACCOUNT_HOLDER',
+  ): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        'INSERT INTO accounts (public_identifier, role) VALUES ($1, $2) RETURNING id',
-        [String(7700000000 + seq), role],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7700000000 + seq), { role });
   }
 
   async function newProgram(code: string, mode: 'SELF_SERVICE' | 'GRANTED'): Promise<string> {

@@ -38,6 +38,11 @@ export interface AuthAssembly {
   graceWindowSeconds: number;
   throttleMaxAttempts: number;
   throttleWindowSeconds: number;
+  /** Longueur minimale d'un secret choisi à l'inscription (LOT 4). */
+  secretMinLength: number;
+  /** Throttle DÉDIÉ de l'inscription publique : par IP, budget distinct du login. */
+  registerThrottleMaxAttempts: number;
+  registerThrottleWindowSeconds: number;
 }
 
 function readInt(
@@ -127,6 +132,9 @@ export function assembleAuthFromEnv(env: NodeJS.ProcessEnv = process.env): AuthA
     graceWindowSeconds: readInt(env, 'AUTH_GRACE_WINDOW_SECONDS', 30, violations),
     throttleMaxAttempts: readInt(env, 'AUTH_THROTTLE_MAX_ATTEMPTS', 10, violations),
     throttleWindowSeconds: readInt(env, 'AUTH_THROTTLE_WINDOW_SECONDS', 60, violations),
+    secretMinLength: readInt(env, 'AUTH_SECRET_MIN_LENGTH', 8, violations),
+    registerThrottleMaxAttempts: readInt(env, 'AUTH_REGISTER_THROTTLE_MAX_ATTEMPTS', 5, violations),
+    registerThrottleWindowSeconds: readInt(env, 'AUTH_REGISTER_THROTTLE_WINDOW_SECONDS', 3600, violations),
   };
 
   if (violations.length > 0) {

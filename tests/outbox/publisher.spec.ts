@@ -8,6 +8,7 @@ import { assemblePhoneConfig } from '../../src/phone/phone-config';
 import { PhoneService } from '../../src/phone/phone.service';
 import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 const crypto = assembleCryptoFromEnv({
@@ -69,12 +70,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
 
   async function newAccount(): Promise<string> {
     seq += 1;
-    return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7800000000 + seq)],
-      ),
-    ).id;
+    // Depuis 011, le chemin unique — les fixtures l'empruntent comme le service.
+    return createAccountFixture(app, String(7800000000 + seq));
   }
 
   /** Un compte prouve la ligne : c'est le chemin réel, de bout en bout. */

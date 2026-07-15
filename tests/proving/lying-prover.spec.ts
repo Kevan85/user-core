@@ -11,6 +11,7 @@ import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { encrypt } from '../../src/crypto/aes-gcm';
 import { fingerprintOf } from '../../src/crypto/fingerprint';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
+import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 
 // LES SIX MENSONGES, joués contre la VRAIE base. Le point de chacun : aucun
@@ -69,12 +70,7 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     ttl = TTL,
   ): Promise<{ claimId: string; code: string; accountId: string }> {
     seq += 1;
-    const accountId = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7300000000 + seq)],
-      ),
-    ).id;
+    const accountId = await createAccountFixture(app, String(7300000000 + seq));
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
       await app.query<{ id: string }>(
@@ -188,12 +184,7 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
 
   test('MENSONGE 5 — ERREUR FRANCHE : le fournisseur échoue → DeliveryFailed, la preuve se clôt', async () => {
     seq += 1;
-    const accountId = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7390000000 + seq)],
-      ),
-    ).id;
+    const accountId = await createAccountFixture(app, String(7390000000 + seq));
     const fp = fingerprintOf(crypto.fingerprint, PHONE);
     const claimId = firstRow(
       await app.query<{ id: string }>(
@@ -255,12 +246,7 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
   test('BOLA en base — un compte étranger ne peut PAS clore la preuve d\'un autre', async () => {
     const { claimId } = await declareAndSend('+243830000004');
     seq += 1;
-    const stranger = firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO accounts (public_identifier, role) VALUES ($1, 'ACCOUNT_HOLDER') RETURNING id",
-        [String(7380000000 + seq)],
-      ),
-    ).id;
+    const stranger = await createAccountFixture(app, String(7380000000 + seq));
     const proofId = firstRow(
       await app.query<{ id: string }>(
         "SELECT id FROM possession_proofs WHERE claim_id = $1 AND status = 'PENDING'",
