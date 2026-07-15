@@ -57,14 +57,37 @@ une **métrique** le réclame, jamais par anticipation.
 | **Le catalogue des programmes activés/désactivés** | Les écritures comptables → **Accounting-Core** |
 | Les rôles **transverses** (titulaire, staff plateforme, admin plateforme) | Les rôles **métier** (enseignant, directeur, comptable, médecin) |
 | Le profil de base (nom, langue, préférences) | L'envoi effectif SMS/WhatsApp/push → **dispatcher** |
-| *(v2)* Les **personnes / ayants droit** du foyer | Les conversations → **Plume** · le rendu de documents → **Document-Core** |
+| **Les personnes / ayants droit du foyer** (dès la V1 — voir §2.1) | Les conversations → **Plume** · le rendu de documents → **Document-Core** |
 
-### 2.1 Le cas des enfants — tranché, mais séquencé
-La personne est transverse (l'enfant devient patient chez Mediyo) ; le rôle « élève » reste
-chez Scolaria et pointe vers elle. **MAIS extraire les personnes oblige à casser l'`élève` de
-Scolaria en deux** (une personne + une scolarité) — chantier lourd. Séquence **imposée** :
-- **User-Core v1** : compte, identifiants, session, numéro vérifié, catalogue des programmes.
-- **User-Core v2** : les personnes / ayants droit. **Avant Mediyo, jamais après.**
+### 2.1 Le cas des enfants — tranché : les PERSONNES entrent dès la V1 (arbitrage Kevin, 15/07/2026)
+**Décision de Kevin (15/07/2026), amendant la décision verrouillée n°2 :** *« Dès la V1, les
+enfants doivent bénéficier de la même liberté au sein de l'écosystème que les autres usagers ;
+le faire plus tard coûterait cher. »* Motif : la fenêtre de la production vide est **périssable**
+— extraire les personnes quand Scolaria aura des dizaines de milliers d'élèves collés à sa
+table interne est un ordre de grandeur plus cher que de le faire maintenant (patron de la
+fenêtre, cf. §8). L'auditeur a **vérifié la cohérence** de l'arbitrage et l'a acté.
+
+**La distinction fondatrice que cette décision introduit — PERSONNE ≠ COMPTE :**
+- **Une PERSONNE** est une identité humaine (nom, éléments d'état civil), **transverse** :
+  la même personne est élève chez Scolaria, demain patiente chez Mediyo — **une seule
+  identité, jamais ressaisie**. Possédée par User-Core dès la V1.
+- **Un COMPTE** est le *moyen d'agir* (identifiants, secret, session). Il est **rattaché à
+  une personne**. Toute personne **autonome** a un compte ; un **enfant mineur n'en a pas
+  (encore)** — il est représenté par son/ses responsables.
+- **Le lien de responsabilité** : une personne-responsable agit pour une personne-ayant droit.
+- **L'ÉMANCIPATION** : à la majorité (ou à un événement défini), l'ayant droit **acquiert son
+  compte** — **même `person_id`, identité stable**, nouvelle capacité d'agir. Pas de ressaisie,
+  pas de rupture, et **aucun responsable ne garde la main sur la vie d'un majeur**.
+- **Les rôles métier restent chez les programmes** (§2 inchangé) : « élève », « patient »
+  vivent chez Scolaria et Mediyo et **pointent vers `person_id`**.
+
+**Ce qui reste à concevoir au cadrage du lot « personnes » (ne pas l'inventer avant) :**
+le modèle exact `persons` / `accounts` (le cœur du LOT 1 en sera touché — c'est le bon moment,
+tout est vide) · **le catalogue s'applique-t-il à une personne ou à un compte** (un enfant
+élève est une personne sans compte, dont le responsable gère l'accès) · le flux de rattachement
+d'un ayant droit · la mécanique d'émancipation. **Séquencement recommandé par l'auditeur :**
+cadrer les personnes **avant de figer l'API publique `/v1`** (LOT 4), pour ne pas publier un
+contrat « par compte » qu'on remplace aussitôt par « par personne ».
 
 ### 2.2 Deux pièges de frontière, nommés d'avance
 1. **Le catalogue de programmes ne devient JAMAIS un moteur d'abonnement.** User-Core dit
@@ -133,6 +156,11 @@ code Scolaria (`cce7e712`) :
 ---
 
 ## 4. Le modèle de compte (V1)
+
+> ⚠️ **Amendé le 15/07/2026 (personnes dès la V1, §2.1).** Un COMPTE reste le *moyen d'agir* ;
+> il est désormais **rattaché à une PERSONNE**. Une personne peut exister **sans** compte
+> (enfant mineur). Ce qui suit décrit le compte ; le modèle `persons` / lien de responsabilité
+> / émancipation est cadré au lot « personnes ».
 
 - **Un compte = une personne titulaire, unique au niveau de l'écosystème.** Jamais « un compte
   par programme » ni « un compte par école » — c'est précisément le défaut de Scolaria
@@ -263,6 +291,19 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
 
+> **⚠️ Reclassement du 15/07/2026 (Kevin) — mineurs & émancipation ne sont PLUS des inconnues
+> à obtenir, mais des DÉCISIONS assumées.** Kevin constate qu'**aucun cadre juridique clair
+> n'existe en RDC** sur le régime des données d'un mineur, le consentement parental et l'âge
+> d'émancipation. La règle devient : **on conçoit comme si un cadre STRICT existait déjà**
+> (CLAUDE.md §3.14) — régime volontaire du niveau des standards internationaux, pour ne pas
+> être bloqué si la juridiction légifère. Principes de conception retenus (à graver au cadrage
+> du lot « personnes ») : **plusieurs responsables** via un lien **historisé** (jamais un
+> « parent » figé ; retrait d'un responsable = acte **contrôlé et tracé**) · **émancipation =
+> événement explicite**, âge **paramétrable** par défaut, **coupure nette** (aucun ancien
+> responsable ne garde d'accès sur un majeur) · **minimisation** (le strict nécessaire à
+> l'identité ; date de naissance au minimum utile) · **effacement par crypto-destruction**
+> (implication clés-par-personne à concevoir, cf. §3.14).
+
 **Un agent qui code une valeur « supposée » sur l'un de ces points = plan BLOQUÉ.** On
 paramètre (config/env), on ne fige pas une hypothèse.
 
@@ -270,7 +311,11 @@ paramètre (config/env), on ne fige pas une hypothèse.
 
 1. L'actif = les comptes parents ; User-Core survit aux programmes ; jamais « backend de la
    superApp ».
-2. Frontière D1 (§2), séquence v1 → v2 (personnes avant Mediyo).
+2. Frontière D1 (§2). **Amendé le 15/07/2026 (Kevin) : les PERSONNES / ayants droit du foyer
+   entrent dès la V1** (et non en v2) — l'enfant *existe* comme personne de l'écosystème dès
+   le départ (identité stable, émancipation en grandissant), sans *agir* seul tant qu'il est
+   mineur. Distinction fondatrice PERSONNE ≠ COMPTE, cf. §2.1. La règle « les personnes avant
+   Mediyo » demeure — elle est simplement avancée à la V1.
 3. D2 : construire mince derrière `AuthenticationProvider` ; bascule vers une brique possible,
    jamais obligatoire ; zéro crypto maison.
 4. Téléphone : jamais en clair (HMAC + AES-256-GCM), cycle de vie HMAC distinct, décidé en V1.
@@ -284,3 +329,7 @@ paramètre (config/env), on ne fige pas une hypothèse.
     payeur global dans Payment-Core).
 11. PostgreSQL unique source de vérité ; outbox, pas de broker ; invariants en base.
 12. Français pour docs + commits ; identifiants de code en anglais.
+13. **Concevoir comme si un cadre STRICT de protection des données existait déjà** (Kevin,
+    15/07/2026) — régime volontaire du niveau des standards internationaux, minimisation,
+    consentement tracé, effacement par crypto-destruction ; cf. CLAUDE.md §3.14. Vaut pour
+    toute donnée personnelle, pas seulement les mineurs.
