@@ -290,8 +290,19 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 | 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
-| 5 | **Régime des données d'un MINEUR + consentement parental** (surtout dès Mediyo/santé) | Kevin (BCC / juriste RDC) |
-| 6 | **Âge/événement de l'émancipation** (quand l'ayant droit acquiert son compte autonome) | Kevin (produit + juridique) |
+
+> **⚠️ Reclassement du 15/07/2026 (Kevin) — mineurs & émancipation ne sont PLUS des inconnues
+> à obtenir, mais des DÉCISIONS assumées.** Kevin constate qu'**aucun cadre juridique clair
+> n'existe en RDC** sur le régime des données d'un mineur, le consentement parental et l'âge
+> d'émancipation. La règle devient : **on conçoit comme si un cadre STRICT existait déjà**
+> (CLAUDE.md §3.14) — régime volontaire du niveau des standards internationaux, pour ne pas
+> être bloqué si la juridiction légifère. Principes de conception retenus (à graver au cadrage
+> du lot « personnes ») : **plusieurs responsables** via un lien **historisé** (jamais un
+> « parent » figé ; retrait d'un responsable = acte **contrôlé et tracé**) · **émancipation =
+> événement explicite**, âge **paramétrable** par défaut, **coupure nette** (aucun ancien
+> responsable ne garde d'accès sur un majeur) · **minimisation** (le strict nécessaire à
+> l'identité ; date de naissance au minimum utile) · **effacement par crypto-destruction**
+> (implication clés-par-personne à concevoir, cf. §3.14).
 
 **Un agent qui code une valeur « supposée » sur l'un de ces points = plan BLOQUÉ.** On
 paramètre (config/env), on ne fige pas une hypothèse.
@@ -318,3 +329,7 @@ paramètre (config/env), on ne fige pas une hypothèse.
     payeur global dans Payment-Core).
 11. PostgreSQL unique source de vérité ; outbox, pas de broker ; invariants en base.
 12. Français pour docs + commits ; identifiants de code en anglais.
+13. **Concevoir comme si un cadre STRICT de protection des données existait déjà** (Kevin,
+    15/07/2026) — régime volontaire du niveau des standards internationaux, minimisation,
+    consentement tracé, effacement par crypto-destruction ; cf. CLAUDE.md §3.14. Vaut pour
+    toute donnée personnelle, pas seulement les mineurs.

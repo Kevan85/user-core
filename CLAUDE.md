@@ -237,6 +237,33 @@ d'enrichir l'outbox.
 On réserve, on commit, on appelle (fournisseur de vérification, dispatcher), on écrit le
 verdict dans une transaction neuve.
 
+### 3.14 Concevoir comme si un cadre strict de protection des données existait déjà
+**Décision fondatrice de Kevin (15/07/2026) :** *« Faisons comme si un cadre juridique strict
+existait, afin de ne pas être bloqués si la juridiction légifère. »* Il n'existe **pas** de
+cadre clair en RDC (fait de terrain, source Kevin) — on adopte donc **volontairement** un
+régime du niveau des standards internationaux. **« Pas de loi aujourd'hui » ≠ « aucun risque
+demain »** : un partenaire santé, un bailleur, un opérateur peut l'exiger avant Mediyo. Vaut
+pour **toute** donnée personnelle (numéro, nom, date de naissance, consentement), pas seulement
+les mineurs.
+
+- **Minimisation & finalité** : chaque donnée personnelle a une finalité écrite. Rien « au cas
+  où ». (Déjà tenu par la frontière : le scolaire/santé reste chez les programmes.)
+- **Consentement tracé** : append-only, horodaté — surtout le consentement d'un responsable
+  pour un mineur.
+- **Droit à l'effacement, SANS casser l'intégrité append-only** (§3.10) — la tension se résout
+  par le chiffrement : la PII est chiffrée, **effacer = détruire la clé** (donnée illisible à
+  jamais, registres techniques intacts). ⚠️ **Implication non résolue** : le trousseau actuel
+  (LOT 2) chiffre tout sous une clé partagée → l'effacement est « tout ou rien ». Effacer **une
+  personne** exigera une **granularité de clé par personne** (dérivation + sel oubliable, ou
+  équivalent) — **à concevoir au lot « personnes », pas à improviser.**
+- **Protection renforcée du mineur** : consentement parental tracé, et **coupure nette à
+  l'émancipation** (aucun ancien responsable ne garde d'accès sur un majeur — cf. CDC §2.1).
+- **Résidence des données** : rester capable de localiser la donnée (Postgres unique, pas de
+  dispersion) — la réponse BCC (CDC §9) reste ouverte, la conception ne se ferme pas.
+
+Un plan qui détient une donnée personnelle **sans finalité écrite**, ou qui rend l'effacement
+d'une personne **impossible par construction**, = **plan REFUSÉ**.
+
 ---
 
 ## 4. Git Workflow
