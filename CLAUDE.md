@@ -17,7 +17,10 @@ PAS un module de Scolaria.
 - L'actif business = **les comptes parents**. Le compte survit aux programmes : l'enfant finit
   l'école, le compte reste.
 - User-Core possède : **le compte** (identifiants, secrets, session, MFA, récupération), **le
-  téléphone chiffré vérifié une fois**, **le catalogue des programmes** (droit d'accès).
+  téléphone chiffré vérifié une fois**, **le catalogue des programmes** (droit d'accès), et —
+  **depuis l'arbitrage Kevin du 15/07/2026** — **les PERSONNES / ayants droit du foyer dès la
+  V1** (distinction fondatrice PERSONNE ≠ COMPTE : l'enfant *existe* sans *agir* seul ; cf.
+  CDC §2.1).
 - Public : RDC, réseau instable, téléphone-d'abord (pas d'email), WhatsApp dominant, SMS cher.
 
 ### Stack (V1 — sobre)
@@ -288,7 +291,8 @@ verdict dans une transaction neuve.
 Voir [docs/CAHIER_DES_CHARGES.md §10](docs/CAHIER_DES_CHARGES.md) — les 12 décisions,
 notamment : construire mince derrière couture · téléphone jamais en clair · possession =
 SMS/appel uniquement · preuve fraîche gagne · jamais d'OTP de routine · un seul patron de
-session · catalogue = droit d'accès · v2 (personnes) avant Mediyo.
+session · catalogue = droit d'accès · **personnes / ayants droit dès la V1** (amendé le
+15/07/2026 — l'enfant existe comme personne de l'écosystème dès le départ, PERSONNE ≠ COMPTE).
 
 ## 9. Où est quoi
 
