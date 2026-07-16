@@ -20,6 +20,8 @@ export const DB_ERROR = {
   STALE_FINGERPRINT_KEY: 'P0109',
   /** Le mode d'accès du programme interdit cette ouverture (008). */
   ACCESS_MODE_VIOLATION: 'P0110',
+  /** Valeur de registre hors bornes — année de naissance future (014). */
+  VALUE_OUT_OF_BOUNDS: 'P0111',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];
