@@ -37,6 +37,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '013_program_client_assertions.sql',
       '014_persons.sql',
       '015_reference_fail_closed.sql',
+      '016_accounts_person.sql',
     ]);
   });
 

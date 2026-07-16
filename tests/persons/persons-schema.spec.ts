@@ -299,14 +299,20 @@ describe('persons — invariants en base (014)', () => {
       ),
     );
     expect(stored.birth_year).toBe(2010); // la colonne n'a pas bougé
-    expect(() =>
-      decryptCivilIdentity(
-        crypto.encryption,
-        stored.erasure_salt,
-        stored.civil_identity_encrypted,
-        stored.birth_year,
-      ),
-    ).toThrow(/divergence/);
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        decryptCivilIdentity(
+          crypto.encryption,
+          stored.erasure_salt,
+          stored.civil_identity_encrypted,
+          stored.birth_year,
+        ),
+      ).toThrow(/INTÉGRITÉ/);
+      expect(errorSpy).toHaveBeenCalledTimes(1); // l'incident est tracé (C7)
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

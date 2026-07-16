@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { IdentityService } from './accounts/identity.service';
 import { ProfileService } from './accounts/profile.service';
 import { RegistrationService } from './accounts/registration.service';
 import { AppModule } from './app.module';
@@ -84,6 +85,9 @@ async function bootstrap(): Promise<void> {
     ),
   );
   const profileService = new ProfileService(assembly.pool);
+  // LOT 5 — l'identité civile de la personne du compte : chiffrée par clé
+  // dérivée (sel par personne), lue par le point unique avec re-dérivation.
+  const identityService = new IdentityService(assembly.pool, cryptoConfig);
   const accountInvitationsService = new AccountInvitationsService(assembly.pool);
 
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
@@ -109,6 +113,7 @@ async function bootstrap(): Promise<void> {
       catalogService,
       registrationService,
       profileService,
+      identityService,
       accountInvitationsService,
       programAuthService,
       jwks,

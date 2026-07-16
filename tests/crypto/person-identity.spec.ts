@@ -3,6 +3,7 @@ import { keyIdOf } from '../../src/crypto/aes-gcm';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import {
   CivilIdentityError,
+  CivilIdentityIntegrityError,
   decryptCivilIdentity,
   encryptCivilIdentity,
   ERASURE_SALT_BYTES,
@@ -51,7 +52,7 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
     );
   });
 
-  test('re-dérivation à la lecture (parade P4) : une divergence blob/borne d’âge refuse de servir', () => {
+  test('re-dérivation à la lecture (parade P4) : une divergence blob/borne d’âge refuse de servir — en INCIDENT, pas en faute de saisie (C7)', () => {
     const salt = generateErasureSalt();
     // Le blob dit 2004 ; la colonne (simulée par une écriture partielle qui a
     // laissé l’ancienne valeur) dit 2010 : la lecture doit refuser, et
@@ -60,14 +61,27 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
       ...IDENTITY,
       birthDate: '2004-03-12',
     });
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       decryptCivilIdentity(crypto.encryption, salt, enc.token, 2010);
-      throw new Error('une CivilIdentityError était attendue');
+      throw new Error('une CivilIdentityIntegrityError était attendue');
     } catch (err) {
-      expect(err).toBeInstanceOf(CivilIdentityError);
-      expect((err as Error).message).toMatch(/divergence/);
+      // Classe DISTINCTE : un « catch CivilIdentityError → 400 » ne peut pas
+      // l'avaler — une violation d'intégrité n'est pas une faute de saisie.
+      expect(err).toBeInstanceOf(CivilIdentityIntegrityError);
+      expect(err).not.toBeInstanceOf(CivilIdentityError);
+      expect((err as Error).message).toMatch(/INTÉGRITÉ/);
       expect((err as Error).message).not.toContain('2004');
       expect((err as Error).message).not.toContain('2010');
+    } finally {
+      // La trace est ÉMISE (espion : on compte les appels), et sans PII.
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const traced = String(errorSpy.mock.calls[0]?.[0]);
+      expect(traced).toMatch(/^INTÉGRITÉ :/);
+      expect(traced).not.toContain('2004');
+      expect(traced).not.toContain('2010');
+      expect(traced).not.toContain('Kabeya');
+      errorSpy.mockRestore();
     }
   });
 

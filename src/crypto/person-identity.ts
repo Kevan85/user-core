@@ -60,6 +60,21 @@ export class CivilIdentityError extends Error {
   }
 }
 
+/**
+ * Une violation d'INTÉGRITÉ du registre n'est PAS une erreur de saisie (C7) :
+ * classe DISTINCTE — qui n'hérite pas de CivilIdentityError, délibérément,
+ * pour qu'un `catch (e instanceof CivilIdentityError) → 400` ne puisse pas
+ * l'avaler — et trace `INTÉGRITÉ :` émise au point de détection (patron
+ * resolveVerifiedAddress : observable et alertable, jamais un 400 dans la
+ * figure d'un parent).
+ */
+export class CivilIdentityIntegrityError extends Error {
+  constructor(reason: string) {
+    super(`INTÉGRITÉ : ${reason}`);
+    this.name = 'CivilIdentityIntegrityError';
+  }
+}
+
 /** Le sel d'effacement d'une personne : CSPRNG, une fois, à la création. */
 export function generateErasureSalt(): Buffer {
   return randomBytes(ERASURE_SALT_BYTES);
@@ -234,11 +249,15 @@ export function decryptCivilIdentity(
   // LA RE-DÉRIVATION (parade P4, à la lecture) : la borne d'âge en clair et
   // la date chiffrée doivent parler du même fait. Une divergence signale une
   // écriture partielle du blob — on refuse de SERVIR une identité qui
-  // contredit le mur d'âge de la base. Trace sans PII : ni l'année, ni la
-  // date, ni le nom ne sortent dans l'erreur.
+  // contredit le mur d'âge de la base, et on le dit sur le canal des
+  // incidents (C7) : classe distincte + trace, jamais un simple refus de
+  // formulaire. Sans PII : ni l'année, ni la date, ni le nom ne sortent.
   if (birthYearOf(identity.birthDate) !== expectedBirthYear) {
-    throw new CivilIdentityError(
-      'divergence entre la borne d’âge en base et la date chiffrée — écriture partielle du blob',
+    console.error(
+      'INTÉGRITÉ : la borne d’âge en base et la date chiffrée divergent — identité non servie',
+    );
+    throw new CivilIdentityIntegrityError(
+      'la borne d’âge en base et la date chiffrée divergent — écriture partielle du blob',
     );
   }
   return identity;

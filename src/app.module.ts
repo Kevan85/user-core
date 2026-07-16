@@ -1,4 +1,6 @@
 import { DynamicModule, Module } from '@nestjs/common';
+import { IdentityController } from './accounts/identity.controller';
+import { IDENTITY_SERVICE, type IdentityService } from './accounts/identity.service';
 import { ProfileController } from './accounts/profile.controller';
 import { PROFILE_SERVICE, type ProfileService } from './accounts/profile.service';
 import { RegistrationController } from './accounts/registration.controller';
@@ -42,6 +44,7 @@ export interface AuthWiring {
   catalogService: CatalogService;
   registrationService: RegistrationService;
   profileService: ProfileService;
+  identityService: IdentityService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
   jwks: { keys: PublicJwk[] };
@@ -65,6 +68,7 @@ export class AppModule {
         PhoneController,
         CatalogController,
         ProfileController,
+        IdentityController,
         AccountInvitationsController,
         ProgramAuthController,
       ],
@@ -77,6 +81,7 @@ export class AppModule {
         { provide: CATALOG_SERVICE, useValue: auth.catalogService },
         { provide: REGISTRATION_SERVICE, useValue: auth.registrationService },
         { provide: PROFILE_SERVICE, useValue: auth.profileService },
+        { provide: IDENTITY_SERVICE, useValue: auth.identityService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },
