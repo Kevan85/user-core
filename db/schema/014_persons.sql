@@ -47,6 +47,10 @@
 -- illisibles, celles des autres restent lisibles, les registres techniques
 -- restent intacts. Le sel est du matériel de clé : hors du SELECT du rôle
 -- applicatif, immuable, 32 octets exigés.
+-- ⚠️ AUCUN CHEMIN D'EFFACEMENT N'EXISTE À CE STADE : le lot dédié livrera
+-- erase_person() (ou équivalent) avec sa procédure contrôlée ET sa politique
+-- de rétention des sauvegardes. Jusque-là le sel est immuable, DÉLIBÉRÉMENT :
+-- « effaçable » décrit une capacité de conception, pas une fonction livrée.
 --
 -- CHEMIN UNIQUE dès le premier jour (leçon F5, patron 011) : le rôle
 -- applicatif n'a JAMAIS eu le droit d'INSERT sur persons — toute personne
@@ -54,8 +58,10 @@
 -- il n'y a rien à retirer plus tard.
 --
 -- ERRCODE : cette migration ajoute P0111 = « valeur de registre hors bornes »
--- (année de naissance future). Les familles P0101…P0110 restent celles de
--- 005/006/008.
+-- (année de naissance future) et P0112 = « table de référence vide » (une
+-- consultation de référence échoue FERMÉ, jamais en rendant NULL — un NULL
+-- dans une comparaison SQL ouvre le mur qu'il devait tenir). Les familles
+-- P0101…P0110 restent celles de 005/006/008.
 -- Pas de BEGIN/COMMIT interne : le runner enveloppe cette migration.
 -- =============================================================================
 
@@ -75,6 +81,13 @@ CREATE TABLE persons (
   -- Le blob et l'identifiant de sa clé vivent et meurent ensemble.
   CONSTRAINT chk_persons_identity_pair
     CHECK ((civil_identity_encrypted IS NULL) = (enc_key_id IS NULL)),
+  -- Le blob porte TOUJOURS une date (validée par son seul écrivain) : un blob
+  -- sans sa borne d'année en clair serait une divergence PAR OMISSION — la
+  -- lecture (re-dérivation, voir read_person_identity) n'aurait rien à
+  -- comparer. La base ne peut pas comparer blob et colonne (pas les clés) ;
+  -- elle peut au moins exiger que les deux existent ensemble.
+  CONSTRAINT chk_persons_identity_has_birth_year
+    CHECK (civil_identity_encrypted IS NULL OR birth_year IS NOT NULL),
   -- Garde statique large ; la borne dynamique (année future) est au trigger.
   CONSTRAINT chk_persons_birth_year_range
     CHECK (birth_year IS NULL OR birth_year BETWEEN 1900 AND 2100),
@@ -163,10 +176,25 @@ GRANT SELECT ON emancipation_policy TO user_core_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON emancipation_policy FROM user_core_app;
 
 -- Le seuil, lisible par les triggers des migrations suivantes (mur d'âge) et
--- par le service (façade). Patron active_hmac_key_id (006).
+-- par le service (façade). Patron active_hmac_key_id (006) — CORRIGÉ : la
+-- consultation échoue FERMÉ (P0112). La forme naïve (SELECT nu) rendrait NULL
+-- si le singleton manquait, et TOUT mur écrit naturellement par-dessus
+-- (« IF x > seuil THEN RAISE ») s'ouvrirait en silence : NULL dans une
+-- comparaison ne lève jamais. On ne demande pas au prochain auteur d'y
+-- penser — il n'y a plus de NULL à oublier. (015 applique la même correction
+-- à active_hmac_key_id, qui portait le défaut d'origine.)
 CREATE FUNCTION emancipation_minimum_age() RETURNS integer AS $$
-  SELECT minimum_age_years FROM emancipation_policy WHERE singleton;
-$$ LANGUAGE sql STABLE
+DECLARE
+  min_age integer;
+BEGIN
+  SELECT minimum_age_years INTO min_age FROM emancipation_policy WHERE singleton;
+  IF min_age IS NULL THEN
+    RAISE EXCEPTION 'emancipation_policy : table de référence vide — le socle est absent, aucun mur ne doit s''ouvrir'
+      USING ERRCODE = 'P0112';
+  END IF;
+  RETURN min_age;
+END;
+$$ LANGUAGE plpgsql STABLE
 SET search_path = pg_catalog, public;
 
 -- -----------------------------------------------------------------------------
@@ -212,14 +240,23 @@ GRANT EXECUTE ON FUNCTION create_person(text, bytea, text, text, integer)
 -- déchiffre rien (elle n'a pas les clés — c'est délibéré) : elle remet le
 -- jeton chiffré et le sel à qui a le droit de les demander. Le déchiffrement
 -- lui-même n'existe que dans src/crypto/person-identity.ts (motif F).
+--
+-- birth_year VOYAGE AVEC LE BLOB, délibérément (parade P4, à la LECTURE) :
+-- le blob et la colonne sont deux représentations du même fait, et la base
+-- ne peut pas les comparer. Le lecteur unique, LUI, le peut — et le doit :
+-- decryptCivilIdentity() re-dérive l'année depuis la date déchiffrée et
+-- refuse toute divergence (patron exact de resolveVerifiedAddress : une
+-- écriture partielle du blob seul se détecte à CHAQUE lecture, jamais des
+-- semaines plus tard).
 -- -----------------------------------------------------------------------------
 CREATE FUNCTION read_person_identity(p_person_id uuid)
-RETURNS TABLE (civil_identity_encrypted text, enc_key_id text, erasure_salt bytea)
+RETURNS TABLE (civil_identity_encrypted text, enc_key_id text, erasure_salt bytea,
+               birth_year smallint)
 LANGUAGE sql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  SELECT p.civil_identity_encrypted, p.enc_key_id, p.erasure_salt
+  SELECT p.civil_identity_encrypted, p.enc_key_id, p.erasure_salt, p.birth_year
     FROM persons p
    WHERE p.id = p_person_id;
 $$;

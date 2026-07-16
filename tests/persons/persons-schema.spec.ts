@@ -91,14 +91,15 @@ describe('persons — invariants en base (014)', () => {
   test('le blob et sa clé vivent et meurent ensemble (paire CHECK)', async () => {
     const salt = generateErasureSalt();
     const enc = encryptCivilIdentity(crypto.encryption, salt, IDENTITY);
-    // Blob sans clé : refusé.
+    // Blob sans clé : refusé (l'année est fournie pour isoler LA paire —
+    // sans elle, c'est chk_persons_identity_has_birth_year qui lève d'abord).
     await expect(
       app.query('SELECT create_person($1, $2, $3, $4, $5)', [
         nextIdentifier(),
         salt,
         enc.token,
         null,
-        null,
+        enc.birthYear,
       ]),
     ).rejects.toThrow(/chk_persons_identity_pair/);
     // Clé sans blob : refusé.
@@ -240,12 +241,72 @@ describe('persons — invariants en base (014)', () => {
         civil_identity_encrypted: string;
         enc_key_id: string;
         erasure_salt: Buffer;
+        birth_year: number;
       }>('SELECT * FROM read_person_identity($1)', [id]),
     );
     expect(identity.erasure_salt.equals(salt)).toBe(true);
+    expect(identity.birth_year).toBe(2010);
     expect(
-      decryptCivilIdentity(crypto.encryption, identity.erasure_salt, identity.civil_identity_encrypted),
+      decryptCivilIdentity(
+        crypto.encryption,
+        identity.erasure_salt,
+        identity.civil_identity_encrypted,
+        identity.birth_year,
+      ),
     ).toEqual(IDENTITY);
+  });
+
+  test('un blob sans sa borne d’année est une divergence PAR OMISSION : refusé par la base', async () => {
+    const salt = generateErasureSalt();
+    const enc = encryptCivilIdentity(crypto.encryption, salt, IDENTITY);
+    await expect(
+      app.query('SELECT create_person($1, $2, $3, $4, $5)', [
+        nextIdentifier(),
+        salt,
+        enc.token,
+        enc.encKeyId,
+        null, // le blob porte une date : la colonne doit exister avec lui
+      ]),
+    ).rejects.toThrow(/chk_persons_identity_has_birth_year/);
+  });
+
+  test('écriture partielle du blob (C4) : la re-dérivation à la lecture refuse de servir', async () => {
+    const salt = generateErasureSalt();
+    const enc = encryptCivilIdentity(crypto.encryption, salt, IDENTITY); // 2010
+    const id = await createPerson(app, nextIdentifier(), { erasureSalt: salt, encrypted: enc });
+
+    // Le chemin le plus naturel du monde : « corriger une faute de frappe »
+    // en réécrivant le blob SEUL — avec une autre date. Le set-once ne voit
+    // rien (birth_year ne change pas), la base ne peut pas comparer (pas les
+    // clés) : l'écriture passe. C'est la LECTURE qui doit attraper.
+    const divergent = encryptCivilIdentity(crypto.encryption, salt, {
+      ...IDENTITY,
+      birthDate: '2004-03-12',
+    });
+    await app.query(
+      'UPDATE persons SET civil_identity_encrypted = $2, enc_key_id = $3 WHERE id = $1',
+      [id, divergent.token, divergent.encKeyId],
+    );
+
+    const stored = firstRow(
+      await app.query<{
+        civil_identity_encrypted: string;
+        erasure_salt: Buffer;
+        birth_year: number;
+      }>(
+        'SELECT civil_identity_encrypted, erasure_salt, birth_year FROM read_person_identity($1)',
+        [id],
+      ),
+    );
+    expect(stored.birth_year).toBe(2010); // la colonne n'a pas bougé
+    expect(() =>
+      decryptCivilIdentity(
+        crypto.encryption,
+        stored.erasure_salt,
+        stored.civil_identity_encrypted,
+        stored.birth_year,
+      ),
+    ).toThrow(/divergence/);
   });
 });
 

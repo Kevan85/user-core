@@ -46,7 +46,29 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
     // c’est lui que 014 stocke dans enc_key_id.
     expect(keyIdOf(enc.token)).toBe('E1');
 
-    expect(decryptCivilIdentity(crypto.encryption, salt, enc.token)).toEqual(IDENTITY);
+    expect(decryptCivilIdentity(crypto.encryption, salt, enc.token, enc.birthYear)).toEqual(
+      IDENTITY,
+    );
+  });
+
+  test('re-dérivation à la lecture (parade P4) : une divergence blob/borne d’âge refuse de servir', () => {
+    const salt = generateErasureSalt();
+    // Le blob dit 2004 ; la colonne (simulée par une écriture partielle qui a
+    // laissé l’ancienne valeur) dit 2010 : la lecture doit refuser, et
+    // l’erreur ne doit porter AUCUNE des deux valeurs.
+    const enc = encryptCivilIdentity(crypto.encryption, salt, {
+      ...IDENTITY,
+      birthDate: '2004-03-12',
+    });
+    try {
+      decryptCivilIdentity(crypto.encryption, salt, enc.token, 2010);
+      throw new Error('une CivilIdentityError était attendue');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CivilIdentityError);
+      expect((err as Error).message).toMatch(/divergence/);
+      expect((err as Error).message).not.toContain('2004');
+      expect((err as Error).message).not.toContain('2010');
+    }
   });
 
   test('le clair ne figure nulle part dans le jeton', () => {
@@ -62,7 +84,7 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
 
     // Un autre sel (= le sel détruit puis « deviné ») : échec du tag GCM.
     expect(() =>
-      decryptCivilIdentity(crypto.encryption, generateErasureSalt(), enc.token),
+      decryptCivilIdentity(crypto.encryption, generateErasureSalt(), enc.token, enc.birthYear),
     ).toThrow(/déchiffrement impossible/);
   });
 
@@ -77,7 +99,9 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
     const enc = encryptCivilIdentity(crypto.encryption, salt, IDENTITY);
 
     const rotated = assembly({ E1, E2 }, 'E2');
-    expect(decryptCivilIdentity(rotated.encryption, salt, enc.token)).toEqual(IDENTITY);
+    expect(decryptCivilIdentity(rotated.encryption, salt, enc.token, enc.birthYear)).toEqual(
+      IDENTITY,
+    );
     // Et un nouveau blob part sous la nouvelle clé active.
     expect(encryptCivilIdentity(rotated.encryption, salt, IDENTITY).encKeyId).toBe('E2');
   });
@@ -87,7 +111,7 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
     expect(() => encryptCivilIdentity(crypto.encryption, short, IDENTITY)).toThrow(
       CivilIdentityError,
     );
-    expect(() => decryptCivilIdentity(crypto.encryption, short, 'v1.E1.x.y.z')).toThrow(
+    expect(() => decryptCivilIdentity(crypto.encryption, short, 'v1.E1.x.y.z', 2010)).toThrow(
       CivilIdentityError,
     );
   });

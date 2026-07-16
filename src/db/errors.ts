@@ -22,6 +22,8 @@ export const DB_ERROR = {
   ACCESS_MODE_VIOLATION: 'P0110',
   /** Valeur de registre hors bornes — année de naissance future (014). */
   VALUE_OUT_OF_BOUNDS: 'P0111',
+  /** Table de référence vide — une consultation échoue FERMÉ, jamais NULL (014/015). */
+  EMPTY_REFERENCE: 'P0112',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];

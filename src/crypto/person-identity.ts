@@ -21,11 +21,16 @@ import type { EncryptionKey, Keyring } from './keyring';
  * trousseau ni aux autres personnes. La dérivation est standard (RFC 5869,
  * crypto de Node) : zéro crypto maison.
  *
- * DISCIPLINE DU SEUL ÉCRIVAIN : birth_year (la borne d'âge en clair, 014) est
- * CALCULÉ ICI, à partir de la même date que le blob. Aucun appelant ne le
- * recalcule jamais lui-même : c'est ce qui empêche la colonne et le blob de
- * mentir l'un sur l'autre (la base n'a pas les clés, elle ne peut pas tenir
- * cette cohérence — même raison d'être que la re-dérivation du motif F).
+ * DISCIPLINE DU SEUL ÉCRIVAIN — ET DU SEUL LECTEUR (parade P4, C4) :
+ * birth_year (la borne d'âge en clair, 014) est CALCULÉ ICI à l'écriture, à
+ * partir de la même date que le blob. Mais une écriture PARTIELLE (retoucher
+ * le blob seul, avec une autre date) passerait sans un bruit : la base ne
+ * peut pas comparer deux représentations dont elle ne lit qu'une (pas les
+ * clés — délibéré). La parade est donc à la LECTURE, comme dans
+ * resolveVerifiedAddress : decryptCivilIdentity() reçoit le birth_year
+ * stocké, RE-DÉRIVE l'année depuis la date déchiffrée, et refuse toute
+ * divergence. Une discipline ne tient que si elle est mécanique : le lecteur
+ * n'a pas l'option d'oublier la comparaison, elle est dans sa signature.
  */
 
 export const ERASURE_SALT_BYTES = 32;
@@ -193,6 +198,8 @@ export function decryptCivilIdentity(
   keyring: Keyring<EncryptionKey>,
   erasureSalt: Buffer,
   token: string,
+  /** persons.birth_year, tel que rendu par read_person_identity() — exigé. */
+  expectedBirthYear: number,
 ): PersonCivilIdentity {
   assertSaltShape(erasureSalt);
 
@@ -223,6 +230,17 @@ export function decryptCivilIdentity(
   // Le blob vient de NOUS (même module, même version) — une forme invalide
   // signale une altération que le tag GCM n'explique pas : on refuse net.
   validateIdentityShapeOnly(identity);
+
+  // LA RE-DÉRIVATION (parade P4, à la lecture) : la borne d'âge en clair et
+  // la date chiffrée doivent parler du même fait. Une divergence signale une
+  // écriture partielle du blob — on refuse de SERVIR une identité qui
+  // contredit le mur d'âge de la base. Trace sans PII : ni l'année, ni la
+  // date, ni le nom ne sortent dans l'erreur.
+  if (birthYearOf(identity.birthDate) !== expectedBirthYear) {
+    throw new CivilIdentityError(
+      'divergence entre la borne d’âge en base et la date chiffrée — écriture partielle du blob',
+    );
+  }
   return identity;
 }
 
