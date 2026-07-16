@@ -75,8 +75,8 @@ describe('program_invitations — invariants en base', () => {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone), 'E1'],
       ),
     ).id;
@@ -363,8 +363,8 @@ describe('program_invitations — invariants en base', () => {
     const fp = fingerprintOf(crypto.fingerprint, line);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, 'E1') RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1') RETURNING id`,
         [person, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, line)],
       ),
     ).id;

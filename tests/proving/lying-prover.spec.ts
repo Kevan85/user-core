@@ -74,8 +74,8 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone), 'E1'],
       ),
     ).id;
@@ -188,8 +188,8 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     const fp = fingerprintOf(crypto.fingerprint, PHONE);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, PHONE), 'E1'],
       ),
     ).id;
@@ -208,10 +208,11 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     ).rejects.toThrow(DeliveryFailed);
     expect(prover.delivered).toHaveLength(0);
 
-    // Le service clôt la preuve — BOLA EN BASE : le compte doit être le sien.
+    // Le service clôt la preuve — BOLA EN BASE : la PERSONNE doit être la
+    // sienne (018 : la ligne appartient à la personne).
     const closedByStranger = firstRow(
       await app.query<{ abandon_possession_proof: boolean }>(
-        'SELECT abandon_possession_proof($1, $2)',
+        'SELECT abandon_possession_proof($1, (SELECT person_id FROM accounts WHERE id = $2))',
         [opened.proof_id, accountId],
       ),
     );

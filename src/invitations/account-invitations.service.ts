@@ -42,11 +42,12 @@ export class AccountInvitationsService {
       expires_at: string;
     }>(
       `SELECT i.id, p.code, p.label, i.created_at, i.expires_at
-         FROM phone_claims c
+         FROM accounts a
+         JOIN phone_claims c ON c.person_id = a.person_id
          JOIN program_invitations i
            ON i.hmac_key_id = c.hmac_key_id AND i.phone_hmac = c.phone_hmac
          JOIN programs p ON p.id = i.program_id
-        WHERE c.account_id = $1
+        WHERE a.id = $1
           AND c.status = 'ACTIVE'
           AND i.status = 'PENDING'
           AND NOT i.suppressed

@@ -37,7 +37,7 @@ export const PHONE_SERVICE = 'PHONE_SERVICE';
 
 interface ClaimRow {
   id: string;
-  account_id: string;
+  person_id: string;
   phone_hmac: string;
   hmac_key_id: string;
   enc_key_id: string;
@@ -116,22 +116,25 @@ export class PhoneService {
       return { outcome: 'INVALID_PHONE' };
     }
     const columns = this.buildPhoneColumns(phone);
+    // Depuis 018, la ligne appartient à la PERSONNE : le compte agit POUR
+    // elle. BOLA : le compte vient du jeton signé, sa personne en découle.
+    const personId = await this.personOf(accountId);
 
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      // Une seule revendication VIVANTE par compte (Q3) : déclarer un autre
+      // Une seule revendication VIVANTE par personne (Q3) : déclarer un autre
       // numéro révoque la précédente — jamais de PII de tiers accumulée.
       await client.query(
         `UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'REPLACED'
-          WHERE account_id = $1 AND status = 'PENDING'`,
-        [accountId],
+          WHERE person_id = $1 AND status = 'PENDING'`,
+        [personId],
       );
       const inserted = await client.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [
-          accountId,
+          personId,
           columns.phoneHmac,
           columns.hmacKeyId,
           columns.phoneEncrypted,
@@ -215,17 +218,20 @@ export class PhoneService {
     try {
       const delivered = await this.prover.deliver({ channel, phone, code });
       // 3) Le VERDICT dans une transaction NEUVE : la ligne de coût et la
-      //    référence naissent ensemble (P6).
+      //    référence naissent ensemble (P6). BOLA par la personne (018).
       await this.pool.query('SELECT record_proof_dispatch($1, $2, $3)', [
         proofId,
-        accountId,
+        claim.person_id,
         delivered.providerRef,
       ]);
       return { outcome: 'SENT', proofId };
     } catch (err) {
       if (err instanceof DeliveryFailed) {
         // Rien n'est parti : aucune ligne de coût, et la preuve se clôt.
-        await this.pool.query('SELECT abandon_possession_proof($1, $2)', [proofId, accountId]);
+        await this.pool.query('SELECT abandon_possession_proof($1, $2)', [
+          proofId,
+          claim.person_id,
+        ]);
         return { outcome: 'UNDELIVERABLE' };
       }
       throw err;
@@ -278,14 +284,29 @@ export class PhoneService {
   }
 
   // BOLA (§6) : le compte vient du jeton signé, jamais du corps de la requête.
-  // La clause account_id est la ceinture — un compte ne touche que ses lignes.
+  // Depuis 018 la ligne appartient à la PERSONNE : la jointure par la personne
+  // du compte est la ceinture — un compte ne touche que les lignes de SA
+  // personne.
   private async findOwnClaim(accountId: string, claimId: string): Promise<ClaimRow | null> {
     const result = await this.pool.query<ClaimRow>(
-      `SELECT id, account_id, phone_hmac, hmac_key_id, enc_key_id, status
-         FROM phone_claims WHERE id = $1 AND account_id = $2`,
+      `SELECT c.id, c.person_id, c.phone_hmac, c.hmac_key_id, c.enc_key_id, c.status
+         FROM phone_claims c
+         JOIN accounts a ON a.person_id = c.person_id
+        WHERE c.id = $1 AND a.id = $2`,
       [claimId, accountId],
     );
     return result.rows[0] ?? null;
   }
 
+  private async personOf(accountId: string): Promise<string> {
+    const result = await this.pool.query<{ person_id: string }>(
+      'SELECT person_id FROM accounts WHERE id = $1',
+      [accountId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new Error('téléphone : compte introuvable');
+    }
+    return row.person_id;
+  }
 }

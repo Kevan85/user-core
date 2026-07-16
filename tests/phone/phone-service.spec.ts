@@ -66,6 +66,23 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
     return createAccountFixture(app, String(7400000000 + seq));
   }
 
+  // Depuis 018 : la ligne appartient à la PERSONNE — le compte y mène.
+  async function personOf(accountId: string): Promise<string> {
+    return firstRow(
+      await app.query<{ person_id: string }>('SELECT person_id FROM accounts WHERE id = $1', [
+        accountId,
+      ]),
+    ).person_id;
+  }
+
+  async function claimsOf(accountId: string): Promise<{ status: string; revoke_reason: string | null }[]> {
+    const result = await app.query<{ status: string; revoke_reason: string | null }>(
+      'SELECT status, revoke_reason FROM phone_claims WHERE person_id = $1 ORDER BY created_at',
+      [await personOf(accountId)],
+    );
+    return result.rows;
+  }
+
   test('VÉRIFICATION PARESSEUSE — déclarer n\'envoie RIEN (comptage d\'appels, pas de résultat)', async () => {
     const accountId = await newAccount();
     const declared = await phone.declare(accountId, '+243 84 000 00 01');
@@ -79,8 +96,8 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
 
     const claim = firstRow(
       await app.query<{ status: string; assurance_level: string }>(
-        'SELECT status, assurance_level FROM phone_claims WHERE account_id = $1',
-        [accountId],
+        'SELECT status, assurance_level FROM phone_claims WHERE person_id = $1',
+        [await personOf(accountId)],
       ),
     );
     expect(claim.status).toBe('PENDING');
@@ -179,9 +196,14 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
     ).fingerprintOf(crypto.fingerprint, lineA);
     const claimId = firstRow(
       await owner.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, 'E1') RETURNING id`,
-        [accountId, fingerprintA.value, fingerprintA.hmacKeyId, encrypt(crypto.encryption, lineB)],
+        [
+          await personOf(accountId),
+          fingerprintA.value,
+          fingerprintA.hmacKeyId,
+          encrypt(crypto.encryption, lineB),
+        ],
       ),
     ).id;
 
@@ -211,16 +233,10 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
     expect(stolenVerify.outcome).toBe('NOT_FOUND');
 
     // La revendication de la victime est INTACTE (nombre de lignes des deux côtés).
-    const victimClaims = await app.query<{ status: string }>(
-      'SELECT status FROM phone_claims WHERE account_id = $1',
-      [victim],
-    );
-    expect(victimClaims.rows).toHaveLength(1);
-    expect(victimClaims.rows[0]?.status).toBe('PENDING');
-    const attackerClaims = await app.query('SELECT id FROM phone_claims WHERE account_id = $1', [
-      attacker,
-    ]);
-    expect(attackerClaims.rows).toHaveLength(0);
+    const victimClaims = await claimsOf(victim);
+    expect(victimClaims).toHaveLength(1);
+    expect(victimClaims[0]?.status).toBe('PENDING');
+    expect(await claimsOf(attacker)).toHaveLength(0);
   });
 
   test('cycle complet : déclaration → preuve → code présenté → ligne PROUVÉE', async () => {
@@ -253,13 +269,10 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
     const second = await phone.declare(accountId, '+243840000010');
     expect(second.outcome).toBe('DECLARED');
 
-    const claims = await app.query<{ status: string; revoke_reason: string | null }>(
-      'SELECT status, revoke_reason FROM phone_claims WHERE account_id = $1 ORDER BY created_at',
-      [accountId],
-    );
-    expect(claims.rows).toHaveLength(2);
-    expect(claims.rows[0]).toMatchObject({ status: 'REVOKED', revoke_reason: 'REPLACED' });
-    expect(claims.rows[1]).toMatchObject({ status: 'PENDING' });
+    const claims = await claimsOf(accountId);
+    expect(claims).toHaveLength(2);
+    expect(claims[0]).toMatchObject({ status: 'REVOKED', revoke_reason: 'REPLACED' });
+    expect(claims[1]).toMatchObject({ status: 'PENDING' });
     if (first.outcome !== 'DECLARED') throw new Error('déclaration attendue');
   });
 
@@ -268,10 +281,7 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
     expect((await phone.declare(accountId, '0812345678')).outcome).toBe('INVALID_PHONE');
     expect((await phone.declare(accountId, 'pas-un-numero')).outcome).toBe('INVALID_PHONE');
     expect(prover.deliveries).toBe(0);
-    const claims = await app.query('SELECT id FROM phone_claims WHERE account_id = $1', [
-      accountId,
-    ]);
-    expect(claims.rows).toHaveLength(0);
+    expect(await claimsOf(accountId)).toHaveLength(0);
   });
 
   test('GARDE DE BOOT — trousseau d\'empreinte désaligné avec la base → refus de démarrer', async () => {
@@ -311,25 +321,20 @@ describe('PhoneService — déclaration, preuve, vérification', () => {
       const fingerprintA = (
         await import('../../src/crypto/fingerprint')
       ).fingerprintOf(crypto.fingerprint, '+243840000012');
+      const trapAccount = await newAccount();
       const trap = firstRow(
         await owner.query<{ id: string }>(
-          `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+          `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
            VALUES ($1, $2, $3, $4, 'E1') RETURNING id`,
           [
-            await newAccount(),
+            await personOf(trapAccount),
             fingerprintA.value,
             fingerprintA.hmacKeyId,
             encrypt(crypto.encryption, '+243840000013'),
           ],
         ),
       ).id;
-      const owner2 = firstRow(
-        await app.query<{ account_id: string }>(
-          'SELECT account_id FROM phone_claims WHERE id = $1',
-          [trap],
-        ),
-      ).account_id;
-      await phone.requestProof(owner2, trap, 'SMS');
+      await phone.requestProof(trapAccount, trap, 'SMS');
 
       const logged = [...logSpy.mock.calls, ...errorSpy.mock.calls, ...warnSpy.mock.calls]
         .flat()
