@@ -209,6 +209,16 @@ export function encryptCivilIdentity(
   };
 }
 
+// C10 : TOUT échec du chemin de lecture est une violation d'INTÉGRITÉ du
+// registre — pas seulement la divergence d'année. Un blob qui ne se déchiffre
+// plus (clé sortie du trousseau à une rotation, tag GCM invalide), illisible
+// ou difforme, part sur le canal des incidents : tracé (sans PII) et typé
+// distinctement, jamais confondu avec une faute de saisie.
+function integrityFailure(reason: string): never {
+  console.error(`INTÉGRITÉ : ${reason} — identité non servie`);
+  throw new CivilIdentityIntegrityError(reason);
+}
+
 export function decryptCivilIdentity(
   keyring: Keyring<EncryptionKey>,
   erasureSalt: Buffer,
@@ -218,19 +228,27 @@ export function decryptCivilIdentity(
 ): PersonCivilIdentity {
   assertSaltShape(erasureSalt);
 
-  const plaintext = decrypt(new DerivedKeyring(keyring, erasureSalt), token);
+  let plaintext: string;
+  try {
+    plaintext = decrypt(new DerivedKeyring(keyring, erasureSalt), token);
+  } catch (err) {
+    // La raison de aes-gcm est garantie sans clair et sans clé.
+    integrityFailure(
+      err instanceof Error ? err.message : 'déchiffrement impossible : cause inconnue',
+    );
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(plaintext);
   } catch {
-    throw new CivilIdentityError('blob illisible');
+    integrityFailure('blob illisible');
   }
   if (
     parsed === null ||
     typeof parsed !== 'object' ||
     (parsed as { v?: unknown }).v !== BLOB_VERSION
   ) {
-    throw new CivilIdentityError('version de blob inconnue');
+    integrityFailure('version de blob inconnue');
   }
   const candidate = parsed as {
     nameComponents?: unknown;
@@ -250,13 +268,9 @@ export function decryptCivilIdentity(
   // la date chiffrée doivent parler du même fait. Une divergence signale une
   // écriture partielle du blob — on refuse de SERVIR une identité qui
   // contredit le mur d'âge de la base, et on le dit sur le canal des
-  // incidents (C7) : classe distincte + trace, jamais un simple refus de
-  // formulaire. Sans PII : ni l'année, ni la date, ni le nom ne sortent.
+  // incidents (C7). Sans PII : ni l'année, ni la date, ni le nom ne sortent.
   if (birthYearOf(identity.birthDate) !== expectedBirthYear) {
-    console.error(
-      'INTÉGRITÉ : la borne d’âge en base et la date chiffrée divergent — identité non servie',
-    );
-    throw new CivilIdentityIntegrityError(
+    integrityFailure(
       'la borne d’âge en base et la date chiffrée divergent — écriture partielle du blob',
     );
   }
@@ -264,19 +278,21 @@ export function decryptCivilIdentity(
 }
 
 // À la relecture, la date « dans le futur » ne se re-juge pas (un blob écrit
-// hier reste lisible demain) : seule la FORME est re-validée.
+// hier reste lisible demain) : seule la FORME est re-validée — et une forme
+// invalide dans un blob que NOUS avons écrit est une violation d'intégrité
+// (C10), jamais une faute de saisie.
 function validateIdentityShapeOnly(identity: PersonCivilIdentity): void {
   if (
     !Array.isArray(identity.nameComponents) ||
     identity.nameComponents.length < 1 ||
     identity.nameComponents.some((c) => typeof c !== 'string' || c.length < 1)
   ) {
-    throw new CivilIdentityError('composantes de nom absentes du blob');
+    integrityFailure('composantes de nom absentes du blob');
   }
   if (typeof identity.displayName !== 'string' || identity.displayName.length < 1) {
-    throw new CivilIdentityError("nom d'affichage absent du blob");
+    integrityFailure("nom d'affichage absent du blob");
   }
   if (typeof identity.birthDate !== 'string' || !BIRTH_DATE_SHAPE.test(identity.birthDate)) {
-    throw new CivilIdentityError('date de naissance absente du blob');
+    integrityFailure('date de naissance absente du blob');
   }
 }

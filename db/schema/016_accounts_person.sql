@@ -77,9 +77,12 @@ SET search_path = pg_catalog, public;
 -- -----------------------------------------------------------------------------
 -- create_account() refondu : PERSONNE + compte + secret, UNE transaction.
 -- Le chemin unique de 011 reste le chemin unique (F5 est mort, il le reste :
--- le REVOKE INSERT ON accounts de 011 n'est pas touché) — il crée désormais
--- aussi la personne, par l'INSERT du propriétaire (les gardes de 014
--- s'appliquent à l'intérieur : forme de l'identifiant, taille du sel).
+-- le REVOKE INSERT ON accounts de 011 n'est pas touché) — et la personne
+-- naît PAR create_person() (C9) : le chemin unique de 014 reste unique LUI
+-- AUSSI. Un INSERT direct ici aurait fait DEUX portes de naissance — la
+-- forme exacte du défaut fondateur (une garde posée dans UN chemin, absente
+-- de l'autre) : le jour où create_person() gagne une ligne (trace, registre,
+-- événement), ce chemin-ci l'aurait ratée en silence.
 --
 -- Le rattachement d'un compte à une personne DÉJÀ existante (émancipation)
 -- n'est PAS ce chemin : il arrive avec sa machinerie propre (020) et son mur
@@ -105,9 +108,9 @@ DECLARE
   new_person_id  uuid;
   new_account_id uuid;
 BEGIN
-  INSERT INTO persons (public_identifier, erasure_salt)
-  VALUES (p_person_public_identifier, p_person_erasure_salt)
-  RETURNING id INTO new_person_id;
+  -- LA porte de naissance d'une personne — jamais un INSERT parallèle (C9).
+  new_person_id := create_person(p_person_public_identifier, p_person_erasure_salt,
+                                 NULL, NULL, NULL);
 
   INSERT INTO accounts (public_identifier, role, person_id)
   VALUES (p_public_identifier, p_role, new_person_id)

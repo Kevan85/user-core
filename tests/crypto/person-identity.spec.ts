@@ -92,14 +92,23 @@ describe('person-identity — dérivation par personne et blob chiffré', () => 
     expect(enc.token).not.toContain('2010');
   });
 
-  test('crypto-destruction : sans LE sel, le blob est illisible à jamais', () => {
+  test('crypto-destruction : sans LE sel, le blob est illisible à jamais — et tracé en incident (C10)', () => {
     const salt = generateErasureSalt();
     const enc = encryptCivilIdentity(crypto.encryption, salt, IDENTITY);
 
-    // Un autre sel (= le sel détruit puis « deviné ») : échec du tag GCM.
-    expect(() =>
-      decryptCivilIdentity(crypto.encryption, generateErasureSalt(), enc.token, enc.birthYear),
-    ).toThrow(/déchiffrement impossible/);
+    // Un autre sel (= le sel détruit puis « deviné ») : échec du tag GCM,
+    // rendu en violation d'INTÉGRITÉ typée et tracée — c'est le cas réaliste
+    // d'une rotation malheureuse, il doit être diagnosticable.
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        decryptCivilIdentity(crypto.encryption, generateErasureSalt(), enc.token, enc.birthYear),
+      ).toThrow(CivilIdentityIntegrityError);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(String(errorSpy.mock.calls[0]?.[0])).toMatch(/^INTÉGRITÉ : déchiffrement impossible/);
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   test('deux personnes, même identité : sels distincts, jetons sans rapport', () => {
