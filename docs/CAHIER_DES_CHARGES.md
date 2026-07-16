@@ -210,23 +210,70 @@ code Scolaria (`cce7e712`) :
 > Or c'est la SIM qui reçoit la demande de paiement et qui est débitée. **WhatsApp est écarté
 > comme preuve de possession** — il reste le canal préféré pour *parler* aux gens.
 
-**Échelle de vérification** : 🥇 **appel manqué** (*flash call* — transite par la SIM, marche
-sur tout téléphone, imparable au guichet : le parent voit son propre téléphone sonner) ·
-🥈 **SMS** (repli rationné et plafonné) · ❌ WhatsApp (jamais pour cet usage) ·
-🔭 `Silent Network Authentication` / GSMA Open Gateway : la preuve la plus forte **si** les
-opérateurs RDC y participent — à vérifier, jamais à présumer.
+**Échelle de vérification** (⚠️ **amendée le 16/07/2026** — l'ordre dépend du **VOLUME**, pas
+d'un dogme : cf. §6.4) : **appel manqué** (*flash call* — transite par la SIM, marche sur tout
+téléphone, imparable au guichet : le parent voit son propre téléphone sonner) · **SMS**
+(transite par la SIM : preuve **aussi valable**, et **moins chère au faible volume**) ·
+❌ WhatsApp (jamais pour cet usage — raison de **sécurité**, jamais de prix : cette exclusion-là
+ne dépend d'aucun tarif) · 🔭 `Silent Network Authentication` / GSMA Open Gateway : la preuve
+la plus forte **si** les opérateurs RDC y participent — à vérifier, jamais à présumer.
 
 ### 6.3 Vérification PARESSEUSE — le coût suit le revenu
 On vérifie le numéro **au premier paiement**, pas à l'inscription. Payment-Core exige déjà un
 numéro vérifié avant tout push : la contrainte existe, il suffit de ne pas la déclencher trop
 tôt. **Le coût des canaux devient proportionnel au nombre de PAYEURS, pas à la base.**
 
-### 6.4 L'économie des canaux (tarifs RDC, source Kevin, à re-valider par contrat)
-SMS ≈ 0,25 $ · WhatsApp entreprise-initie ≈ 0,009 $ · utilisateur-initie ≈ 0 $ · flash call :
-**prix à obtenir — c'est LE chiffre manquant**. Calcul posé (école à 500 $/an, 500 parents) :
-vérification par SMS = 175 $ = **35 % du revenu de l'école** ; code SMS à chaque connexion =
-3 000 $/an = **perte nette**. D'où les trois règles gravées : SMS = secours plafonné · jamais
-de code au login de routine · vérification paresseuse.
+### 6.4 L'économie des canaux — **chiffres révisés le 16/07/2026** (source Kevin)
+⚠️ **Le SMS était estimé à 0,25 $ (12/07). Le chiffre réel est ≈ 0,04 $** — deux sources
+convergentes (un fournisseur RDC à 0,041 $ ; DRCNotify à 0,04 $, annonçant des connexions
+directes Vodacom/Airtel/Orange/Africell), **probablement proche du prix opérateur** (arbitrage
+Kevin). **Facteur 6 par rapport à l'estimation initiale : le calcul est refait, et une règle
+est amendée — une règle dont la justification tombe doit être révisée, pas défendue.**
+
+**Le calcul, refait** (école à 500 $/an, 500 parents, facteur de renvoi 1,4 → 700 messages) :
+
+| Usage | Messages/an | Coût | % du revenu de l'école |
+|---|---|---|---|
+| **Vérifier une fois, au premier paiement** (la règle) | 700 | **28 $** | ✅ **5,6 %** |
+| **Un code à chaque connexion** (2×/mois) | 12 000 | **480 $** | 💀 **96 %** |
+
+**Ce qui TIENT, et pourquoi** (aucune de ces règles ne dépendait du prix du SMS) :
+- **Jamais de code au login de routine** — 96 % du revenu : ruineux **à tout prix**. La règle
+  tient à la **structure**, pas au tarif.
+- **Vérification paresseuse** — sa raison est « le coût suit le revenu, pas la base d'inscrits ».
+- **Plafond dur par ligne** — sa raison est de **protéger le téléphone d'un TIERS**, jamais
+  notre facture.
+- **WhatsApp jamais comme preuve** — raison de sécurité (§6.2).
+
+**Ce qui est AMENDÉ** : « SMS = secours rationné » **tombe**. Sa justification était « 35 % du
+revenu de l'école » ; à 0,04 $ c'est **5,6 %** — soutenable. **Le SMS n'est pas un pis-aller :
+c'est le canal de DÉMARRAGE, le moins cher au faible volume.**
+
+**Le flash call — le chiffre manquant est partiellement obtenu.** Offre CheckMobi (abonnement à
+**quota mensuel**, pas du paiement à l'usage) : 15 $/mois → 10 000 vérifications ; 30 $ → 30 000 ;
+60 $ → 120 000 (+0,0005 $ au-delà). **À pleine charge : 0,0005 – 0,0015 $ par vérification.**
+⚠️ **Le piège du quota** : notre vérification est **unique à vie par parent** — à 42/mois
+(1 école), l'abonnement Startup revient à **0,36 $ la vérification**, soit **9× le SMS**.
+
+> **🎯 LE SEUIL DE BASCULE, à graver : ~4 500 vérifications/an** (180 $/an d'abonnement ÷ 0,04 $)
+> — soit **≈ 9 écoles** de 500 parents. **En dessous : SMS à l'usage. Au-dessus : flash call**
+> (le quota Startup couvre 120 000/an pour 180 $ — **22× moins cher** que le SMS à ce volume).
+> **La bascule est un changement de CONFIG, jamais de code** (§3.11 + couture
+> `LineOwnershipProver`). C'est précisément pourquoi aucun prix n'a jamais été figé.
+
+**Questions ouvertes AVANT tout contrat** (elles annulent le prix si mal répondues) : le trafic
+d'appels courts est-il **accepté** par Vodacom/Orange/Airtel (certains opérateurs le bloquent —
+inconnue n°1, §9) ? « *successful verification* » = appel **émis** ou validation **réussie** ?
+Le flash call exige-t-il un **SDK** (donc smartphone) ou marche-t-il par **API pure** (donc
+téléphone basique, l'utilisateur dicte les 4 chiffres — c'est le cas du guichet) ? Engagement
+de durée ? ⚠️ **Un fournisseur voit les numéros en clair : c'est un sous-traitant de données
+personnelles** — contrat et garanties exigés (§3.14).
+
+⚠️ **Se méfier des repères du fournisseur** : « les coûts OTP représentent < 0,1 % de la valeur
+des transactions » est un ratio **fintech** (revenu = % de transaction). **Notre revenu est un
+abonnement école de 500 $/an** — le seul repère valable est le tableau ci-dessus. Et leur guide
+recommande explicitement **l'OTP à chaque connexion** : c'est **leur** intérêt commercial, et
+**notre ruine** (96 %). *Un fournisseur n'est jamais une source de doctrine.*
 
 ### 6.5 Le numéro recyclé — la possession est EXCLUSIVE et au PRÉSENT
 Une preuve **fraîche** révoque d'office la revendication antérieure : deux personnes ne
@@ -286,7 +333,7 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 
 | # | Inconnue | Qui la porte |
 |---|---|---|
-| 1 | Prix d'un flash call vers un mobile congolais + acceptation du trafic par les opérateurs | Kevin (terrain/contrat) |
+| 1 | ~~Prix d'un flash call~~ **PARTIELLEMENT OBTENU (16/07/2026)** : offre CheckMobi = abonnement à quota, **0,0005–0,0015 $/vérification à pleine charge** (§6.4). **Restent ouverts, et ils annulent le prix si mal répondus** : l'**acceptation du trafic** d'appels courts par Vodacom/Orange/Airtel · « successful verification » = appel émis ou validation réussie ? · **SDK requis (smartphone) ou API pure (téléphone basique)** ? | Kevin (terrain/contrat) |
 | 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
