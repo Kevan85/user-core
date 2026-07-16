@@ -178,34 +178,19 @@ export class ResponsibilitiesService {
   }
 
   /**
-   * L'ACTE STAFF (C2, option a) : clore un lien, avec remplacement atomique
-   * si la personne n'aurait plus personne pour agir. L'invariant P0114 est le
-   * mur ; ce service rend les erreurs propres.
+   * L'ACTE STAFF (C2 option a, mur C11) : la clôture passe par
+   * end_responsibility() — SECURITY DEFINER, seul chemin (le rôle applicatif
+   * n'a AUCUN droit d'UPDATE sur les liens). Le contrôle de rôle vit EN BASE
+   * (le rôle du staff est une donnée d'accounts) ; ce service ne fait que
+   * résoudre l'identifiant du remplaçant et rendre les erreurs propres.
+   * Fin + remplacement sont atomiques DANS la fonction ; les murs différés
+   * (orphelin P0114, coupure P0113) rendent leur verdict au commit.
    */
   async endResponsibility(
     staffAccountId: string,
     responsibilityId: string,
     replacementResponsiblePublicIdentifier: string | null,
   ): Promise<EndResponsibilityResult> {
-    const staff = await this.pool.query<{ role: string }>(
-      "SELECT role FROM accounts WHERE id = $1 AND status = 'ACTIVE'",
-      [staffAccountId],
-    );
-    const staffRole = staff.rows[0]?.role;
-    if (staffRole !== 'PLATFORM_STAFF' && staffRole !== 'PLATFORM_ADMIN') {
-      return { outcome: 'FORBIDDEN' };
-    }
-
-    const link = await this.pool.query<{ dependent_person_id: string }>(
-      `SELECT dependent_person_id FROM person_responsibilities
-        WHERE id = $1 AND status = 'ACTIVE'`,
-      [responsibilityId],
-    );
-    const dependent = link.rows[0];
-    if (dependent === undefined) {
-      return { outcome: 'UNKNOWN_RESPONSIBILITY' };
-    }
-
     let replacementPersonId: string | null = null;
     if (replacementResponsiblePublicIdentifier !== null) {
       const replacement = await this.pool.query<{ id: string }>(
@@ -217,28 +202,28 @@ export class ResponsibilitiesService {
         return { outcome: 'UNKNOWN_PERSON' };
       }
     }
+    return this.callEnd(responsibilityId, staffAccountId, replacementPersonId);
+  }
 
-    // Fin + remplacement dans la MÊME transaction : les murs différés
-    // (orphelin, coupure) rendent leur verdict au COMMIT.
-    const client = await this.pool.connect();
+  private async callEnd(
+    responsibilityId: string,
+    actorAccountId: string,
+    replacementPersonId: string | null,
+  ): Promise<EndResponsibilityResult> {
     try {
-      await client.query('BEGIN');
-      if (replacementPersonId !== null) {
-        await client.query(
-          `INSERT INTO person_responsibilities (responsible_person_id, dependent_person_id, opened_by)
-           VALUES ($1, $2, 'PLATFORM_STAFF')`,
-          [replacementPersonId, dependent.dependent_person_id],
-        );
-      }
-      await client.query(
-        `UPDATE person_responsibilities SET status = 'ENDED', end_reason = 'ADMIN'
-          WHERE id = $1 AND status = 'ACTIVE'`,
-        [responsibilityId],
+      const result = await this.pool.query<{ verdict: string }>(
+        'SELECT verdict FROM end_responsibility($1, $2, $3)',
+        [responsibilityId, actorAccountId, replacementPersonId],
       );
-      await client.query('COMMIT');
-      return { outcome: 'OK' };
+      switch (result.rows[0]?.verdict) {
+        case 'ENDED':
+          return { outcome: 'OK' };
+        case 'FORBIDDEN':
+          return { outcome: 'FORBIDDEN' };
+        default:
+          return { outcome: 'UNKNOWN_RESPONSIBILITY' };
+      }
     } catch (err) {
-      await client.query('ROLLBACK');
       if (isDbError(err, DB_ERROR.ORPHANED_DEPENDENT)) {
         return { outcome: 'WOULD_ORPHAN' };
       }
@@ -246,27 +231,8 @@ export class ResponsibilitiesService {
         return { outcome: 'REPLACEMENT_CANNOT_ACT' };
       }
       if (isUniqueViolation(err, 'uq_person_responsibilities_active')) {
-        // Le remplaçant était déjà responsable : la fin seule suffit — on
-        // rejoue sans l'insertion.
-        return this.endWithoutReplacement(responsibilityId);
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
-
-  private async endWithoutReplacement(responsibilityId: string): Promise<EndResponsibilityResult> {
-    try {
-      await this.pool.query(
-        `UPDATE person_responsibilities SET status = 'ENDED', end_reason = 'ADMIN'
-          WHERE id = $1 AND status = 'ACTIVE'`,
-        [responsibilityId],
-      );
-      return { outcome: 'OK' };
-    } catch (err) {
-      if (isDbError(err, DB_ERROR.ORPHANED_DEPENDENT)) {
-        return { outcome: 'WOULD_ORPHAN' };
+        // Le remplaçant était déjà responsable : la fin seule suffit.
+        return this.callEnd(responsibilityId, actorAccountId, null);
       }
       throw err;
     }

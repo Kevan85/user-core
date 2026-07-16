@@ -120,6 +120,21 @@ BEGIN
       USING ERRCODE = 'P0113';
   END IF;
 
+  -- LA COUPURE EST IRRÉVERSIBLE (C11, CDC §2.1.1.3) : une personne émancipée
+  -- ne redevient JAMAIS un ayant droit — même si son compte meurt ensuite
+  -- (un compte désactivé passe le contrôle ci-dessus, délibérément), même
+  -- dans l'année frontière où le mur de minorité la laisserait passer. Le
+  -- registre porte déjà ce fait (end_reason = 'EMANCIPATED') : le mur le
+  -- consulte. La course « émancipation concurrente » n'a pas besoin d'être
+  -- traitée ici : elle crée un compte ACTIF, et l'invariant E différé
+  -- l'attrape au commit quel que soit l'ordre des transactions.
+  IF EXISTS (SELECT 1 FROM person_responsibilities r
+              WHERE r.dependent_person_id = NEW.dependent_person_id
+                AND r.end_reason = 'EMANCIPATED') THEN
+    RAISE EXCEPTION 'person_responsibilities : personne émancipée — la coupure est définitive, aucun responsable ne revient'
+      USING ERRCODE = 'P0113';
+  END IF;
+
   -- Le mur de minorité (voir l'en-tête : sa raison est la coupure nette).
   SELECT p.birth_year INTO v_birth_year FROM persons p
    WHERE p.id = NEW.dependent_person_id FOR SHARE;
@@ -312,12 +327,74 @@ GRANT EXECUTE ON FUNCTION attach_dependent(uuid, text, bytea, text, text, intege
   TO user_core_app;
 
 -- -----------------------------------------------------------------------------
+-- end_responsibility() : LE chemin de clôture d'un lien (C11, CDC §2.1.1.4).
+-- « Retirer un responsable est un acte contrôlé et tracé, JAMAIS un
+-- self-service » est une règle de la BASE, pas du service : le rôle de
+-- l'acteur est une donnée d'accounts — la base n'a besoin de personne pour
+-- le lire. Le rôle applicatif PERD tout droit d'UPDATE : aucun chemin —
+-- endpoint d'admin, job, v2 — ne peut clore un lien sans passer ici. La
+-- symétrie est rétablie : naître = attach_dependent()/INSERT gardé, mourir =
+-- end_responsibility(). (L'émancipation, 020, clôturera par SA fonction
+-- SECURITY DEFINER — le REVOKE ne la concerne pas.)
+-- Le remplacement éventuel est ATOMIQUE (même transaction) ; les murs
+-- différés (orphelin P0114, coupure P0113) rendent leur verdict au commit.
+-- Verdicts : ENDED · FORBIDDEN (acteur non-staff ou inactif) · UNKNOWN.
+-- -----------------------------------------------------------------------------
+CREATE FUNCTION end_responsibility(
+  p_responsibility_id                 uuid,
+  p_actor_account_id                  uuid,
+  p_replacement_responsible_person_id uuid
+) RETURNS TABLE (verdict text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  actor accounts%ROWTYPE;
+  link person_responsibilities%ROWTYPE;
+BEGIN
+  SELECT * INTO actor FROM accounts WHERE id = p_actor_account_id FOR SHARE;
+  IF NOT FOUND
+     OR actor.status <> 'ACTIVE'
+     OR actor.role NOT IN ('PLATFORM_STAFF', 'PLATFORM_ADMIN') THEN
+    verdict := 'FORBIDDEN'; RETURN NEXT; RETURN;
+  END IF;
+
+  SELECT * INTO link FROM person_responsibilities
+   WHERE id = p_responsibility_id AND status = 'ACTIVE'
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    verdict := 'UNKNOWN'; RETURN NEXT; RETURN;
+  END IF;
+
+  IF p_replacement_responsible_person_id IS NOT NULL THEN
+    INSERT INTO person_responsibilities (responsible_person_id, dependent_person_id, opened_by)
+    VALUES (p_replacement_responsible_person_id, link.dependent_person_id, 'PLATFORM_STAFF');
+  END IF;
+
+  UPDATE person_responsibilities
+     SET status = 'ENDED', end_reason = 'ADMIN'
+   WHERE id = p_responsibility_id;
+
+  verdict := 'ENDED'; RETURN NEXT;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION end_responsibility(uuid, uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION end_responsibility(uuid, uuid, uuid) TO user_core_app;
+
+-- -----------------------------------------------------------------------------
 -- Droits : ajouter un co-responsable à une personne EXISTANTE est un INSERT
--- direct (les triggers portent les murs) ; clore un lien est un UPDATE de
--- statut motivé. Ce que la base pose n'est jamais accordé au client.
+-- direct (les triggers portent les murs) ; CLORE un lien n'est PAS un droit
+-- du rôle applicatif (C11) — end_responsibility() est le seul chemin. Ce que
+-- la base pose n'est jamais accordé au client.
 -- -----------------------------------------------------------------------------
 GRANT SELECT ON person_responsibilities TO user_core_app;
 GRANT INSERT (responsible_person_id, dependent_person_id, opened_by)
   ON person_responsibilities TO user_core_app;
-GRANT UPDATE (status, end_reason) ON person_responsibilities TO user_core_app;
+-- Les deux formes, table ET colonne (piège Postgres vérifié en 011 : un
+-- REVOKE de table ne retire pas un GRANT de colonne) — ici aucun GRANT
+-- UPDATE n'a jamais existé dans ce fichier, la forme colonne est la ceinture.
+REVOKE UPDATE ON person_responsibilities FROM user_core_app;
+REVOKE UPDATE (status, end_reason) ON person_responsibilities FROM user_core_app;
 REVOKE DELETE, TRUNCATE ON person_responsibilities FROM user_core_app;

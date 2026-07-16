@@ -302,14 +302,15 @@ describe('person_responsibilities — les murs (017)', () => {
     const linkA = await link(a.personId, minor, owner);
     await link(b.personId, minor, owner);
 
-    // Sans motif : refusé.
+    // Sans motif : refusé (sous owner — le rôle bridé, lui, n'a plus AUCUN
+    // droit d'UPDATE : voir le test C11 dédié).
     await expect(
       codeOf(() =>
-        app.query(`UPDATE person_responsibilities SET status = 'ENDED' WHERE id = $1`, [linkA]),
+        owner.query(`UPDATE person_responsibilities SET status = 'ENDED' WHERE id = $1`, [linkA]),
       ),
     ).resolves.toBe(DB_ERROR.FORBIDDEN_TRANSITION);
 
-    await app.query(
+    await owner.query(
       `UPDATE person_responsibilities SET status = 'ENDED', end_reason = 'ADMIN' WHERE id = $1`,
       [linkA],
     );
@@ -351,5 +352,88 @@ describe('person_responsibilities — les murs (017)', () => {
     await expect(
       codeOf(() => owner.query('DELETE FROM person_responsibilities WHERE id = $1', [linkId])),
     ).resolves.toBe(DB_ERROR.DELETE_FORBIDDEN);
+  });
+
+  test('C11 face A : une personne ÉMANCIPÉE ne redevient jamais un ayant droit — même compte désactivé, même dans l’année frontière, même sous owner', async () => {
+    const parent = await adult();
+    // Année FRONTIÈRE (diff == seuil) : le mur de minorité laisserait passer —
+    // seul le mur d'irréversibilité doit parler.
+    const emancipated = await person(YEAR - minimumAge);
+    const linkId = await link(parent.personId, emancipated, owner);
+
+    // On fabrique l'émancipation sous owner (la machinerie complète arrive
+    // en 020) : compte créé + lien clos EMANCIPATED, une transaction — les
+    // murs différés valident la coupure au commit.
+    const emancipationVerdict = await commitVerdict(async (c) => {
+      await c.query(
+        `INSERT INTO accounts (public_identifier, role, person_id) VALUES ($1, 'ACCOUNT_HOLDER', $2)`,
+        [nextIdentifier(), emancipated],
+      );
+      await c.query(
+        `UPDATE person_responsibilities SET status = 'ENDED', end_reason = 'EMANCIPATED' WHERE id = $1`,
+        [linkId],
+      );
+    });
+    expect(emancipationVerdict).toBeUndefined();
+
+    // Le compte meurt ensuite (perdu, compromis — cas prévu par 016) : la
+    // personne n'a plus de compte ACTIF, et le contrôle « pas de compte
+    // actif » ne protège plus rien.
+    await owner.query(
+      `UPDATE accounts SET status = 'DEACTIVATED' WHERE person_id = $1 AND status = 'ACTIVE'`,
+      [emancipated],
+    );
+
+    // L'ex-responsable (ou n'importe qui) tente de reprendre la main, en
+    // INSERT direct owner : la coupure est DÉFINITIVE.
+    await expect(codeOf(() => link(parent.personId, emancipated, owner))).resolves.toBe(
+      DB_ERROR.EMANCIPATION_CUT,
+    );
+  });
+
+  test('C11 face B : clore un lien n’est PAS un droit du rôle applicatif — end_responsibility() est le seul chemin, et il lit le rôle EN BASE', async () => {
+    const parent = await adult();
+    const minor = await person(YEAR - 12);
+    const linkId = await link(parent.personId, minor, owner);
+
+    // Le rôle bridé ne peut PAS clore en direct — quel que soit le motif.
+    await expect(
+      app.query(
+        `UPDATE person_responsibilities SET status = 'ENDED', end_reason = 'ADMIN' WHERE id = $1`,
+        [linkId],
+      ),
+    ).rejects.toThrow(/permission denied/);
+
+    // Et le chemin unique refuse un acteur ACCOUNT_HOLDER : le contrôle est
+    // dans la BASE (SECURITY DEFINER), pas dans un if du service.
+    const holder = firstRow(
+      await app.query<{ verdict: string }>(
+        'SELECT verdict FROM end_responsibility($1, $2, NULL)',
+        [linkId, parent.accountId],
+      ),
+    );
+    expect(holder.verdict).toBe('FORBIDDEN');
+
+    // Un staff ACTIF passe — fin sèche refusée par l'orphelin, remplacement
+    // atomique accepté : les murs différés s'appliquent AU chemin unique.
+    const staffAccountId = await createAccount(app, nextIdentifier(), { role: 'PLATFORM_STAFF' });
+    await expect(
+      codeOf(() =>
+        app.query('SELECT verdict FROM end_responsibility($1, $2, NULL)', [
+          linkId,
+          staffAccountId,
+        ]),
+      ),
+    ).resolves.toBe(DB_ERROR.ORPHANED_DEPENDENT);
+
+    const replacement = await adult();
+    const ended = firstRow(
+      await app.query<{ verdict: string }>('SELECT verdict FROM end_responsibility($1, $2, $3)', [
+        linkId,
+        staffAccountId,
+        replacement.personId,
+      ]),
+    );
+    expect(ended.verdict).toBe('ENDED');
   });
 });
