@@ -13,6 +13,7 @@ import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 import { CatalogService } from './catalog/catalog.service';
+import { ResponsibilitiesService } from './persons/responsibilities.service';
 import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
@@ -88,6 +89,9 @@ async function bootstrap(): Promise<void> {
   // LOT 5 — l'identité civile de la personne du compte : chiffrée par clé
   // dérivée (sel par personne), lue par le point unique avec re-dérivation.
   const identityService = new IdentityService(assembly.pool, cryptoConfig);
+  // LOT 5 — le lien de responsabilité : rattacher un ayant droit, ajouter un
+  // co-responsable, et l'acte staff de retrait (contrôlé, tracé, atomique).
+  const responsibilitiesService = new ResponsibilitiesService(assembly.pool, cryptoConfig);
   const accountInvitationsService = new AccountInvitationsService(assembly.pool);
 
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
@@ -114,6 +118,7 @@ async function bootstrap(): Promise<void> {
       registrationService,
       profileService,
       identityService,
+      responsibilitiesService,
       accountInvitationsService,
       programAuthService,
       jwks,
