@@ -121,7 +121,12 @@ numéro est déjà pris » = défaut de conception.
 ### 3.5 JAMAIS de code OTP à la connexion de routine
 Le code sert à l'**amorçage** (première vérification) et à la **récupération de compte**.
 Ensuite : mot de passe/PIN + session longue durée. « Un code à chaque login, c'est plus sûr »
-= destruction de marge déguisée en prudence (SMS ≈ 0,25 $ en RDC — calcul posé au CDC §6.4).
+= destruction de marge déguisée en prudence. **Calcul refait au prix RÉEL du SMS (≈ 0,04 $,
+révisé le 16/07/2026 — l'estimation initiale de 0,25 $ était fausse d'un facteur 6, CDC §6.4) :
+un code à chaque connexion = 480 $/an pour une école qui en paie 500 = 96 % de son revenu.
+La règle tient donc à la STRUCTURE, pas au tarif** — c'est ce qui la rend non négociable.
+⚠️ Le fournisseur de SMS, lui, **recommande** l'OTP à chaque connexion : c'est son intérêt
+commercial. **Un fournisseur n'est jamais une source de doctrine.**
 De même : **vérification PARESSEUSE** — le numéro se vérifie au **premier paiement**, pas à
 l'inscription.
 
