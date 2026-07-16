@@ -156,6 +156,34 @@ jobs:
           fi
           echo "OK : un seul point de déchiffrement, avec re-dérivation obligatoire"
 
+  garde-pays:
+    name: "Garde pays — motif G (CLAUDE.md §3.7) : le cœur est agnostique du PAYS"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motif contractuel G, périmètre db/ src/, sensible à la casse
+        # La règle jumelle de « le jour où User-Core sait ce qu'est un
+        # enseignant, il est mort » : le jour où il sait ce qu'est un post-nom,
+        # il est congolais — et servir Brazzaville (une composante de nom en
+        # moins, pas de post-nom) exigerait une migration. À la place : des
+        # composantes de nom GÉNÉRIQUES + un nom d'affichage FOURNI — le cœur
+        # STOCKE, il n'INTERPRÈTE pas.
+        #
+        # Le motif vise les formes de CODE (post_nom en colonne, postNom en
+        # identifiant, +243 en préfixe câblé) et laisse vivre la PROSE
+        # (« post-nom » avec tiret, « RDC », « congolais ») : la première forme
+        # envisagée (insensible à la casse, avec RDC|congo) matchait 8 lignes —
+        # toutes des commentaires de doctrine — et aurait effacé le contexte de
+        # terrain qui justifie les règles. Une garde qui supprime son propre
+        # « pourquoi » se retourne contre elle (même arbitrage que les gardes
+        # PII et zéro-cycle).
+        run: |
+          if git grep -rnE "post_nom|postNom|postnom|POST_NOM|\+243" -- db/ src/; then
+            echo "ÉCHEC : marqueur de pays détecté dans le cœur (CLAUDE.md §3.7, motif G)"
+            exit 1
+          fi
+          echo "OK : le cœur est agnostique du pays (motif G)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
