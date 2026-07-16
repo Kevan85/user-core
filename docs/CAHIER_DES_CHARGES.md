@@ -81,13 +81,36 @@ fenêtre, cf. §8). L'auditeur a **vérifié la cohérence** de l'arbitrage et l
 - **Les rôles métier restent chez les programmes** (§2 inchangé) : « élève », « patient »
   vivent chez Scolaria et Mediyo et **pointent vers `person_id`**.
 
-**Ce qui reste à concevoir au cadrage du lot « personnes » (ne pas l'inventer avant) :**
-le modèle exact `persons` / `accounts` (le cœur du LOT 1 en sera touché — c'est le bon moment,
-tout est vide) · **le catalogue s'applique-t-il à une personne ou à un compte** (un enfant
-élève est une personne sans compte, dont le responsable gère l'accès) · le flux de rattachement
-d'un ayant droit · la mécanique d'émancipation. **Séquencement recommandé par l'auditeur :**
-cadrer les personnes **avant de figer l'API publique `/v1`** (LOT 4), pour ne pas publier un
-contrat « par compte » qu'on remplace aussitôt par « par personne ».
+### 2.1.1 Les décisions du cadrage (Kevin, 15–16/07/2026) — le cadre du lot « personnes »
+
+1. **« Même liberté » = EXISTER, pas AGIR seul.** L'enfant est une personne dès le jour 1 ;
+   il n'a pas de compte tant qu'il est mineur ; un responsable agit pour lui.
+2. **🎯 LE DROIT D'ACCÈS EST ATTACHÉ À LA PERSONNE, jamais au compte** (« Scolaria pour
+   Junior », pas « la famille a Scolaria »). **Raison décisive : à l'émancipation, il n'y a
+   RIEN à transférer** — les accès étaient déjà les siens, il en prend la main. Un compte
+   **gère** les droits des personnes dont il est responsable (dont lui-même). L'affichage d'un
+   bouton unique par programme reste possible : **c'est une question d'écran, pas de base.**
+   ⚠️ **Conséquence : `program_grants` (008) passe de `account_id` à `person_id`** — refonte
+   du cœur assumée, c'est le bon moment (tout est vide).
+3. **Émancipation : 16 ans par défaut, PARAMÉTRABLE** (aucun cadre juridique RDC — Kevin, on
+   assume ; le seuil rejoint le standard strict adopté). **C'est un ACTE, pas un basculement
+   automatique** : à l'âge, le jeune *peut* prouver **SA** ligne et acquérir son compte (il
+   réutilise la machinerie du LOT 2). **Coupure NETTE** : aucun ancien responsable ne garde
+   d'accès sur un majeur — à rendre **non représentable**, jamais un `if`.
+4. **Responsabilité : PLUSIEURS responsables**, via un **lien historisé** (début, fin, motif) —
+   jamais un « parent » figé sur l'enfant. **Ajouter** un co-responsable est simple ; **RETIRER**
+   un responsable est un **acte contrôlé et tracé** (jamais un self-service : ce serait une arme
+   dans un conflit de garde ; le système ne tranche pas à la place d'un juge).
+5. **Nom + date de naissance COMPLÈTE** (Kevin, 16/07) — **finalité écrite : « identité d'état
+   civil, source unique pour tous les programmes »** (et non « calculer l'âge » : l'année y
+   suffirait). Justification : sans source unique, Scolaria dira 12 mars et Mediyo 13 mars —
+   l'incohérence que la superApp existe pour éliminer. **En contrepartie, donnée de mineur
+   sensible : protection maximale** (traitée comme le numéro — chiffrée, effaçable, **jamais
+   dans un log, jamais dans un jeton**).
+
+**Reste à concevoir au plan de l'Exécuteur (ne pas l'inventer ici)** : le modèle exact
+`persons` / `accounts` · `phone_claims` reste-t-il sur le compte ou passe-t-il à la personne ·
+le flux de rattachement d'un ayant droit · la **granularité de clé par personne** (§3.14).
 
 ### 2.2 Deux pièges de frontière, nommés d'avance
 1. **Le catalogue de programmes ne devient JAMAIS un moteur d'abonnement.** User-Core dit

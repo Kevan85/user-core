@@ -201,6 +201,41 @@ discutent pas) : les mots-clés SQL s'écrivent en **MAJUSCULES** (`ORDER BY`, j
 Les rôles sont transverses (`ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où
 User-Core sait ce qu'est un enseignant, il est mort.
 
+**Motif G — le cœur est agnostique du PAYS comme du MÉTIER** (règle jumelle, posée le
+16/07/2026), périmètre `db/ src/`, **SENSIBLE à la casse** :
+```
+git grep -rnE "post_nom|postNom|postnom|POST_NOM|\+243" -- db/ src/
+```
+⚠️ **Pourquoi sensible à la casse, et pourquoi ni `RDC` ni `congo` n'y figurent** — **la même
+leçon, pour la TROISIÈME fois** (après `class`, puis `whatsapp`) : la première forme de ce motif
+était `-niE "…|\bRDC\b|congo"`. **Testée avant d'être gravée, elle matchait 8 lignes — toutes des
+commentaires de doctrine** (`SMS ≈ 0,04 $ en RDC` · `réseau instable — le cas le plus banal en
+RDC` · `l'espace des numéros congolais` · `inconnue de terrain, disponibilité en RDC`). Elle
+aurait **effacé le contexte de terrain qui justifie les règles**. Le motif retenu vise les formes
+de **CODE** (`post_nom` en colonne, `postNom` en identifiant, `+243` en préfixe câblé) et laisse
+vivre la **prose** (« post-nom » avec tiret, « RDC », « congolais »). **Une garde qui supprime
+son propre « pourquoi » se retourne contre elle** — et cette leçon a maintenant coûté trois
+tentatives : **teste toujours une garde AVANT de la graver.**
+
+⚠️ **Pourquoi cette règle existe.** En RDC, un nom s'écrit **Nom + Post-nom + Prénom** (fait de terrain, source
+Kevin). La tentation est d'ajouter une colonne `post_nom`. **Le jour où le schéma dit
+`post_nom`, User-Core est congolais — et il ne servira jamais le Congo-Brazzaville**, qui n'a
+pas de post-nom : migration, colonnes vides qui mentent, `si pays = X alors…`. C'est exactement
+le défaut « école » transposé à la géographie. **La règle jumelle de « le jour où User-Core sait
+ce qu'est un enseignant, il est mort » est : « le jour où il sait ce qu'est un post-nom, il est
+congolais ».**
+**Ce qu'on fait à la place** : des **composantes de nom génériques** (le post-nom congolais est
+une *composante additionnelle* — le même emplacement que le *middle name* américain, le
+deuxième prénom français, le deuxième nom de famille espagnol) + un **nom d'affichage FOURNI**.
+**User-Core STOCKE, il n'INTERPRÈTE pas** : il ne décide pas comment un Congolais s'appelle, ni
+dans quel ordre, ni laquelle de ses composantes est « le vrai nom ». **Chaque programme applique
+SA convention locale.** Brazzaville = une composante de moins, **zéro migration**.
+*(Exemple concret : « en RDC, forte culture du nom — on dit “Bonjour Kabeya”, pas “Bonjour
+Junior” ». C'est vrai, c'est utile — et ça vit dans **l'application**, qui pré-remplit le nom
+d'affichage. Jamais dans le cœur : sinon Brazzaville, ou un parent qui préfère son prénom,
+exigeraient une migration. Et Kevin l'a donné comme « fortement probable », pas certain — une
+hypothèse ne se grave jamais dans un schéma, §3.11.)*
+
 ### 3.8 Le catalogue n'est PAS un moteur d'abonnement
 User-Core enregistre le **droit d'accès** (activé/désactivé, historisé). Prix, échéances,
 relances, suspension pour impayé : **ailleurs** (Payment-Core + futur module de facturation).
