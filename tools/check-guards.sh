@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NB : ce fichier vit dans tools/, HORS du périmètre des gardes (db/ src/
 # scripts/) — il contient les motifs, il se ferait attraper lui-même.
-# Les SIX gardes contractuelles (CLAUDE.md §3.7, §3.8), jouées sur l'INDEX
+# Les SEPT gardes contractuelles (CLAUDE.md §3.7, §3.8), jouées sur l'INDEX
 # git — exactement comme la CI les jouera sur le commit poussé. Les motifs
 # sont recopiés VERBATIM de .github/workflows/ci.yml : si l'un des deux
 # fichiers change, l'autre suit dans le même commit.
@@ -48,5 +48,9 @@ run_guard "Motif E (zéro cycle — le dispatcher ne connaît aucune identité)"
 run_guard "Motif F (un seul point de déchiffrement)" -n \
   "decrypt(" \
   -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts'
+
+run_guard "Motif G (le cœur est agnostique du pays, sensible à la casse)" -nE \
+  "post_nom|postNom|postnom|POST_NOM|\+243" \
+  -- db/ src/
 
 exit $status
