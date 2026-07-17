@@ -40,6 +40,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '016_accounts_person.sql',
       '017_person_responsibilities.sql',
       '018_claims_to_person.sql',
+      '019_grants_to_person.sql',
     ]);
   });
 

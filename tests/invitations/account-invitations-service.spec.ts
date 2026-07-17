@@ -170,8 +170,10 @@ describe('AccountInvitationsService', () => {
     const invitationId = await invite(programId, line);
 
     expect(await invitations.accept(holder, invitationId)).toEqual({ outcome: 'ACCEPTED' });
+    // Depuis 019 : le droit est né pour la PERSONNE du compte qui accepte.
     const grants = await owner.query<{ granted_by: string; status: string }>(
-      'SELECT granted_by, status FROM program_grants WHERE account_id = $1',
+      `SELECT g.granted_by, g.status FROM program_grants g
+        JOIN accounts a ON a.person_id = g.person_id WHERE a.id = $1`,
       [holder],
     );
     expect(grants.rows).toHaveLength(1);

@@ -21,7 +21,7 @@ describe('triggers réarmés après transformation (C3)', () => {
     await owner.end();
   });
 
-  test.each(['phone_claims', 'possession_proof_refusals', 'outbox'])(
+  test.each(['phone_claims', 'possession_proof_refusals', 'outbox', 'program_grants'])(
     'chaque trigger de %s est armé (tgenabled = O)',
     async (table) => {
       const rows = await owner.query<{ tgname: string; tgenabled: string }>(

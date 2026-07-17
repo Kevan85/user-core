@@ -46,7 +46,10 @@ export const CATALOG_SERVICE = 'CATALOG_SERVICE';
 export class CatalogService {
   constructor(private readonly pool: Pool) {}
 
-  /** Le catalogue vu par un compte : chaque programme, activé ou non. */
+  /**
+   * Le catalogue vu par un compte : chaque programme, activé ou non — pour SA
+   * personne (019 : le droit appartient à la personne ; le compte le gère).
+   */
   async list(accountId: string): Promise<ProgramView[]> {
     const result = await this.pool.query<{
       code: string;
@@ -56,8 +59,9 @@ export class CatalogService {
     }>(
       `SELECT p.code, p.label, p.access_mode,
               EXISTS (SELECT 1 FROM program_grants g
+                       JOIN accounts a ON a.person_id = g.person_id
                        WHERE g.program_id = p.id
-                         AND g.account_id = $1
+                         AND a.id = $1
                          AND g.status = 'ACTIVE') AS activated
          FROM programs p
         WHERE p.status = 'ACTIVE'
@@ -78,10 +82,11 @@ export class CatalogService {
     if (program === null) {
       return { outcome: 'UNKNOWN_PROGRAM' };
     }
+    const personId = await this.personOf(accountId);
     try {
       await this.pool.query(
-        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'SELF')",
-        [accountId, program.id],
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')",
+        [personId, program.id],
       );
       return { outcome: 'ACTIVATED' };
     } catch (err) {
@@ -89,7 +94,7 @@ export class CatalogService {
         // La base a tranché : soit le programme ne s'ouvre pas soi-même, soit
         // un TIERS a retiré cet accès et la famille ne peut pas le rouvrir.
         // On distingue les deux pour le message, jamais pour la décision.
-        const previous = await this.lastGrant(accountId, program.id);
+        const previous = await this.lastGrant(personId, program.id);
         return previous === null
           ? { outcome: 'NOT_SELF_SERVICE' }
           : { outcome: 'REVOKED_BY_THIRD_PARTY' };
@@ -111,11 +116,12 @@ export class CatalogService {
     if (program === null) {
       return { outcome: 'UNKNOWN_PROGRAM' };
     }
-    // BOLA : la clause account_id est la ceinture — un compte ne coupe que le
-    // sien, même en nommant le programme d'un autre.
+    // BOLA : la jointure par SA personne est la ceinture — un compte ne coupe
+    // que le sien, même en nommant le programme d'un autre.
     const result = await this.pool.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1)
+          AND program_id = $2 AND status = 'ACTIVE'`,
       [accountId, program.id],
     );
     return result.rowCount === 0 ? { outcome: 'NOT_ACTIVE' } : { outcome: 'DEACTIVATED' };
@@ -145,8 +151,8 @@ export class CatalogService {
     }
     try {
       await this.pool.query(
-        `INSERT INTO program_grants (account_id, program_id, granted_by)
-         VALUES ($1, $2, 'PLATFORM_STAFF')`,
+        `INSERT INTO program_grants (person_id, program_id, granted_by)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PLATFORM_STAFF')`,
         [targetAccountId, program.id],
       );
       return { outcome: 'GRANTED' };
@@ -174,16 +180,28 @@ export class CatalogService {
     return result.rows[0]?.role ?? null;
   }
 
-  private async lastGrant(accountId: string, programId: string): Promise<{ id: string } | null> {
+  private async lastGrant(personId: string, programId: string): Promise<{ id: string } | null> {
     const result = await this.pool.query<{ id: string }>(
       // Ordre d'INSERTION (seq), jamais l'horloge : now() est l'horodatage de
       // la transaction, deux lignes d'une même transaction sont ex æquo (F3).
       `SELECT id FROM program_grants
-        WHERE account_id = $1 AND program_id = $2
+        WHERE person_id = $1 AND program_id = $2
         ORDER BY seq DESC LIMIT 1`,
-      [accountId, programId],
+      [personId, programId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private async personOf(accountId: string): Promise<string> {
+    const result = await this.pool.query<{ person_id: string }>(
+      'SELECT person_id FROM accounts WHERE id = $1',
+      [accountId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new Error('catalogue : compte introuvable');
+    }
+    return row.person_id;
   }
 
   private isUniqueViolation(err: unknown, constraint: string): boolean {
