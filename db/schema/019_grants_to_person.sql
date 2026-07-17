@@ -17,9 +17,9 @@
 -- LE DROIT NE NAÎT PLUS « SOUS UN COMPTE » : l'ancienne garde exigeait un
 -- compte ACTIF au porteur du droit — un mineur sans compte est désormais le
 -- cas NOMINAL. Aucun contrôle de vitalité ne le remplace : une personne n'a
--- pas de statut (zéro suppression), et QUI a le droit d'accorder est le BOLA
--- du service et des fonctions (l'acteur, lui, reste contrôlé : mode d'accès,
--- matrice de réactivation — inchangés, transposés à la personne).
+-- pas de statut (zéro suppression), et QUI a le droit d'ouvrir un droit est
+-- le BOLA du service et des fonctions (l'acteur, lui, reste contrôlé : mode
+-- d'accès, matrice de réactivation — inchangés, transposés à la personne).
 --
 -- TRANSFORMATION : backfill compte → personne par jointure (1:1, aucune
 -- information perdue — account_id est ensuite supprimé) ; DISABLE TRIGGER
