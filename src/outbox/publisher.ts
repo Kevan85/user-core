@@ -18,7 +18,7 @@ export interface PublisherConfig {
 interface OutboxRow {
   id: string;
   event_type: string;
-  account_id: string;
+  person_id: string;
   claim_id: string | null;
   attempts: number;
 }
@@ -94,8 +94,19 @@ export class OutboxPublisher {
 
       if (externalChannel === null) {
         if (policy.in_account) {
-          await this.pool.query('SELECT publish_outbox_event($1, true)', [event.id]);
-          report.published += 1;
+          // Depuis 018, l'événement vise une PERSONNE : son compte se résout
+          // au moment de publier. NO_ACCOUNT = aucun canal AUJOURD'HUI
+          // (émancipation entamée sans compte, compte désactivé) — on ne
+          // notifie pas, on TRACE, et on repassera : la personne peut
+          // acquérir un compte avant l'épuisement des tentatives (C1).
+          const published = await this.publish(event.id, true);
+          if (published) {
+            report.published += 1;
+          } else {
+            const verdict = await this.failAttempt(event, 'NOT_NOTIFIABLE');
+            report[verdict === 'FAILED' ? 'failed' : 'retried'] += 1;
+            report.notNotifiable += 1;
+          }
         } else {
           // Le silence est acceptable ; envoyer au mauvais destinataire, non.
           const verdict = await this.failAttempt(event, 'NOT_NOTIFIABLE');
@@ -112,10 +123,11 @@ export class OutboxPublisher {
           channel: externalChannel.channel,
           content: event.event_type,
         });
-        await this.pool.query('SELECT publish_outbox_event($1, $2)', [
-          event.id,
-          policy.in_account,
-        ]);
+        // L'envoi externe a atteint la personne : si le dépôt en compte est
+        // impossible (NO_ACCOUNT), on publie quand même — le message est parti.
+        if (!(await this.publish(event.id, policy.in_account))) {
+          await this.publish(event.id, false);
+        }
         report.published += 1;
       } catch (err) {
         if (!(err instanceof OutboundFailed)) {
@@ -127,6 +139,15 @@ export class OutboxPublisher {
     }
 
     return report;
+  }
+
+  /** true si l'événement est publié ; false si NO_ACCOUNT (rien déposé). */
+  private async publish(eventId: string, notifyAccount: boolean): Promise<boolean> {
+    const result = await this.pool.query<{ verdict: string }>(
+      'SELECT publish_outbox_event($1, $2) AS verdict',
+      [eventId, notifyAccount],
+    );
+    return result.rows[0]?.verdict !== 'NO_ACCOUNT';
   }
 
   private pickChannel(

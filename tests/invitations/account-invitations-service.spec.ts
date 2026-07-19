@@ -65,8 +65,8 @@ describe('AccountInvitationsService', () => {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, 'E1') RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1') RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone)],
       ),
     ).id;
@@ -155,8 +155,8 @@ describe('AccountInvitationsService', () => {
 
     const fp = fingerprintOf(crypto.fingerprint, line);
     await app.query(
-      `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-       VALUES ($1, $2, $3, $4, 'E1')`,
+      `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+       VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1')`,
       [person, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, line)],
     );
     expect(await invitations.list(person)).toHaveLength(0); // PENDING ≠ prouvée
@@ -170,8 +170,10 @@ describe('AccountInvitationsService', () => {
     const invitationId = await invite(programId, line);
 
     expect(await invitations.accept(holder, invitationId)).toEqual({ outcome: 'ACCEPTED' });
+    // Depuis 019 : le droit est né pour la PERSONNE du compte qui accepte.
     const grants = await owner.query<{ granted_by: string; status: string }>(
-      'SELECT granted_by, status FROM program_grants WHERE account_id = $1',
+      `SELECT g.granted_by, g.status FROM program_grants g
+        JOIN accounts a ON a.person_id = g.person_id WHERE a.id = $1`,
       [holder],
     );
     expect(grants.rows).toHaveLength(1);

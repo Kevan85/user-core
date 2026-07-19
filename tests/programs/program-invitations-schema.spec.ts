@@ -75,8 +75,8 @@ describe('program_invitations — invariants en base', () => {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone), 'E1'],
       ),
     ).id;
@@ -331,7 +331,8 @@ describe('program_invitations — invariants en base', () => {
 
     const grant = firstRow(
       await owner.query<{ granted_by: string; status: string }>(
-        'SELECT granted_by, status FROM program_grants WHERE account_id = $1',
+        `SELECT g.granted_by, g.status FROM program_grants g
+          JOIN accounts a ON a.person_id = g.person_id WHERE a.id = $1`,
         [holder],
       ),
     );
@@ -363,8 +364,8 @@ describe('program_invitations — invariants en base', () => {
     const fp = fingerprintOf(crypto.fingerprint, line);
     const claimId = firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, 'E1') RETURNING id`,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1') RETURNING id`,
         [person, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, line)],
       ),
     ).id;
@@ -449,7 +450,7 @@ describe('program_invitations — invariants en base', () => {
     const account = await newAccount();
     await expect(
       app.query(
-        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -459,24 +460,24 @@ describe('program_invitations — invariants en base', () => {
     const programId = await newProgram('prog-kevin');
     const account = await newAccount();
     await app.query(
-      "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
       [account, programId],
     );
     await app.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [account, programId],
     );
     // Ni sous rôle bridé, ni sous OWNER : le trigger tient aux deux étages.
     await expect(
       app.query(
-        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
     await expect(
       owner.query(
-        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -493,7 +494,7 @@ describe('program_invitations — invariants en base', () => {
     expect(await accept(first.invitation_id!, holder)).toBe('ACCEPTED');
     await app.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [holder, programId],
     );
 
@@ -501,7 +502,8 @@ describe('program_invitations — invariants en base', () => {
     expect(await accept(second.invitation_id!, holder)).toBe('ACCEPTED');
 
     const grants = await owner.query<{ granted_by: string; status: string }>(
-      'SELECT granted_by, status FROM program_grants WHERE account_id = $1 ORDER BY seq',
+      `SELECT g.granted_by, g.status FROM program_grants g
+        JOIN accounts a ON a.person_id = g.person_id WHERE a.id = $1 ORDER BY g.seq`,
       [holder],
     );
     expect(grants.rows).toHaveLength(2);
@@ -512,17 +514,17 @@ describe('program_invitations — invariants en base', () => {
     const programId = await newProgram('prog-rouvre');
     const account = await newAccount();
     await app.query(
-      "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
       [account, programId],
     );
     await app.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'PROGRAM'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [account, programId],
     );
     await expect(
       app.query(
-        "INSERT INTO program_grants (account_id, program_id, granted_by) VALUES ($1, $2, 'PROGRAM')",
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
         [account, programId],
       ),
     ).resolves.toBeDefined();

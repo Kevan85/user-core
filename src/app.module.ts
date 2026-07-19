@@ -1,4 +1,6 @@
 import { DynamicModule, Module } from '@nestjs/common';
+import { IdentityController } from './accounts/identity.controller';
+import { IDENTITY_SERVICE, type IdentityService } from './accounts/identity.service';
 import { ProfileController } from './accounts/profile.controller';
 import { PROFILE_SERVICE, type ProfileService } from './accounts/profile.service';
 import { RegistrationController } from './accounts/registration.controller';
@@ -25,6 +27,16 @@ import {
 } from './invitations/account-invitations.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CATALOG_SERVICE, type CatalogService } from './catalog/catalog.service';
+import { EmancipationController } from './persons/emancipation.controller';
+import {
+  EMANCIPATION_SERVICE,
+  type EmancipationService,
+} from './persons/emancipation.service';
+import { ResponsibilitiesController } from './persons/responsibilities.controller';
+import {
+  RESPONSIBILITIES_SERVICE,
+  type ResponsibilitiesService,
+} from './persons/responsibilities.service';
 import { PhoneController } from './phone/phone.controller';
 import { PHONE_SERVICE, type PhoneService } from './phone/phone.service';
 import { PROGRAM_JWKS, type PublicJwk } from './programs/jwks';
@@ -42,6 +54,9 @@ export interface AuthWiring {
   catalogService: CatalogService;
   registrationService: RegistrationService;
   profileService: ProfileService;
+  identityService: IdentityService;
+  responsibilitiesService: ResponsibilitiesService;
+  emancipationService: EmancipationService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
   jwks: { keys: PublicJwk[] };
@@ -65,6 +80,9 @@ export class AppModule {
         PhoneController,
         CatalogController,
         ProfileController,
+        IdentityController,
+        ResponsibilitiesController,
+        EmancipationController,
         AccountInvitationsController,
         ProgramAuthController,
       ],
@@ -77,6 +95,9 @@ export class AppModule {
         { provide: CATALOG_SERVICE, useValue: auth.catalogService },
         { provide: REGISTRATION_SERVICE, useValue: auth.registrationService },
         { provide: PROFILE_SERVICE, useValue: auth.profileService },
+        { provide: IDENTITY_SERVICE, useValue: auth.identityService },
+        { provide: RESPONSIBILITIES_SERVICE, useValue: auth.responsibilitiesService },
+        { provide: EMANCIPATION_SERVICE, useValue: auth.emancipationService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },

@@ -20,6 +20,14 @@ export const DB_ERROR = {
   STALE_FINGERPRINT_KEY: 'P0109',
   /** Le mode d'accès du programme interdit cette ouverture (008). */
   ACCESS_MODE_VIOLATION: 'P0110',
+  /** Valeur de registre hors bornes — année de naissance future (014). */
+  VALUE_OUT_OF_BOUNDS: 'P0111',
+  /** Table de référence vide — une consultation échoue FERMÉ, jamais NULL (014/015). */
+  EMPTY_REFERENCE: 'P0112',
+  /** Coupure d'émancipation : ayant droit ACTIF ⇔ aucun compte ACTIF (017). */
+  EMANCIPATION_CUT: 'P0113',
+  /** Dernier lien actif : la fin laisserait la personne sans personne pour agir (017). */
+  ORPHANED_DEPENDENT: 'P0114',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];

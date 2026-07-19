@@ -26,7 +26,14 @@ describe('RegistrationService', () => {
   });
 
   beforeEach(async () => {
-    await truncateTables(owner, 'session_refresh_tokens', 'sessions', 'account_secrets', 'accounts');
+    await truncateTables(
+      owner,
+      'session_refresh_tokens',
+      'sessions',
+      'account_secrets',
+      'accounts',
+      'persons',
+    );
   });
 
   afterAll(async () => {
@@ -37,8 +44,17 @@ describe('RegistrationService', () => {
   function service(
     throttle = new LoginThrottle(1000, 60),
     generator?: () => string,
+    personGenerator?: () => string,
   ): RegistrationService {
-    return new RegistrationService(app, provider, auth, config, throttle, generator);
+    return new RegistrationService(
+      app,
+      provider,
+      auth,
+      config,
+      throttle,
+      generator,
+      personGenerator,
+    );
   }
 
   async function accountCount(): Promise<number> {
@@ -67,6 +83,19 @@ describe('RegistrationService', () => {
       [result.accountId],
     );
     expect(secrets.rows).toHaveLength(1);
+
+    // Depuis 016 : la PERSONNE est née avec le compte — nue (minimisation),
+    // avec son sel d'effacement, rattachée de façon immuable.
+    const person = firstRow(
+      await owner.query<{ id: string; enc_key_id: string | null; birth_year: number | null }>(
+        `SELECT p.id, p.enc_key_id, p.birth_year FROM persons p
+          JOIN accounts a ON a.person_id = p.id WHERE a.id = $1`,
+        [result.accountId],
+      ),
+    );
+    expect(person.id).toBe(result.personId);
+    expect(person.enc_key_id).toBeNull();
+    expect(person.birth_year).toBeNull();
 
     // La session rendue est réelle et ACTIVE.
     const claims = await provider.verifyAccessToken(result.accessToken);
@@ -116,6 +145,37 @@ describe('RegistrationService', () => {
     expect(calls).toBe(2);
     expect(collided.identifier).toBe('9999999999');
     expect(await accountCount()).toBe(2);
+  });
+
+  test("collision de l'identifiant de PERSONNE → seul l'identifiant de personne est re-tiré", async () => {
+    const first = await service().register('S3cretChoisi!', '10.1.0.10');
+    if (first.outcome !== 'OK') throw new Error('OK attendu');
+    const taken = firstRow(
+      await owner.query<{ public_identifier: string }>(
+        'SELECT public_identifier FROM persons WHERE id = $1',
+        [first.personId],
+      ),
+    ).public_identifier;
+
+    const personDraws = [taken, '9999999998'];
+    let personCalls = 0;
+    let accountCalls = 0;
+    const collided = await service(
+      undefined,
+      () => {
+        accountCalls += 1;
+        return String(9_100_000_000 + accountCalls);
+      },
+      () => {
+        const value = personDraws[Math.min(personCalls, personDraws.length - 1)]!;
+        personCalls += 1;
+        return value;
+      },
+    ).register('AutreS3cret!', '10.1.0.11');
+
+    if (collided.outcome !== 'OK') throw new Error('OK attendu après re-tirage');
+    expect(personCalls).toBe(2); // le tirage en collision, puis le libre
+    expect(accountCalls).toBe(1); // l'identifiant de COMPTE n'est pas re-tiré
   });
 
   test('tirages épuisés (générateur cassé) → échec BRUYANT, aucun compte fantôme', async () => {

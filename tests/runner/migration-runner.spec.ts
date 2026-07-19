@@ -35,6 +35,13 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '011_create_account.sql',
       '012_program_invitations.sql',
       '013_program_client_assertions.sql',
+      '014_persons.sql',
+      '015_reference_fail_closed.sql',
+      '016_accounts_person.sql',
+      '017_person_responsibilities.sql',
+      '018_claims_to_person.sql',
+      '019_grants_to_person.sql',
+      '020_emancipation.sql',
     ]);
   });
 

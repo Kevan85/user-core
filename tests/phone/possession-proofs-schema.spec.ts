@@ -61,14 +61,23 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     return createAccountFixture(app, String(7200000000 + seq));
   }
 
+  // Depuis 018 : la ligne appartient à la PERSONNE — le compte y mène.
+  async function personOf(accountId: string): Promise<string> {
+    return firstRow(
+      await app.query<{ person_id: string }>('SELECT person_id FROM accounts WHERE id = $1', [
+        accountId,
+      ]),
+    ).person_id;
+  }
+
   async function declare(accountId: string, phone: string): Promise<string> {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const token = encrypt(crypto.encryption, phone);
     return firstRow(
       await app.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [accountId, fp.value, fp.hmacKeyId, token, crypto.encryption.activeKeyId],
+        [await personOf(accountId), fp.value, fp.hmacKeyId, token, crypto.encryption.activeKeyId],
       ),
     ).id;
   }
@@ -251,13 +260,14 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     expect(claims.rows[1]).toMatchObject({ status: 'ACTIVE', revoke_reason: null });
 
     // L'ancien détenteur DOIT être prévenu — l'intention est écrite dans la
-    // transaction qui révoque, elle ne peut pas se perdre.
-    const events = await app.query<{ event_type: string; account_id: string; status: string }>(
-      'SELECT event_type, account_id, status FROM outbox',
+    // transaction qui révoque, elle ne peut pas se perdre. Depuis 018,
+    // l'événement vise sa PERSONNE (le compte se résout au moment de publier).
+    const events = await app.query<{ event_type: string; person_id: string; status: string }>(
+      'SELECT event_type, person_id, status FROM outbox',
     );
     expect(events.rows).toHaveLength(1);
     expect(events.rows[0]?.event_type).toBe('PHONE_LINE_SUPERSEDED');
-    expect(events.rows[0]?.account_id).toBe(ancien); // l'ANCIEN, pas le nouveau
+    expect(events.rows[0]?.person_id).toBe(await personOf(ancien)); // l'ANCIEN, pas le nouveau
     expect(events.rows[0]?.status).toBe('PENDING');
   });
 
@@ -269,7 +279,6 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     expect(columns.rows.map((r) => r.column_name)).toEqual([
       'id',
       'event_type',
-      'account_id',
       'claim_id',
       'status',
       'occurred_at',
@@ -278,6 +287,7 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
       'next_attempt_at',
       'last_error_code',
       'failed_at',
+      'person_id',
     ]);
     // Ni numéro, ni empreinte, ni valeur chiffrée : le dispatcher résoudra
     // l'adresse au moment d'envoyer, par le chemin de déchiffrement contrôlé.

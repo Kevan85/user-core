@@ -74,6 +74,15 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
     return createAccountFixture(app, String(7800000000 + seq));
   }
 
+  // Depuis 018 : l'outbox vise une PERSONNE — le compte se résout au dépôt.
+  async function personOf(accountId: string): Promise<string> {
+    return firstRow(
+      await app.query<{ person_id: string }>('SELECT person_id FROM accounts WHERE id = $1', [
+        accountId,
+      ]),
+    ).person_id;
+  }
+
   /** Un compte prouve la ligne : c'est le chemin réel, de bout en bout. */
   async function proveLine(accountId: string, line = LINE): Promise<string> {
     const declared = await phone.declare(accountId, line);
@@ -94,13 +103,13 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
     const nouveau = await newAccount();
     await proveLine(nouveau);
 
-    // L'événement de reprise attend d'être drainé.
-    const pending = await app.query<{ event_type: string; account_id: string }>(
-      "SELECT event_type, account_id FROM outbox WHERE status = 'PENDING'",
+    // L'événement de reprise attend d'être drainé — il vise la PERSONNE.
+    const pending = await app.query<{ event_type: string; person_id: string }>(
+      "SELECT event_type, person_id FROM outbox WHERE status = 'PENDING'",
     );
     expect(pending.rows).toHaveLength(1);
     expect(pending.rows[0]?.event_type).toBe('PHONE_LINE_SUPERSEDED');
-    expect(pending.rows[0]?.account_id).toBe(ancien);
+    expect(pending.rows[0]?.person_id).toBe(await personOf(ancien));
 
     const report = await publisher.drain();
     expect(report.claimed).toBe(1);
@@ -196,8 +205,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
        VALUES ('TEST_EXTERNAL_ONLY', '{SMS}', false, 'test')`,
     );
     await owner.query(
-      "INSERT INTO outbox (event_type, account_id) VALUES ('TEST_EXTERNAL_ONLY', $1)",
-      [accountId],
+      "INSERT INTO outbox (event_type, person_id) VALUES ('TEST_EXTERNAL_ONLY', $1)",
+      [await personOf(accountId)],
     );
 
     // maxAttempts = 3 : trois tours, et il meurt. (Le backoff est rembobiné
@@ -232,8 +241,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
        VALUES ('TEST_REACHABLE', '{SMS}', false, 'test')`,
     );
     await owner.query(
-      "INSERT INTO outbox (event_type, account_id, claim_id) VALUES ('TEST_REACHABLE', $1, $2)",
-      [accountId, claimId],
+      "INSERT INTO outbox (event_type, person_id, claim_id) VALUES ('TEST_REACHABLE', $1, $2)",
+      [await personOf(accountId), claimId],
     );
 
     const report = await publisher.drain();
@@ -251,8 +260,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
        VALUES ('TEST_FLAKY', '{SMS}', false, 'test')`,
     );
     await owner.query(
-      "INSERT INTO outbox (event_type, account_id, claim_id) VALUES ('TEST_FLAKY', $1, $2)",
-      [accountId, claimId],
+      "INSERT INTO outbox (event_type, person_id, claim_id) VALUES ('TEST_FLAKY', $1, $2)",
+      [await personOf(accountId), claimId],
     );
 
     dispatcher.willLie('PROVIDER_ERROR');
@@ -281,10 +290,15 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
     const lineA = fingerprintOf(crypto.fingerprint, '+243867777777');
     const claimId = firstRow(
       await owner.query<{ id: string }>(
-        `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted,
+        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted,
                                    enc_key_id, status, assurance_level, verified_at)
          VALUES ($1, $2, $3, $4, 'E1', 'ACTIVE', 'PROVEN', now()) RETURNING id`,
-        [accountId, lineA.value, lineA.hmacKeyId, encrypt(crypto.encryption, '+243868888888')],
+        [
+          await personOf(accountId),
+          lineA.value,
+          lineA.hmacKeyId,
+          encrypt(crypto.encryption, '+243868888888'),
+        ],
       ),
     ).id;
 
@@ -294,8 +308,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
        VALUES ('TEST_TRAP', '{SMS}', false, 'test')`,
     );
     await owner.query(
-      "INSERT INTO outbox (event_type, account_id, claim_id) VALUES ('TEST_TRAP', $1, $2)",
-      [accountId, claimId],
+      "INSERT INTO outbox (event_type, person_id, claim_id) VALUES ('TEST_TRAP', $1, $2)",
+      [await personOf(accountId), claimId],
     );
 
     const report = await publisher.drain();
@@ -321,8 +335,8 @@ describe('OutboxPublisher — et LE PIÈGE du numéro recyclé', () => {
        VALUES ('TEST_TX', '{SMS}', false, 'test')`,
     );
     await owner.query(
-      "INSERT INTO outbox (event_type, account_id, claim_id) VALUES ('TEST_TX', $1, $2)",
-      [accountId, claimId],
+      "INSERT INTO outbox (event_type, person_id, claim_id) VALUES ('TEST_TX', $1, $2)",
+      [await personOf(accountId), claimId],
     );
 
     let openDuringCall = -1;

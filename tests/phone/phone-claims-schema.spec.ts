@@ -55,11 +55,20 @@ describe('phone_claims — invariants en base', () => {
     return [fp.value, fp.hmacKeyId, token, crypto.encryption.activeKeyId];
   }
 
+  // Depuis 018 : la ligne appartient à la PERSONNE — le compte y mène.
+  async function personOf(accountId: string): Promise<string> {
+    return firstRow(
+      await app.query<{ person_id: string }>('SELECT person_id FROM accounts WHERE id = $1', [
+        accountId,
+      ]),
+    ).person_id;
+  }
+
   async function declare(accountId: string, phone: string, client: Pool = app): Promise<string> {
     const r = await client.query<{ id: string }>(
-      `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+      `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [accountId, ...phoneFields(phone)],
+      [await personOf(accountId), ...phoneFields(phone)],
     );
     return firstRow(r).id;
   }
@@ -137,29 +146,30 @@ describe('phone_claims — invariants en base', () => {
     // sera géré par la cascade « preuve fraîche gagne » en 007.)
   });
 
-  test('Q3 — une seule revendication VIVANTE par compte', async () => {
+  test('Q3 — une seule revendication VIVANTE par personne', async () => {
     const accountId = await newAccount();
     await declare(accountId, '+243810000005');
     await expect(declare(accountId, '+243810000006')).rejects.toThrow(
-      /uq_phone_claims_alive_per_account/,
+      /uq_phone_claims_alive_per_person/,
     );
     // Le chemin légitime : révoquer (REPLACED) puis déclarer l'autre.
     await app.query(
-      "UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'REPLACED' WHERE account_id = $1 AND status = 'PENDING'",
-      [accountId],
+      "UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'REPLACED' WHERE person_id = $1 AND status = 'PENDING'",
+      [await personOf(accountId)],
     );
     await expect(declare(accountId, '+243810000006')).resolves.toBeDefined();
   });
 
   test('Q2 — une empreinte calculée sous une clé NON active est refusée (P0109)', async () => {
     const accountId = await newAccount();
+    const personId = await personOf(accountId);
     const [hmac, , encrypted, encKeyId] = phoneFields('+243810000007');
     await expect(
       codeOf(() =>
         app.query(
-          `INSERT INTO phone_claims (account_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
+          `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
            VALUES ($1, $2, 'H0_PERIMEE', $3, $4)`,
-          [accountId, hmac, encrypted, encKeyId],
+          [personId, hmac, encrypted, encKeyId],
         ),
       ),
     ).resolves.toBe(DB_ERROR.STALE_FINGERPRINT_KEY);
@@ -223,19 +233,23 @@ describe('phone_claims — invariants en base', () => {
     await expect(app.query('TRUNCATE phone_claims')).rejects.toThrow(/permission denied/);
   });
 
-  test('cascade C13 étendue : compte désactivé → revendication révoquée par la BASE', async () => {
+  test('D-A (018) : la revendication SURVIT à la désactivation du compte — la possession appartient à la personne', async () => {
     const accountId = await newAccount();
+    const personId = await personOf(accountId);
     const id = await declare(accountId, '+243810000012');
     await proveUnderOwner(id);
 
     await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
 
-    const claims = await app.query<{ status: string; revoke_reason: string }>(
-      'SELECT status, revoke_reason FROM phone_claims WHERE account_id = $1',
-      [accountId],
+    // C13 est rétréci (décision D-A, actée par l'Auditeur) : la ligne reste
+    // ACTIVE — une SIM est possédée par un humain, pas par un artefact de
+    // connexion. Le recyclage (§3.4) couvre le reste.
+    const claims = await app.query<{ status: string; revoke_reason: string | null }>(
+      'SELECT status, revoke_reason FROM phone_claims WHERE person_id = $1',
+      [personId],
     );
     expect(claims.rows).toHaveLength(1);
-    expect(claims.rows[0]?.status).toBe('REVOKED');
-    expect(claims.rows[0]?.revoke_reason).toBe('ACCOUNT_DEACTIVATED');
+    expect(claims.rows[0]?.status).toBe('ACTIVE');
+    expect(claims.rows[0]?.revoke_reason).toBeNull();
   });
 });

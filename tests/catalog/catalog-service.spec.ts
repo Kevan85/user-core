@@ -46,9 +46,11 @@ describe('CatalogService', () => {
   async function grantsOf(accountId: string): Promise<
     { status: string; granted_by: string; revoke_reason: string | null }[]
   > {
+    // Depuis 019 : le droit appartient à la PERSONNE du compte.
     const r = await app.query<{ status: string; granted_by: string; revoke_reason: string | null }>(
-      `SELECT status, granted_by, revoke_reason FROM program_grants
-        WHERE account_id = $1 ORDER BY granted_at, id`,
+      `SELECT g.status, g.granted_by, g.revoke_reason FROM program_grants g
+        JOIN accounts a ON a.person_id = g.person_id
+        WHERE a.id = $1 ORDER BY g.granted_at, g.id`,
       [accountId],
     );
     return r.rows;
@@ -106,7 +108,7 @@ describe('CatalogService', () => {
     // L'école retire l'accès (un parent exclu, un impayé traité ailleurs…).
     await app.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [family, programId],
     );
 
@@ -131,7 +133,7 @@ describe('CatalogService', () => {
     // Puis l'école coupe pour de bon.
     await app.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
-        WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [family, programId],
     );
 
@@ -157,19 +159,19 @@ describe('CatalogService', () => {
         // La famille se coupe…
         await client.query(
           `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-            WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+            WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
           [family, programId],
         );
         // …le staff la remet dans la MÊME transaction…
         await client.query(
-          `INSERT INTO program_grants (account_id, program_id, granted_by)
-           VALUES ($1, $2, 'PLATFORM_STAFF')`,
+          `INSERT INTO program_grants (person_id, program_id, granted_by)
+           VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PLATFORM_STAFF')`,
           [family, programId],
         );
         // …puis l'école la coupe pour de bon, toujours dans la même transaction.
         await client.query(
           `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
-            WHERE account_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+            WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
           [family, programId],
         );
         await client.query('COMMIT');
