@@ -1,7 +1,6 @@
 import { Pool } from 'pg';
-import { encrypt } from '../crypto/aes-gcm';
-import { fingerprintOf } from '../crypto/fingerprint';
 import type { CryptoAssembly } from '../crypto/keyring';
+import { buildPhoneColumns, normalizePhone } from './phone-columns';
 import {
   DeliveryFailed,
   type LineOwnershipProver,
@@ -84,38 +83,15 @@ export class PhoneService {
     private readonly config: PhoneConfig,
   ) {}
 
-  /** P4 §1 — LE point de construction unique des deux colonnes sensibles. */
-  private buildPhoneColumns(phone: string): {
-    phoneHmac: string;
-    hmacKeyId: string;
-    phoneEncrypted: string;
-    encKeyId: string;
-  } {
-    const fingerprint = fingerprintOf(this.crypto.fingerprint, phone);
-    return {
-      phoneHmac: fingerprint.value,
-      hmacKeyId: fingerprint.hmacKeyId,
-      phoneEncrypted: encrypt(this.crypto.encryption, phone),
-      encKeyId: this.crypto.encryption.activeKeyId,
-    };
-  }
-
-  /**
-   * Normalisation E.164 minimale. Le numéro n'existe en clair que dans cette
-   * pile d'appels — jamais en base, jamais en log.
-   */
-  private normalize(raw: string): string | null {
-    const trimmed = raw.replace(/[\s().-]/g, '');
-    return /^\+[1-9][0-9]{7,14}$/.test(trimmed) ? trimmed : null;
-  }
-
   /** Déclarer un numéro : on chiffre, on hache, on n'envoie RIEN (paresseux). */
   async declare(accountId: string, rawPhone: string): Promise<DeclareResult> {
-    const phone = this.normalize(rawPhone);
+    // P4 §1 : la fabrique UNIQUE des deux colonnes (phone-columns.ts) — la
+    // même que celle de l'émancipation, jamais une deuxième.
+    const phone = normalizePhone(rawPhone);
     if (phone === null) {
       return { outcome: 'INVALID_PHONE' };
     }
-    const columns = this.buildPhoneColumns(phone);
+    const columns = buildPhoneColumns(this.crypto, phone);
     // Depuis 018, la ligne appartient à la PERSONNE : le compte agit POUR
     // elle. BOLA : le compte vient du jeton signé, sa personne en découle.
     const personId = await this.personOf(accountId);

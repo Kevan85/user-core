@@ -27,6 +27,11 @@ import {
 } from './invitations/account-invitations.service';
 import { CatalogController } from './catalog/catalog.controller';
 import { CATALOG_SERVICE, type CatalogService } from './catalog/catalog.service';
+import { EmancipationController } from './persons/emancipation.controller';
+import {
+  EMANCIPATION_SERVICE,
+  type EmancipationService,
+} from './persons/emancipation.service';
 import { ResponsibilitiesController } from './persons/responsibilities.controller';
 import {
   RESPONSIBILITIES_SERVICE,
@@ -51,6 +56,7 @@ export interface AuthWiring {
   profileService: ProfileService;
   identityService: IdentityService;
   responsibilitiesService: ResponsibilitiesService;
+  emancipationService: EmancipationService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
   jwks: { keys: PublicJwk[] };
@@ -76,6 +82,7 @@ export class AppModule {
         ProfileController,
         IdentityController,
         ResponsibilitiesController,
+        EmancipationController,
         AccountInvitationsController,
         ProgramAuthController,
       ],
@@ -90,6 +97,7 @@ export class AppModule {
         { provide: PROFILE_SERVICE, useValue: auth.profileService },
         { provide: IDENTITY_SERVICE, useValue: auth.identityService },
         { provide: RESPONSIBILITIES_SERVICE, useValue: auth.responsibilitiesService },
+        { provide: EMANCIPATION_SERVICE, useValue: auth.emancipationService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },

@@ -13,6 +13,7 @@ import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 import { CatalogService } from './catalog/catalog.service';
+import { EmancipationService } from './persons/emancipation.service';
 import { ResponsibilitiesService } from './persons/responsibilities.service';
 import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
@@ -92,6 +93,21 @@ async function bootstrap(): Promise<void> {
   // LOT 5 — le lien de responsabilité : rattacher un ayant droit, ajouter un
   // co-responsable, et l'acte staff de retrait (contrôlé, tracé, atomique).
   const responsibilitiesService = new ResponsibilitiesService(assembly.pool, cryptoConfig);
+  // LOT 5 — l'émancipation : endpoints publics, throttle IP dédié (budget de
+  // la même famille que l'inscription), murs en base (020).
+  const emancipationService = new EmancipationService(
+    assembly.pool,
+    cryptoConfig,
+    codeKeyring,
+    new LyingProver(),
+    phoneConfig,
+    provider,
+    authConfig,
+    new LoginThrottle(
+      authConfig.registerThrottleMaxAttempts,
+      authConfig.registerThrottleWindowSeconds,
+    ),
+  );
   const accountInvitationsService = new AccountInvitationsService(assembly.pool);
 
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
@@ -119,6 +135,7 @@ async function bootstrap(): Promise<void> {
       profileService,
       identityService,
       responsibilitiesService,
+      emancipationService,
       accountInvitationsService,
       programAuthService,
       jwks,
