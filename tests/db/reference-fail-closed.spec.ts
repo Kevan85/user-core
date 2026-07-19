@@ -54,10 +54,10 @@ describe('références singleton — échec FERMÉ, jamais NULL (014/015)', () =
     expect(restored.id).toBe(saved.hmac_key_id);
   });
 
-  test('emancipation_minimum_age() : singleton absent → RAISE P0112, jamais NULL (014)', async () => {
+  test('emancipation_minimum_age() et emancipation_proof_max_age() : singleton absent → RAISE P0112, jamais NULL (014)', async () => {
     const saved = firstRow(
-      await owner.query<{ minimum_age_years: number }>(
-        'SELECT minimum_age_years FROM emancipation_policy WHERE singleton',
+      await owner.query<{ minimum_age_years: number; proof_max_age_seconds: number }>(
+        'SELECT minimum_age_years, proof_max_age_seconds FROM emancipation_policy WHERE singleton',
       ),
     );
     await owner.query('DELETE FROM emancipation_policy');
@@ -65,14 +65,22 @@ describe('références singleton — échec FERMÉ, jamais NULL (014/015)', () =
       await expect(codeOf(() => owner.query('SELECT emancipation_minimum_age()'))).resolves.toBe(
         DB_ERROR.EMPTY_REFERENCE,
       );
+      // La fenêtre de fraîcheur (C14) obéit au même patron : échec FERMÉ.
+      await expect(codeOf(() => owner.query('SELECT emancipation_proof_max_age()'))).resolves.toBe(
+        DB_ERROR.EMPTY_REFERENCE,
+      );
     } finally {
-      await owner.query('INSERT INTO emancipation_policy (minimum_age_years) VALUES ($1)', [
-        saved.minimum_age_years,
-      ]);
+      await owner.query(
+        'INSERT INTO emancipation_policy (minimum_age_years, proof_max_age_seconds) VALUES ($1, $2)',
+        [saved.minimum_age_years, saved.proof_max_age_seconds],
+      );
     }
     const restored = firstRow(
-      await owner.query<{ age: number }>('SELECT emancipation_minimum_age() AS age'),
+      await owner.query<{ age: number; window_seconds: number }>(
+        'SELECT emancipation_minimum_age() AS age, emancipation_proof_max_age() AS window_seconds',
+      ),
     );
     expect(restored.age).toBe(saved.minimum_age_years);
+    expect(restored.window_seconds).toBe(saved.proof_max_age_seconds);
   });
 });

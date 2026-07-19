@@ -108,10 +108,45 @@ describe('émancipation — les murs en base (020)', () => {
     );
   }
 
+  /**
+   * Forge (owner) l'état que verify_possession_code laisse derrière lui :
+   * revendication ACTIVE + preuve SUCCEEDED fraîche (settled_at posé à
+   * l'instant — le mur de fraîcheur C14 la voit comme le flux réel).
+   */
   async function proveUnderOwner(claimId: string): Promise<void> {
     await owner.query(
       "UPDATE phone_claims SET status = 'ACTIVE', assurance_level = 'PROVEN' WHERE id = $1",
       [claimId],
+    );
+    await owner.query(
+      `INSERT INTO possession_proofs (claim_id, channel, code_hmac, proof_code_key_id,
+                                      max_attempts, expires_at, status, settled_at)
+       VALUES ($1, 'SMS', 'hmac-de-fixture', 'C1', 3,
+               now() + interval '10 minutes', 'SUCCEEDED', now())`,
+      [claimId],
+    );
+  }
+
+  /**
+   * Forge (owner) le scénario C14 : revendication ACTIVE dont la preuve a
+   * réussi il y a LONGTEMPS. Aucun trigger d'INSERT sur possession_proofs
+   * (007 ne garde que UPDATE/DELETE) : la forge est possible — c'est
+   * exactement ce qu'un chemin owner ou un incident de données produirait.
+   */
+  async function proveUnderOwnerLongAgo(claimId: string, secondsAgo: number): Promise<void> {
+    await owner.query(
+      "UPDATE phone_claims SET status = 'ACTIVE', assurance_level = 'PROVEN' WHERE id = $1",
+      [claimId],
+    );
+    await owner.query(
+      `INSERT INTO possession_proofs (claim_id, channel, code_hmac, proof_code_key_id,
+                                      max_attempts, expires_at, status, settled_at, created_at)
+       VALUES ($1, 'SMS', 'hmac-de-fixture', 'C1', 3,
+               now() - make_interval(secs => $2::int) + interval '10 minutes',
+               'SUCCEEDED',
+               now() - make_interval(secs => $2::int) + interval '1 minute',
+               now() - make_interval(secs => $2::int))`,
+      [claimId, secondsAgo],
     );
   }
 
@@ -172,6 +207,56 @@ describe('émancipation — les murs en base (020)', () => {
     ).id;
     await proveUnderOwner(forged);
     expect((await complete(child.id)).verdict).toBe('UNDERAGE');
+  });
+
+  test('C14 : une revendication ACTIVE ancienne + appel DIRECT à complete_emancipation → PROOF_STALE, aucun compte créé', async () => {
+    // Junior a une ligne prouvée il y a deux jours et pas de compte actif —
+    // le scénario de la prise de compte : un appel direct (la « v2 de cet
+    // endpoint », un job, un chemin admin) tente de poser SON secret sur sa
+    // personne. Le service exigerait un code frais ; la BASE doit refuser
+    // TOUTE SEULE.
+    const junior = await person(YEAR - minimumAge - 2);
+    const opened = await open(junior.identifier, '+243870000021');
+    expect(opened.verdict).toBe('OPENED');
+    await proveUnderOwnerLongAgo(opened.claim_id as string, 2 * 24 * 3600);
+
+    const attacked = await complete(junior.id);
+    expect(attacked.verdict).toBe('PROOF_STALE');
+    expect(attacked.account_id).toBeNull();
+
+    // L'absence se prouve en COMPTANT : zéro compte n'est pas « pas trouvé ».
+    const born = firstRow(
+      await owner.query<{ n: string }>('SELECT count(*) AS n FROM accounts WHERE person_id = $1', [
+        junior.id,
+      ]),
+    );
+    expect(born.n).toBe('0');
+  });
+
+  test('C14 : la fenêtre est LUE de la politique, pas décorative — l\'élargir sous owner change le verdict', async () => {
+    // Une preuve d'il y a deux heures : hors fenêtre par défaut (900 s),
+    // dans la fenêtre si la politique s'élargit à un jour. Si un jour une
+    // constante finit câblée à côté de la colonne, ce test rougit.
+    const junior = await person(YEAR - minimumAge - 2);
+    const opened = await open(junior.identifier, '+243870000022');
+    expect(opened.verdict).toBe('OPENED');
+    await proveUnderOwnerLongAgo(opened.claim_id as string, 2 * 3600);
+
+    expect((await complete(junior.id)).verdict).toBe('PROOF_STALE');
+
+    const saved = firstRow(
+      await owner.query<{ proof_max_age_seconds: number }>(
+        'SELECT proof_max_age_seconds FROM emancipation_policy WHERE singleton',
+      ),
+    ).proof_max_age_seconds;
+    await owner.query('UPDATE emancipation_policy SET proof_max_age_seconds = 86400');
+    try {
+      const widened = await complete(junior.id);
+      expect(widened.verdict).toBe('EMANCIPATED');
+      expect(widened.account_id).not.toBeNull();
+    } finally {
+      await owner.query('UPDATE emancipation_policy SET proof_max_age_seconds = $1', [saved]);
+    }
   });
 
   test('le PARCOURS du sommet : coupure nette au commit, même person_id, ex-responsables prévenus, irréversibilité armée', async () => {
@@ -245,7 +330,9 @@ describe('émancipation — les murs en base (020)', () => {
     // ligne toujours PROUVÉE peut recevoir un compte neuf par la même porte
     // (l'unique partiel de 016 n'interdit que la coexistence de deux comptes
     // ACTIFS). Au niveau SERVICE, un code frais reste toujours exigé — la
-    // fonction, elle, est gardée par la possession de ligne.
+    // fonction, elle, est gardée par la possession de ligne prouvée
+    // FRAÎCHEMENT (C14 : la preuve de cette fixture vient d'être posée, elle
+    // est dans la fenêtre — six mois plus tard elle ne le serait plus).
     const reacquired = await complete(junior.id);
     expect(reacquired.verdict).toBe('EMANCIPATED');
     expect(

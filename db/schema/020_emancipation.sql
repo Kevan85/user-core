@@ -13,7 +13,10 @@
 --   · le mur d'âge lit emancipation_minimum_age() (fail-closed, P0112) avec
 --     le comparateur >= (D-C : l'âge réel est dans [diff-1, diff] — refuser
 --     diff >= seuil refuserait de vrais jeunes majeurs ; le mur n'est JAMAIS
---     plus dur que la règle, symétrique du mur de minorité de 017).
+--     plus dur que la règle, symétrique du mur de minorité de 017) ;
+--   · la preuve doit être FRAÎCHE (C14) : une revendication ACTIVE ancienne
+--     ne suffit pas — le mur lit emancipation_proof_max_age() (fail-closed,
+--     P0112) et settled_at, posé par la base, non falsifiable.
 --
 -- UNE PORTE DE NAISSANCE (leçon C9, appliquée d'avance) : le couple
 -- compte + premier secret naît dans attach_account_to_person() — SANS
@@ -156,7 +159,7 @@ GRANT EXECUTE ON FUNCTION open_emancipation(text, text, text, text, text) TO use
 --    liens actifs se closent EMANCIPATED — une transaction. L'invariant E
 --    (différé) valide la coupure au commit ; le mur C11 devient définitif.
 --    Verdicts : EMANCIPATED · UNKNOWN · HAS_ACCOUNT · UNDERAGE ·
---    LINE_NOT_PROVEN.
+--    LINE_NOT_PROVEN · PROOF_STALE.
 -- -----------------------------------------------------------------------------
 CREATE FUNCTION complete_emancipation(
   p_person_id                 uuid,
@@ -194,6 +197,27 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM phone_claims c
                   WHERE c.person_id = subject.id AND c.status = 'ACTIVE') THEN
     account_id := NULL; verdict := 'LINE_NOT_PROVEN'; RETURN NEXT; RETURN;
+  END IF;
+
+  -- C14 — LA FRAÎCHEUR AU MÊME ÉTAGE QUE LE MUR (§3.1, « la v2 de cet
+  -- endpoint ») : le service exige déjà un code frais, mais un service se
+  -- réécrit. Sans ce mur, une revendication prouvée il y a six mois suffirait
+  -- à un appel direct pour poser SON secret sur la personne d'autrui — la
+  -- prise de compte fermée au service, survivant un étage plus bas.
+  -- settled_at est posé par la BASE à la clôture (007), jamais par le client :
+  -- l'horodatage ne se fournit ni ne se rejoue. Dans le flux légitime, la
+  -- vérification du code et cet acte partagent la même horloge — celle de la
+  -- base — à quelques secondes d'intervalle : la fenêtre (politique
+  -- paramétrable, lecture fail-closed P0112) ne mord jamais sur le légitime.
+  IF NOT EXISTS (
+    SELECT 1 FROM phone_claims c
+      JOIN possession_proofs p ON p.claim_id = c.id
+     WHERE c.person_id = subject.id
+       AND c.status = 'ACTIVE'
+       AND p.status = 'SUCCEEDED'
+       AND p.settled_at > now() - make_interval(secs => emancipation_proof_max_age())
+  ) THEN
+    account_id := NULL; verdict := 'PROOF_STALE'; RETURN NEXT; RETURN;
   END IF;
 
   -- Le compte naît par LA porte — même person_id, identité stable.

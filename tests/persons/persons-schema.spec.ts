@@ -348,10 +348,14 @@ describe('emancipation_policy — la politique appartient aux migrations (014)',
 
   test('UNE ligne, pour toujours : le singleton ne se duplique pas, même par owner', async () => {
     await expect(
-      owner.query('INSERT INTO emancipation_policy (singleton, minimum_age_years) VALUES (true, 18)'),
+      owner.query(
+        'INSERT INTO emancipation_policy (singleton, minimum_age_years, proof_max_age_seconds) VALUES (true, 18, 900)',
+      ),
     ).rejects.toThrow(/duplicate key/);
     await expect(
-      owner.query('INSERT INTO emancipation_policy (singleton, minimum_age_years) VALUES (false, 18)'),
+      owner.query(
+        'INSERT INTO emancipation_policy (singleton, minimum_age_years, proof_max_age_seconds) VALUES (false, 18, 900)',
+      ),
     ).rejects.toThrow(/emancipation_policy_singleton_check/);
   });
 
@@ -359,5 +363,9 @@ describe('emancipation_policy — la politique appartient aux migrations (014)',
     await expect(
       owner.query('UPDATE emancipation_policy SET minimum_age_years = 160'),
     ).rejects.toThrow(/minimum_age_years/);
+    // La fenêtre C14 a la même garde de saisie : une semaine ne passe pas.
+    await expect(
+      owner.query('UPDATE emancipation_policy SET proof_max_age_seconds = 604800'),
+    ).rejects.toThrow(/proof_max_age_seconds/);
   });
 });

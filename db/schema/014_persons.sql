@@ -167,10 +167,20 @@ CREATE TRIGGER trg_persons_no_delete
 CREATE TABLE emancipation_policy (
   singleton         boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   minimum_age_years integer NOT NULL CHECK (minimum_age_years BETWEEN 10 AND 30),
+  -- C14 : la fraîcheur de preuve exigée pour ACHEVER une émancipation (020).
+  -- Le code frais du service authentifie l'acte ; ce mur borne l'exposition
+  -- d'un appel direct : une ligne prouvée il y a six mois ne suffit plus à
+  -- poser un secret sur la personne d'autrui. 900 s = deux ordres de grandeur
+  -- au-dessus du pire cas légitime (vérification du code → argon2 → acte,
+  -- quelques secondes) : le mur ne mord jamais sur le légitime (même règle
+  -- que le >= de 017). Paramétrable par migration signée, jamais figé dans
+  -- une fonction. Les bornes du CHECK sont une garde de saisie, pas une
+  -- doctrine (patron minimum_age_years).
+  proof_max_age_seconds integer NOT NULL CHECK (proof_max_age_seconds BETWEEN 60 AND 86400),
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
-INSERT INTO emancipation_policy (minimum_age_years) VALUES (16);
+INSERT INTO emancipation_policy (minimum_age_years, proof_max_age_seconds) VALUES (16, 900);
 
 GRANT SELECT ON emancipation_policy TO user_core_app;
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON emancipation_policy FROM user_core_app;
@@ -193,6 +203,22 @@ BEGIN
       USING ERRCODE = 'P0112';
   END IF;
   RETURN min_age;
+END;
+$$ LANGUAGE plpgsql STABLE
+SET search_path = pg_catalog, public;
+
+-- La fenêtre de fraîcheur (C14), même patron : consultée par le mur de 020,
+-- échec FERMÉ (P0112) — un singleton absent n'ouvre aucun mur en silence.
+CREATE FUNCTION emancipation_proof_max_age() RETURNS integer AS $$
+DECLARE
+  max_age integer;
+BEGIN
+  SELECT proof_max_age_seconds INTO max_age FROM emancipation_policy WHERE singleton;
+  IF max_age IS NULL THEN
+    RAISE EXCEPTION 'emancipation_policy : table de référence vide — le socle est absent, aucun mur ne doit s''ouvrir'
+      USING ERRCODE = 'P0112';
+  END IF;
+  RETURN max_age;
 END;
 $$ LANGUAGE plpgsql STABLE
 SET search_path = pg_catalog, public;

@@ -229,7 +229,7 @@ export class EmancipationService {
         if (result.rows[0]?.verdict === 'EMANCIPATED') {
           return { outcome: 'EMANCIPATED', accountIdentifier: identifier };
         }
-        return { outcome: 'REFUSED' }; // UNDERAGE / HAS_ACCOUNT / LINE_NOT_PROVEN
+        return { outcome: 'REFUSED' }; // UNDERAGE / HAS_ACCOUNT / LINE_NOT_PROVEN / PROOF_STALE
       } catch (err) {
         if (isCollision(err, 'uq_accounts_public_identifier')) {
           identifier = this.generateAccountIdentifier();
