@@ -1,0 +1,16 @@
+#!/bin/sh
+# =============================================================================
+# Le DÉCLENCHEMENT MÉCANIQUE des gardes (C13bis, Auditeur 17/07/2026).
+#
+# tools/check-guards.sh avait prédit l'incident dans son propre en-tête
+# (« un ; mal placé dans une chaîne de commandes laisse passer le commit »)
+# sans pouvoir l'empêcher : son invocation restait manuelle. Ici, le commit
+# est REFUSÉ si une garde échoue — plus de if à retenir, plus de chaîne
+# shell à ne pas rater, plus de 23 h.
+#
+# Posé par « npm install » (script prepare : git config core.hooksPath
+# .githooks) : versionné, il survit aux personnes et aux machines neuves.
+# « Jamais --no-verify sans accord explicite » (CLAUDE.md §4) protège
+# désormais quelque chose de réel.
+# =============================================================================
+exec bash tools/check-guards.sh
