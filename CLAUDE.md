@@ -198,6 +198,14 @@ discutent pas) : les mots-clés SQL s'écrivent en **MAJUSCULES** (`ORDER BY`, j
 `tests/` est **hors périmètre** : les tests d'invariants doivent pouvoir interroger
 `pg_catalog` / `pg_class`, et ils ne définissent aucun schéma.
 
+⚠️ **Le motif A attrape des mots FRANÇAIS ordinaires — c'est le prix, pas un défaut.** `cart`
+vit dans « **cart**e SIM » et « é**cart** » ; `order` vit dans « acc**order** ». Trois fois déjà,
+la garde a rougi sur de la prose parfaitement légitime. **La réponse est TOUJOURS de reformuler
+le commentaire, JAMAIS d'affaiblir le motif** : la forme « évidente » `\border\b` **laisserait
+passer `order_id`** — en regex, `_` est un caractère de mot, donc `order_id` n'a pas de
+frontière après `order` (vérifié). On perdrait la colonne qu'on voulait interdire pour gagner
+le droit d'écrire « accorder ». **Une garde se contourne par la plume, jamais par le motif.**
+
 Les rôles sont transverses (`ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où
 User-Core sait ce qu'est un enseignant, il est mort.
 
@@ -318,9 +326,23 @@ d'une personne **impossible par construction**, = **plan REFUSÉ**.
   titre + body ; l'Exécuteur utilise le bloc verbatim.
 - **Clean-clean** après merge : branches locale + distante supprimées, `ls-remote` vide,
   worktree retiré, `prune`.
-- Jamais de force-push sur `main`. Jamais `--no-verify` sans accord explicite.
+- Jamais de force-push sur `main`.
+- **Les gardes se déclenchent MÉCANIQUEMENT** : `.githooks/pre-commit` joue
+  `tools/check-guards.sh` et **refuse le commit** (`core.hooksPath` posé par le `prepare` de
+  `package.json`, donc au `npm install` — versionné, il survit aux personnes et aux machines
+  neuves). **Jamais `--no-verify` sans accord explicite** — cette règle protège désormais
+  quelque chose de réel. *(Elle a longtemps interdit de contourner un hook qui n'existait pas :
+  une règle peut garder une porte qu'on n'a jamais posée — cf. §11.)*
+- ⚠️ **Jouer le script À LA MAIN ne remplace pas le hook** : `git grep --cached` lit l'**INDEX**.
+  Lancé avant `git add`, il valide un contenu qu'il n'a pas lu et répond « tout va bien ». Le
+  hook, lui, voit le staging réel. **Une garde jouée sur le mauvais instantané est une garde qui
+  ment** — et elle ment dans le sens rassurant, le seul qui soit dangereux.
 - **CI = gate de merge, vérifiée À LA SOURCE** (API check-runs sur le SHA exact), jamais sur
   parole. Kevin n'a pas de device de test.
+- ⚠️ **Un check qui TOURNE n'est pas un check qui BLOQUE.** La liste des checks *exécutés* et
+  celle des checks **requis** (`/branches/main/protection`) sont deux objets distincts : un job
+  peut rougir et le merge passer quand même. **Les deux se lisent à la source, jamais dans une
+  note ou un prompt** (cf. §11).
 
 ## 5. Qualité du code & tests
 
@@ -355,11 +377,44 @@ d'une personne **impossible par construction**, = **plan REFUSÉ**.
 
 ## 8. Décisions verrouillées (ne pas rouvrir sans Kevin)
 
-Voir [docs/CAHIER_DES_CHARGES.md §10](docs/CAHIER_DES_CHARGES.md) — les 12 décisions,
+Voir [docs/CAHIER_DES_CHARGES.md §10](docs/CAHIER_DES_CHARGES.md) — les 13 décisions,
 notamment : construire mince derrière couture · téléphone jamais en clair · possession =
 SMS/appel uniquement · preuve fraîche gagne · jamais d'OTP de routine · un seul patron de
 session · catalogue = droit d'accès · **personnes / ayants droit dès la V1** (amendé le
 15/07/2026 — l'enfant existe comme personne de l'écosystème dès le départ, PERSONNE ≠ COMPTE).
+
+### 8.1 Ce que le LOT 5 a gravé (livré le 17/07/2026, migrations `014`→`020`)
+
+La distinction **PERSONNE ≠ COMPTE** n'est plus une intention : elle est **non représentable**
+autrement.
+
+- **Le droit d'accès appartient à la PERSONNE, jamais au compte** (« Scolaria pour Junior »,
+  pas « la famille a Scolaria »). Raison décisive : **à l'émancipation, il n'y a RIEN à
+  transférer.** Un test le rejoue à chaque CI : *le droit d'un mineur survit à la désactivation
+  du compte de son responsable.*
+- **L'invariant d'émancipation** (P0113), **différé au commit, sur les DEUX tables** : une
+  personne ne peut pas à la fois avoir un compte ACTIF et être l'ayant droit d'un lien ACTIF.
+  Il rend la coupure non contournable **et tue tous les cycles de responsabilité**, à toute
+  longueur — un responsable exige un compte actif, un ayant droit ne peut pas en avoir.
+- **La coupure est IRRÉVERSIBLE** : `end_reason = 'EMANCIPATED'` est consulté par le mur ; un
+  émancipé ne redevient jamais un ayant droit. *(Sans cela, la protection dépendait de l'écart
+  entre l'anniversaire et le 31 décembre.)*
+- **Retirer un responsable est un acte STAFF**, en base (`SECURITY DEFINER` + `REVOKE UPDATE`
+  **table ET colonne**) — **jamais un self-service** : dans un conflit de garde, le système ne
+  tranche pas à la place d'un juge.
+- **Émancipation = acte, pas bascule** : seuil **paramétrable** (16 ans), le jeune prouve **SA**
+  ligne, avec une **preuve FRAÎCHE** (fenêtre paramétrable — une revendication ancienne ne
+  suffit pas), et le compte naît sur le **même `person_id`**.
+- **PII de personne** : identité civile chiffrée sous une clé **dérivée HKDF(clé du trousseau,
+  sel propre à la personne)** — **effacer une personne = détruire SON sel**, sans toucher aux
+  autres ni aux registres. Seule l'**année** de naissance reste en clair (finalité écrite,
+  résidu ± 1 an assumé, **le mois n'y entre jamais** : une date fine en clair survivrait à la
+  crypto-destruction et ferait de « effaçable » un mensonge).
+- ⚠️ **L'effacement n'est PAS livré** — le crochet l'est. `erase_person()`, la **politique de
+  rétention des sauvegardes** (sans laquelle *la crypto-destruction est un mensonge*), le
+  re-chiffrement des numéros et la neutralisation des empreintes HMAC déterministes sont un
+  **lot dédié**, avec trois questions produit/réglementaires **pour Kevin** (à commencer par :
+  *qui a le droit de demander l'effacement d'un mineur ?*).
 
 ## 9. Où est quoi
 
@@ -380,3 +435,58 @@ user-core/
 - Ce dépôt manipule l'identité de familles et le numéro qui sera débité par les paiements.
   La rigueur du double-check n'est pas une cérémonie : c'est ce qui empêche qu'un inconnu
   reçoive la demande de paiement d'un autre, ou qu'un poste volé garde accès à une école.
+
+---
+
+## 11. Les leçons payées — à relire avant de concevoir une garde
+
+Chacune a coûté un défaut réel. Elles ne sont pas des maximes : ce sont des **erreurs
+commises ici**, par l'Exécuteur comme par l'Auditeur, et le prix est déjà payé.
+
+**① Une discipline ne tient que si elle est MÉCANIQUE.** La parade P4 (re-dériver l'empreinte
+après déchiffrement) a été posée au LOT 2… puis **oubliée trois lots plus tard par son propre
+auteur**, sans qu'aucun test ne rougisse — d'où le motif F. Le corollaire est une **question à
+se poser à chaque correction** : *« qu'est-ce qui empêchera ce trou de renaître ailleurs ? »*
+Les bonnes réponses sont des gardes CI, des `REVOKE`, des paramètres **obligatoires dans une
+signature** (le lecteur ne peut pas *oublier* de comparer). Les mauvaises sont « j'y penserai ».
+
+**② Une garde qui TOURNE n'est pas une garde qui BLOQUE.** Pendant des semaines, tous les
+documents affirmaient « `main` est protégé par 8 checks ». L'API en montrait **5** : les gardes
+PII, zéro-cycle et P4 — celles qui protègent les leçons les plus chères — **s'exécutaient sans
+conditionner le merge**. Personne n'avait regardé, parce que tout le monde *savait*. **Un état
+d'infrastructure se lit à la source ou ne se dit pas.** Même famille : une garde jouée sur
+l'index au lieu du staging (§4), un `if` de shell qui n'arrête pas un commit, une règle qui
+interdit de contourner un hook inexistant.
+
+**③ L'invariant vit dans la base, et « la v2 de cet endpoint » est le test qui tranche.**
+Trois fois sur le seul LOT 5, un mur porteur s'est retrouvé dans un service : la coupure
+d'émancipation, le « jamais un self-service », la fraîcheur d'une preuve. **Chaque fois, la
+donnée nécessaire était DÉJÀ en base** — le mur ne la consultait simplement pas. Le réflexe :
+avant d'écrire un `if` de sécurité, chercher ce que le registre sait déjà.
+
+**④ Une porte n'arrive jamais avant son mur.** Livrer un chemin d'écriture une étape avant
+l'invariant qui le garde ouvre le trou pour la durée de l'étape. §3.1 appliqué au **temps**.
+
+**⑤ Une justification périmée survit à la règle qu'elle justifiait.** Un commentaire a porté
+« SMS ≈ 0,25 $, repli rationné » des mois après que le chiffre réel (0,04 $) eut **annulé la
+règle**. Le prochain lecteur aurait conçu contre le CDC. **Quand une décision change, le
+commentaire qui la porte change dans le même commit.**
+
+**⑥ Un patron se copie AVEC son défaut.** `emancipation_minimum_age()` a hérité du fail-open de
+`active_hmac_key_id()` : en SQL, `'H1' <> NULL` vaut `NULL`, donc le `IF` ne lève pas et **la
+garde s'ouvre en silence**. Copier le patron de la maison est le geste correct — **relire ce
+qu'on copie l'est aussi**. Toute lecture de référence échoue **FERMÉ** (P0112).
+
+**⑦ Une garde qui efface sa raison d'être se retourne contre elle.** Trois motifs (`class`,
+`whatsapp`, puis pays) ont d'abord été écrits dans une forme qui supprimait les commentaires
+expliquant *pourquoi* la règle existe. **TESTE TOUJOURS UNE GARDE AVANT DE LA GRAVER** — et
+quand elle mord la prose, **reformule la prose** (§3.7).
+
+**⑧ Refuser une consigne AVEC PREUVE est le travail, pas une friction.** Score du chantier au
+17/07/2026 : **8 refus argumentés de l'Exécuteur, fondés 8 fois** — dont un « piège » de
+l'Auditeur matériellement faux, un backfill validé qui aurait fabriqué des identifiants
+devinables, et une porte validée refusée parce que son mur n'existait pas encore. **Un agent
+qui dit « amen » n'apporte rien ; celui qui prouve vaut ce qu'il coûte.** Symétriquement :
+**refuser d'affirmer ce qu'on n'a pas vérifié, même quand on a raison** — l'Exécuteur a livré
+un rapport en marquant « CI non vérifiée » pendant une panne GitHub, alors que tout était vert.
+C'est la règle.
