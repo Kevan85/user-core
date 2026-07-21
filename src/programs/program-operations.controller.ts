@@ -119,11 +119,9 @@ export class ProgramOperationsController {
     @Headers('authorization') authorization?: string,
   ): Promise<{ status: 'GRANTED' | 'ALREADY_ACTIVE' }> {
     const caller = this.requireProgram(authorization);
-    if (typeof body.personIdentifier !== 'string' || !/^[1-9][0-9]{9}$/.test(body.personIdentifier)) {
-      throw new BadRequestException('personIdentifier : 10 chiffres attendus');
-    }
+    const identifier = readPersonIdentifier(body.personIdentifier);
 
-    const result = await this.grants.openForKnownPerson(caller.programId, body.personIdentifier);
+    const result = await this.grants.openForKnownPerson(caller.programId, identifier);
     switch (result.outcome) {
       case 'GRANTED':
         return { status: 'GRANTED' };
@@ -144,6 +142,48 @@ export class ProgramOperationsController {
     }
   }
 
+  /**
+   * LA LECTURE (étape 4) : le droit de CE programme pour cette personne —
+   * jamais ceux d'un autre (frontière §7). POST et corps, pas GET et URL :
+   * un identifiant de personne n'entre jamais dans un chemin ou une query
+   * (les access-logs des proxys journalisent les URL — §3.2 par construction).
+   */
+  @Post('grants/status')
+  @HttpCode(200)
+  async knownPersonGrantStatus(
+    @Body() body: KnownPersonGrantBody,
+    @Headers('authorization') authorization?: string,
+  ): Promise<{ status: 'ACTIVE' | 'REVOKED' | 'NONE'; grantedAt?: string; revokedAt?: string }> {
+    const caller = this.requireProgram(authorization);
+    const identifier = readPersonIdentifier(body.personIdentifier);
+    const result = await this.grants.statusForKnownPerson(caller.programId, identifier);
+    if (result.outcome === 'NOT_FOUND') {
+      throw new NotFoundException('personne inconnue');
+    }
+    return { status: result.status, grantedAt: result.grantedAt, revokedAt: result.revokedAt };
+  }
+
+  /**
+   * LA RÉVOCATION par le programme : son droit, motif PROGRAM — la matrice
+   * de 019 fait le reste (la famille ne rouvre pas ce qu'un tiers a fermé ;
+   * le programme, si). Un re-revoke rend NOT_ACTIVE en 200 : un constat
+   * idempotent, pas une erreur.
+   */
+  @Post('grants/revoke')
+  @HttpCode(200)
+  async revokeKnownPersonGrant(
+    @Body() body: KnownPersonGrantBody,
+    @Headers('authorization') authorization?: string,
+  ): Promise<{ status: 'REVOKED' | 'NOT_ACTIVE' }> {
+    const caller = this.requireProgram(authorization);
+    const identifier = readPersonIdentifier(body.personIdentifier);
+    const result = await this.grants.revokeForKnownPerson(caller.programId, identifier);
+    if (result.outcome === 'NOT_FOUND') {
+      throw new NotFoundException('personne inconnue');
+    }
+    return { status: result.outcome };
+  }
+
   // Le mur de l'étape 1, traduit en HTTP — un seul point, pour tous les
   // endpoints métier de ce contrôleur.
   private requireProgram(authorization?: string): ProgramCaller {
@@ -156,6 +196,13 @@ export class ProgramOperationsController {
     }
     return result.caller;
   }
+}
+
+function readPersonIdentifier(value: unknown): string {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{9}$/.test(value)) {
+    throw new BadRequestException('personIdentifier : 10 chiffres attendus');
+  }
+  return value;
 }
 
 function readReference(value: unknown): string {

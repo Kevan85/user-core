@@ -126,6 +126,74 @@ describe('/v1/grants — ProgramGrantsService (étape 3)', () => {
     expect((await service.openForKnownPerson(programId, identifier)).outcome).toBe('CLOSED_BY_FAMILY');
   });
 
+  test('LECTURE (étape 4) : chaque programme ne voit que SON droit — jamais celui d\'un autre sur la même personne (§7)', async () => {
+    const programA = await program('GRANTED');
+    const programB = await program('GRANTED');
+    const identifier = await adultIdentifier();
+
+    // B ouvre son droit ; A n'a rien ouvert.
+    expect((await service.openForKnownPerson(programB, identifier)).outcome).toBe('GRANTED');
+
+    // A lit : la personne existe, mais SON droit est NONE — le droit de B
+    // n'apparaît nulle part dans la réponse (le lien inter-programmes ne
+    // sort jamais).
+    const forA = await service.statusForKnownPerson(programA, identifier);
+    expect(forA).toEqual({ outcome: 'OK', status: 'NONE' });
+
+    // B lit le sien : ACTIVE, horodaté — et rien sur A.
+    const forB = await service.statusForKnownPerson(programB, identifier);
+    if (forB.outcome !== 'OK') throw new Error('OK attendu');
+    expect(forB.status).toBe('ACTIVE');
+    expect(forB.grantedAt).toBeDefined();
+    expect(forB.revokedAt).toBeUndefined();
+
+    // Personne inconnue : même politique que l'écriture (confirmation
+    // d'intégrité sur identifiant détenu — doctrine 012-vs-grants).
+    expect((await service.statusForKnownPerson(programA, '1234567891')).outcome).toBe('NOT_FOUND');
+  });
+
+  test('RÉVOCATION (étape 4) : motif PROGRAM posé, idempotente, et la matrice rejouée — le programme rouvre, pas la famille', async () => {
+    const programId = await program('GRANTED');
+    const identifier = await adultIdentifier();
+    expect((await service.openForKnownPerson(programId, identifier)).outcome).toBe('GRANTED');
+
+    expect((await service.revokeForKnownPerson(programId, identifier)).outcome).toBe('REVOKED');
+    // Le registre porte l'acte : statut + motif + horodatage de la base.
+    const row = firstRow(
+      await owner.query<{ status: string; revoke_reason: string }>(
+        `SELECT g.status, g.revoke_reason FROM program_grants g
+          JOIN persons p ON p.id = g.person_id
+         WHERE p.public_identifier = $1 AND g.program_id = $2
+         ORDER BY g.seq DESC LIMIT 1`,
+        [identifier, programId],
+      ),
+    );
+    expect(row).toEqual({ status: 'REVOKED', revoke_reason: 'PROGRAM' });
+
+    // Re-revoke : un constat, pas une erreur — et RIEN n'a bougé au registre.
+    expect((await service.revokeForKnownPerson(programId, identifier)).outcome).toBe('NOT_ACTIVE');
+
+    // La lecture reflète l'état.
+    const read = await service.statusForKnownPerson(programId, identifier);
+    if (read.outcome !== 'OK') throw new Error('OK attendu');
+    expect(read.status).toBe('REVOKED');
+    expect(read.revokedAt).toBeDefined();
+
+    // LA MATRICE (019) : retiré par le PROGRAMME → le programme peut rouvrir
+    // (nouvelle ligne) ; ce que la FAMILLE a fermé reste fermé pour lui
+    // (déjà prouvé plus haut : CLOSED_BY_FAMILY).
+    expect((await service.openForKnownPerson(programId, identifier)).outcome).toBe('GRANTED');
+    const lines = firstRow(
+      await owner.query<{ n: string }>(
+        `SELECT count(*) AS n FROM program_grants g
+          JOIN persons p ON p.id = g.person_id
+         WHERE p.public_identifier = $1 AND g.program_id = $2`,
+        [identifier, programId],
+      ),
+    );
+    expect(lines.n).toBe('2'); // l'histoire est append-only : deux lignes, jamais un écrasement
+  });
+
   test('refus propres : personne inconnue, libre-service, programme retiré', async () => {
     const programId = await program('GRANTED');
     expect((await service.openForKnownPerson(programId, '1234567890')).outcome).toBe('NOT_FOUND');
