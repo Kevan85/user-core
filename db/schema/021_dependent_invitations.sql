@@ -23,6 +23,16 @@
 -- silence si la fenêtre s'est libérée) ou à un acte staff. Ce n'est pas un
 -- défaut : le droit n'attend pas le parent ; seule la découverte attend.
 --
+-- ÉTAT NOMMÉ — L'EXTINCTION SILENCIEUSE : une invitation supprimée qui
+-- expire meurt comme elle a vécu — invisible. Personne ne l'a jamais vue :
+-- son expiration ne produit RIEN (aucun événement d'outbox, aucune
+-- notification, aucun signal à la ligne ni au programme). Sa clôture est
+-- paresseuse (le prochain ré-appel du couple la passe EXPIRED, 012) et le
+-- registre la garde, suppressed pour toujours — l'ORDRE DES CONTRÔLES la
+-- protège : accept/decline testent suppressed AVANT l'expiration, donc une
+-- supprimée expirée rend UNKNOWN, jamais EXPIRED (un EXPIRED révélerait
+-- qu'elle a existé). Un test compte cette absence à chaque CI.
+--
 -- LA FENÊTRE UNIQUE (TTL) : l'expiration de l'invitation borne À LA FOIS le
 -- rattachement par un détenteur recyclé de la ligne ET l'exposition du nom
 -- de l'ayant droit (la lecture, étape 5, exige : PENDING ∧ non supprimée ∧
