@@ -42,6 +42,8 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '018_claims_to_person.sql',
       '019_grants_to_person.sql',
       '020_emancipation.sql',
+      '021_dependent_invitations.sql',
+      '022_invited_dependent_identity.sql',
     ]);
   });
 

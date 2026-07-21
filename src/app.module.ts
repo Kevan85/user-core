@@ -45,6 +45,19 @@ import {
   PROGRAM_AUTH_SERVICE,
   type ProgramAuthService,
 } from './programs/program-auth.service';
+import {
+  PROGRAM_REQUEST_AUTH,
+  type ProgramRequestAuth,
+} from './programs/program-request-auth';
+import {
+  DEPENDENT_ACCESS_SERVICE,
+  type DependentAccessService,
+} from './programs/dependent-access.service';
+import {
+  PROGRAM_GRANTS_SERVICE,
+  type ProgramGrantsService,
+} from './programs/program-grants.service';
+import { ProgramOperationsController } from './programs/program-operations.controller';
 
 export interface AuthWiring {
   authService: AuthService;
@@ -59,6 +72,9 @@ export interface AuthWiring {
   emancipationService: EmancipationService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
+  programRequestAuth: ProgramRequestAuth;
+  dependentAccessService: DependentAccessService;
+  programGrantsService: ProgramGrantsService;
   jwks: { keys: PublicJwk[] };
 }
 
@@ -85,6 +101,7 @@ export class AppModule {
         EmancipationController,
         AccountInvitationsController,
         ProgramAuthController,
+        ProgramOperationsController,
       ],
       providers: [
         { provide: PG_POOL, useValue: assembly.pool },
@@ -100,6 +117,9 @@ export class AppModule {
         { provide: EMANCIPATION_SERVICE, useValue: auth.emancipationService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
+        { provide: PROGRAM_REQUEST_AUTH, useValue: auth.programRequestAuth },
+        { provide: DEPENDENT_ACCESS_SERVICE, useValue: auth.dependentAccessService },
+        { provide: PROGRAM_GRANTS_SERVICE, useValue: auth.programGrantsService },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },
       ],
     };

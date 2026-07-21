@@ -27,7 +27,7 @@ describe('AccountInvitationsService', () => {
   beforeAll(async () => {
     app = new Pool({ connectionString: appUrl() });
     owner = new Pool({ connectionString: adminUrl() });
-    invitations = new AccountInvitationsService(app);
+    invitations = new AccountInvitationsService(app, crypto);
   });
 
   beforeEach(async () => {
@@ -120,12 +120,14 @@ describe('AccountInvitationsService', () => {
       programLabel: 'prog-visible',
     });
     expect(Object.keys(view[0]!).sort()).toEqual([
+      'dependents', // étape 5 : nom d'affichage seul, vide pour une invitation ordinaire
       'expiresAt',
       'id',
       'invitedAt',
       'programCode',
       'programLabel',
     ]);
+    expect(view[0]!.dependents).toEqual([]);
   });
 
   test('une invitation SUPPRESSED (plafond de ligne) n\'apparaît JAMAIS dans la liste', async () => {

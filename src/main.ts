@@ -19,8 +19,13 @@ import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
 import { buildJwks } from './programs/jwks';
+import { DependentAccessService } from './programs/dependent-access.service';
 import { assembleProgramAuthFromEnv } from './programs/program-auth-config';
 import { ProgramAuthService } from './programs/program-auth.service';
+import { ProgramGrantsService } from './programs/program-grants.service';
+import { assembleProgramOperationsFromEnv } from './programs/program-operations-config';
+import { ProgramRequestAuth } from './programs/program-request-auth';
+import { assembleReferenceKeyring } from './programs/reference-hmac';
 import { assembleProofCodeKeyring } from './proving/proof-code';
 import { LyingProver } from './proving/simulator/lying-prover';
 
@@ -108,7 +113,10 @@ async function bootstrap(): Promise<void> {
       authConfig.registerThrottleWindowSeconds,
     ),
   );
-  const accountInvitationsService = new AccountInvitationsService(assembly.pool);
+  // Étape 5 — les invitations à ayants droit : le nom d'affichage se lit par
+  // le mur de 022 (quatre conditions en base) et se déchiffre par le point
+  // unique. Le service reçoit donc le trousseau.
+  const accountInvitationsService = new AccountInvitationsService(assembly.pool, cryptoConfig);
 
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
   // (pid = LA frontière de /v1), throttle dédié par IP et par client visé.
@@ -123,6 +131,26 @@ async function bootstrap(): Promise<void> {
     ),
   );
   const jwks = buildJwks(authConfig);
+  // Étape 1 du lot /v1 — le mur d'appel : jeton de programme exigé, programme
+  // résolu du jeton SEUL, budget métier par client (distinct de /v1/token).
+  const programRequestAuth = new ProgramRequestAuth(
+    authConfig,
+    new LoginThrottle(
+      programAuthConfig.apiThrottleMaxAttempts,
+      programAuthConfig.apiThrottleWindowSeconds,
+    ),
+  );
+  // Étape 3 — les opérations métier : le clic (personne + droit + invitation)
+  // et l'ouverture sur personne connue. Trousseau DÉDIÉ aux références
+  // d'idempotence (quatrième trousseau, cycle de vie distinct).
+  const operationsConfig = assembleProgramOperationsFromEnv();
+  const dependentAccessService = new DependentAccessService(
+    assembly.pool,
+    cryptoConfig,
+    assembleReferenceKeyring(),
+    operationsConfig,
+  );
+  const programGrantsService = new ProgramGrantsService(assembly.pool);
 
   const app = await NestFactory.create(
     AppModule.register(assembly, {
@@ -138,6 +166,9 @@ async function bootstrap(): Promise<void> {
       emancipationService,
       accountInvitationsService,
       programAuthService,
+      programRequestAuth,
+      dependentAccessService,
+      programGrantsService,
       jwks,
     }),
   );
