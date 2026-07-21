@@ -25,6 +25,8 @@ function programAuthConfig(overrides: Partial<ProgramAuthConfig> = {}): ProgramA
     assertionMaxTtlSeconds: 300,
     throttleMaxAttempts: 1000,
     throttleWindowSeconds: 60,
+    apiThrottleMaxAttempts: 1000,
+    apiThrottleWindowSeconds: 60,
     ...overrides,
   };
 }

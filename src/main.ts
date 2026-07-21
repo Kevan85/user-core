@@ -21,6 +21,7 @@ import { PhoneService } from './phone/phone.service';
 import { buildJwks } from './programs/jwks';
 import { assembleProgramAuthFromEnv } from './programs/program-auth-config';
 import { ProgramAuthService } from './programs/program-auth.service';
+import { ProgramRequestAuth } from './programs/program-request-auth';
 import { assembleProofCodeKeyring } from './proving/proof-code';
 import { LyingProver } from './proving/simulator/lying-prover';
 
@@ -123,6 +124,15 @@ async function bootstrap(): Promise<void> {
     ),
   );
   const jwks = buildJwks(authConfig);
+  // Étape 1 du lot /v1 — le mur d'appel : jeton de programme exigé, programme
+  // résolu du jeton SEUL, budget métier par client (distinct de /v1/token).
+  const programRequestAuth = new ProgramRequestAuth(
+    authConfig,
+    new LoginThrottle(
+      programAuthConfig.apiThrottleMaxAttempts,
+      programAuthConfig.apiThrottleWindowSeconds,
+    ),
+  );
 
   const app = await NestFactory.create(
     AppModule.register(assembly, {
@@ -138,6 +148,7 @@ async function bootstrap(): Promise<void> {
       emancipationService,
       accountInvitationsService,
       programAuthService,
+      programRequestAuth,
       jwks,
     }),
   );

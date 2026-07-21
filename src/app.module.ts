@@ -45,6 +45,10 @@ import {
   PROGRAM_AUTH_SERVICE,
   type ProgramAuthService,
 } from './programs/program-auth.service';
+import {
+  PROGRAM_REQUEST_AUTH,
+  type ProgramRequestAuth,
+} from './programs/program-request-auth';
 
 export interface AuthWiring {
   authService: AuthService;
@@ -59,6 +63,7 @@ export interface AuthWiring {
   emancipationService: EmancipationService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
+  programRequestAuth: ProgramRequestAuth;
   jwks: { keys: PublicJwk[] };
 }
 
@@ -100,6 +105,7 @@ export class AppModule {
         { provide: EMANCIPATION_SERVICE, useValue: auth.emancipationService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
+        { provide: PROGRAM_REQUEST_AUTH, useValue: auth.programRequestAuth },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },
       ],
     };

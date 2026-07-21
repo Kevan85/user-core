@@ -12,6 +12,13 @@ export interface ProgramAuthConfig {
   assertionMaxTtlSeconds: number;
   throttleMaxAttempts: number;
   throttleWindowSeconds: number;
+  /**
+   * Le budget MÉTIER de /v1, par client authentifié (étape 1 du lot /v1) —
+   * budget DISTINCT de celui de /v1/token : les deux surfaces ne partagent
+   * pas leurs tentatives (même arbitrage que login/refresh, LOT 1).
+   */
+  apiThrottleMaxAttempts: number;
+  apiThrottleWindowSeconds: number;
 }
 
 function readInt(
@@ -51,6 +58,8 @@ export function assembleProgramAuthFromEnv(
     assertionMaxTtlSeconds: readInt(env, 'PROGRAM_ASSERTION_MAX_TTL_SECONDS', 300, violations),
     throttleMaxAttempts: readInt(env, 'PROGRAM_TOKEN_THROTTLE_MAX_ATTEMPTS', 30, violations),
     throttleWindowSeconds: readInt(env, 'PROGRAM_TOKEN_THROTTLE_WINDOW_SECONDS', 60, violations),
+    apiThrottleMaxAttempts: readInt(env, 'PROGRAM_API_THROTTLE_MAX_ATTEMPTS', 120, violations),
+    apiThrottleWindowSeconds: readInt(env, 'PROGRAM_API_THROTTLE_WINDOW_SECONDS', 60, violations),
   };
 
   if (violations.length > 0) {
