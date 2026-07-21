@@ -1,9 +1,10 @@
-# User-Core — Contrat d'intégration des programmes (V1.0)
+# User-Core — Contrat d'intégration des programmes (V1.1)
 
 > **Ce document dit ce qu'un programme a le droit de demander à User-Core, et ce qui lui est
 > refusé pour toujours.** Il est la contrepartie du cahier des charges : le CDC dit ce que
 > User-Core *possède*, celui-ci dit ce qu'il *expose*. Patron : `CONTRAT_VERTICALE.md` de
-> Payment-Core. Rédigé le 14/07/2026.
+> Payment-Core. Rédigé le 14/07/2026 · **amendé le 21/07/2026 (V1.1) — les personnes (LOT 5)
+> et les opérations métier `/v1` : le droit d'accès porte sur la PERSONNE, pas le compte.**
 >
 > **La règle qui gouverne tout le reste** : *Scolaria est un client externe comme un autre.*
 > Le jour où un programme obtient un privilège « juste pour cette fois », l'abstraction
@@ -25,14 +26,60 @@
 
 ## 2. Ce qu'un programme PEUT demander — et rien d'autre
 
-| # | Besoin réel | Ce que User-Core rend |
-|---|---|---|
-| 1 | « Qui est cet utilisateur ? » | Vérification du **jeton d'accès** par la **clé publique** (EdDSA, `kid` dans l'entête). Le programme **vérifie** un badge ; il ne peut pas en **fabriquer** un. |
-| 2 | « Ce compte a-t-il MON programme activé ? » | Un **oui / non** sur **son** programme, avec la date d'activation. |
-| 3 | « Comment je le désigne chez moi ? » | Un **identifiant de compte stable** (uuid technique), plus un **profil de base** minimal (nom d'affichage, langue). |
+> **⚠️ V1.1 — le sujet du droit d'accès est la PERSONNE, jamais le compte.** Un enfant mineur
+> **existe** (identité, droit d'accès) **sans agir** (il n'a pas de compte — il est représenté
+> par ses responsables). « Scolaria pour Junior », pas « la famille a Scolaria ». **Raison
+> décisive : à l'émancipation, il n'y a rien à transférer** — le droit était déjà celui de la
+> personne. Là où ce contrat disait « compte » avant le LOT 5, lire « personne ».
 
-**C'est tout.** Un besoin qui n'entre dans aucune de ces trois lignes n'est pas une demande
+| # | Besoin réel | Ce que User-Core rend | API |
+|---|---|---|---|
+| 1 | « Qui est cet utilisateur ? » | Vérification du **jeton d'accès** par la **clé publique** (EdDSA, `kid` dans l'entête). Le programme **vérifie** un badge ; il ne peut pas en **fabriquer** un. | `/v1/jwks` |
+| 2 | « MON programme est-il activé pour cette PERSONNE ? » | Un **oui / non** sur **son** programme, avec la date d'activation — **et seulement le sien** (jamais l'état d'un autre programme). | `/v1/grants/status` |
+| 3 | « Comment je la désigne chez moi ? » | Un **identifiant de personne stable** (opaque, dictable au guichet), plus un **profil de base** minimal (nom d'affichage). | (rendu à l'ouverture) |
+| 4 | « Ouvrir MON accès pour cette personne » | Un droit d'accès posé sur la **personne** — **si et seulement si le programme est en mode `GRANTED`** (§2.1). Sur une personne **déjà connue** (le programme détient son identifiant), ou en **faisant entrer une famille** (§2.2). | `/v1/grants`, `/v1/dependent-access` |
+| 5 | « Consulter / révoquer un accès que J'AI ouvert » | Statut et révocation — **uniquement sur les droits de son propre programme** (prédicat en base, pas une promesse). | `/v1/grants/status`, `/v1/grants/revoke` |
+
+**C'est tout.** Un besoin qui n'entre dans aucune de ces lignes n'est pas une demande
 d'intégration : c'est une demande de frontière, et elle se tranche avec l'Auditeur.
+
+### 2.1 Le mode d'accès — une donnée du programme, pas un privilège
+
+Chaque programme du catalogue porte un **mode d'accès** (donnée, jamais du code) :
+- **`SELF_SERVICE`** — la personne l'active elle-même, comme on installe une app.
+- **`GRANTED`** — un tiers l'ouvre (le programme lui-même, ou le staff) : *l'école inscrit,
+  pas le parent.* Un programme en `SELF_SERVICE` **ne peut pas** ouvrir un accès à la place de
+  la personne ; un programme en `GRANTED` **ne peut pas** être auto-activé par la famille. La
+  base tient les deux sens.
+
+### 2.2 Faire entrer une famille (mode `GRANTED`) — le clic, puis l'invitation
+
+Au **clic** du programme (une inscription), deux choses distinctes se produisent, et l'ordre
+est doctrinal :
+- **L'accès de l'ayant droit s'ouvre immédiatement** — le droit est sur la personne-enfant, il
+  **n'attend pas** le parent.
+- **Une invitation part vers le numéro du responsable.** Le **compte du parent naît de l'acte
+  du parent** (il pose son propre secret, prouve sa ligne, accepte) — **jamais** créé par le
+  programme. C'est ce qui interdit les « deux classes de parents » et protège le compte qui
+  paie. Le parent déjà présent (inscrit ailleurs) découvre l'invitation **sans ressaisie**.
+
+**Idempotence :** un re-clic (retry réseau) ne crée **jamais** une deuxième fiche d'enfant, à
+condition que le programme joigne **sa propre référence** de requête. Cette référence n'est
+stockée **qu'en empreinte** (le cœur est incapable de la lire) : elle est un **verrou
+anti-rejeu**, pas une table de correspondance — voir §6.
+
+### 2.3 Pourquoi l'existence d'une personne se confirme, mais pas celle d'un numéro
+
+Deux politiques, **parce que deux situations diffèrent** — ce n'est pas une incohérence :
+- **Inviter par un NUMÉRO** ne révèle jamais s'il est connu (`/v1/dependent-access` rend un
+  accusé uniforme). Un numéro est un espace **énumérable** que le programme **ne détient pas** :
+  répondre « connu/inconnu » serait une machine à énumérer l'écosystème — une fuite sur des
+  **tiers**.
+- **Agir sur un IDENTIFIANT de personne** (`/v1/grants`) le confirme (un `NOT_FOUND` explicite).
+  Un identifiant est **CSPRNG**, opaque, **légitimement détenu** par le programme (rendu à
+  l'ouverture, ou dicté au guichet) : ce n'est pas une sonde de découverte, c'est une
+  **confirmation d'intégrité** d'une écriture ciblée (détecter la faute de frappe du guichet).
+  Il ne révèle que l'existence nue — jamais un nom, un numéro, ni l'accès d'un autre programme.
 
 ## 3. Ce qui est REFUSÉ pour toujours
 
@@ -50,7 +97,15 @@ d'intégration : c'est une demande de frontière, et elle se tranche avec l'Audi
    plateforme — et ce pouvoir ne se reprend pas.
 5. **Un rôle métier.** User-Core ne connaît que `ACCOUNT_HOLDER`, `PLATFORM_STAFF`,
    `PLATFORM_ADMIN`. « Enseignant », « médecin », « bailleur » restent chez le programme, et
-   pointent vers l'identifiant de compte.
+   pointent vers l'identifiant de **personne**.
+7. **L'accès d'un AUTRE programme sur la même personne.** Un programme ne lit ni ne révoque que
+   **ses** droits (`program_id` du jeton = prédicat en base). Il ne saura jamais qu'un autre
+   programme a ouvert un accès sur la même personne — même cloisonnement que le point 2.
+8. **Le nom d'un ayant droit qu'il n'a pas le droit de voir.** À l'invitation, le nom
+   **d'affichage** d'un mineur ne se lit que sous quatre conditions tenues **en base**
+   (invitation active, non supprimée, non expirée, **ligne prouvée** de l'appelant) et dans une
+   **fenêtre bornée**. Jamais la date de naissance, jamais les composantes du nom, jamais le
+   numéro.
 6. **Une donnée de verticale**, quelle qu'elle soit — garde CI bloquante (CLAUDE.md §3.7).
 
 ## 4. Le catalogue des programmes — **liste OUVERTE** (décision Kevin, 14/07/2026)
@@ -82,8 +137,17 @@ Et sa réciproque, pour toute demande d'un programme :
 
 ## 6. Ce que le programme garde chez lui
 
-- **Sa table de correspondance locale** (son entité métier ↔ l'identifiant de compte
-  User-Core) : c'est le point de conception de l'extraction de Scolaria (CDC §8.5).
+- **Sa table de correspondance locale** (son entité métier ↔ l'identifiant de **personne**
+  User-Core) : c'est le point de conception de l'extraction de Scolaria (CDC §8.5). ⚠️ Cette
+  correspondance vit **chez le programme, jamais chez nous.** La *référence d'idempotence* que
+  User-Core stocke (§2.2) n'est **pas** cette table : elle n'existe qu'en **empreinte**
+  illisible, elle sert un seul but — reconnaître un re-clic — et ne dit **rien** de l'entité
+  métier qu'elle désigne.
 - **Ses rôles métier, ses données métier, ses écrans.** User-Core ne saura jamais qu'il existe
   une classe, une ordonnance ou un loyer — et c'est précisément ce qui lui permet de tous les
   servir.
+- **Le consentement au traitement de SES données.** User-Core enregistre un **droit d'accès**,
+  pas un traitement. 📌 *Question produit ouverte (Kevin)* : dans le régime strict de protection
+  des données (CDC §3.14), une ouverture d'accès `GRANTED` directe sur un mineur doit-elle
+  laisser une **trace de consentement** du responsable chez User-Core, ou la confiance accordée
+  au programme (mode `GRANTED`) suffit-elle ? À trancher avant Mediyo.
