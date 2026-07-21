@@ -19,9 +19,13 @@ import { assembleCryptoFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
 import { buildJwks } from './programs/jwks';
+import { DependentAccessService } from './programs/dependent-access.service';
 import { assembleProgramAuthFromEnv } from './programs/program-auth-config';
 import { ProgramAuthService } from './programs/program-auth.service';
+import { ProgramGrantsService } from './programs/program-grants.service';
+import { assembleProgramOperationsFromEnv } from './programs/program-operations-config';
 import { ProgramRequestAuth } from './programs/program-request-auth';
+import { assembleReferenceKeyring } from './programs/reference-hmac';
 import { assembleProofCodeKeyring } from './proving/proof-code';
 import { LyingProver } from './proving/simulator/lying-prover';
 
@@ -133,6 +137,17 @@ async function bootstrap(): Promise<void> {
       programAuthConfig.apiThrottleWindowSeconds,
     ),
   );
+  // Étape 3 — les opérations métier : le clic (personne + droit + invitation)
+  // et l'ouverture sur personne connue. Trousseau DÉDIÉ aux références
+  // d'idempotence (quatrième trousseau, cycle de vie distinct).
+  const operationsConfig = assembleProgramOperationsFromEnv();
+  const dependentAccessService = new DependentAccessService(
+    assembly.pool,
+    cryptoConfig,
+    assembleReferenceKeyring(),
+    operationsConfig,
+  );
+  const programGrantsService = new ProgramGrantsService(assembly.pool);
 
   const app = await NestFactory.create(
     AppModule.register(assembly, {
@@ -149,6 +164,8 @@ async function bootstrap(): Promise<void> {
       accountInvitationsService,
       programAuthService,
       programRequestAuth,
+      dependentAccessService,
+      programGrantsService,
       jwks,
     }),
   );
