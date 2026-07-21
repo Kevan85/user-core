@@ -113,7 +113,10 @@ async function bootstrap(): Promise<void> {
       authConfig.registerThrottleWindowSeconds,
     ),
   );
-  const accountInvitationsService = new AccountInvitationsService(assembly.pool);
+  // Étape 5 — les invitations à ayants droit : le nom d'affichage se lit par
+  // le mur de 022 (quatre conditions en base) et se déchiffre par le point
+  // unique. Le service reçoit donc le trousseau.
+  const accountInvitationsService = new AccountInvitationsService(assembly.pool, cryptoConfig);
 
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
   // (pid = LA frontière de /v1), throttle dédié par IP et par client visé.

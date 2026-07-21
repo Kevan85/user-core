@@ -1,4 +1,9 @@
 import { Pool } from 'pg';
+import type { CryptoAssembly } from '../crypto/keyring';
+import {
+  CivilIdentityIntegrityError,
+  decryptCivilIdentity,
+} from '../crypto/person-identity';
 
 export interface AccountInvitationView {
   id: string;
@@ -6,6 +11,13 @@ export interface AccountInvitationView {
   programLabel: string;
   invitedAt: string;
   expiresAt: string;
+  /**
+   * Les ayants droit que l'acceptation rattacherait — NOM D'AFFICHAGE SEUL
+   * (étape 5) : jamais les composantes, jamais la date de naissance, jamais
+   * un identifiant de personne. Le strict nécessaire pour qu'un vrai parent
+   * reconnaisse son enfant. Vide pour une invitation ordinaire.
+   */
+  dependents: { displayName: string }[];
 }
 
 export type InvitationDecisionResult = {
@@ -31,7 +43,10 @@ const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * invitation inexistante doivent être indiscernables.
  */
 export class AccountInvitationsService {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly crypto: CryptoAssembly,
+  ) {}
 
   async list(accountId: string): Promise<AccountInvitationView[]> {
     const result = await this.pool.query<{
@@ -55,13 +70,61 @@ export class AccountInvitationsService {
         ORDER BY i.created_at`,
       [accountId],
     );
-    return result.rows.map((row) => ({
-      id: row.id,
-      programCode: row.code,
-      programLabel: row.label,
-      invitedAt: row.created_at,
-      expiresAt: row.expires_at,
-    }));
+    const views: AccountInvitationView[] = [];
+    for (const row of result.rows) {
+      views.push({
+        id: row.id,
+        programCode: row.code,
+        programLabel: row.label,
+        invitedAt: row.created_at,
+        expiresAt: row.expires_at,
+        dependents: await this.dependentsOf(accountId, row.id),
+      });
+    }
+    return views;
+  }
+
+  /**
+   * Le NOM D'AFFICHAGE des ayants droit d'une invitation — et RIEN d'autre.
+   * Les quatre conditions (PENDING, non supprimée, non expirée, ligne
+   * prouvée) vivent EN BASE (022, patron du verdict) : hors d'elles, la
+   * fonction rend zéro ligne et ce service n'a rien à décider. Le blob se
+   * déchiffre par le point unique (motif F) ; seul displayName en sort —
+   * jamais les composantes, jamais la date, jamais un log.
+   */
+  private async dependentsOf(
+    accountId: string,
+    invitationId: string,
+  ): Promise<{ displayName: string }[]> {
+    const rows = await this.pool.query<{
+      civil_identity_encrypted: string | null;
+      erasure_salt: Buffer;
+      birth_year: number | null;
+    }>(
+      'SELECT civil_identity_encrypted, erasure_salt, birth_year FROM read_invited_dependent_identities($1, $2)',
+      [invitationId, accountId],
+    );
+    const dependents: { displayName: string }[] = [];
+    for (const row of rows.rows) {
+      if (row.civil_identity_encrypted === null || row.birth_year === null) {
+        continue; // théorique : le clic exige l'identité (021, P0111)
+      }
+      try {
+        const identity = decryptCivilIdentity(
+          this.crypto.encryption,
+          row.erasure_salt,
+          row.civil_identity_encrypted,
+          row.birth_year,
+        );
+        dependents.push({ displayName: identity.displayName });
+      } catch (err) {
+        if (err instanceof CivilIdentityIntegrityError) {
+          continue; // l'incident est déjà tracé (C7) — on ne sert pas un registre qui ment
+        }
+        throw err;
+      }
+    }
+    return dependents;
   }
 
   async accept(accountId: string, invitationId: string): Promise<InvitationDecisionResult> {
