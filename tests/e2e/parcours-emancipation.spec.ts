@@ -124,8 +124,9 @@ describe('e2e — rattachement, émancipation, coupure nette (LOT 5)', () => {
          RETURNING id`,
       ),
     ).id;
+    // E1 : le droit du mineur est posé par un TIERS (SELF exige un compte actif).
     await owner.query(
-      `INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')`,
+      `INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'PLATFORM_STAFF')`,
       [attached.dependentPersonId, programId],
     );
 

@@ -32,6 +32,25 @@
 -- de FOND (immuabilité, matrice, différés P0113/P0114) : les fonctions
 -- passent dessous comme tout le monde.
 --
+-- LE MUR E1 — un acte SELF exige un compte ACTIF de la personne du droit.
+-- Trois chemins d'acte sur cinq le vérifiaient déjà (staff, co-responsable,
+-- rattachement — via 017) ; les deux chemins famille ne le vérifiaient
+-- nulle part, et revoke_reason = 'SELF' est l'entrée du mur de réactivation :
+-- un compte mort pouvait verrouiller un programme contre le programme
+-- lui-même. Le mur vit dans les TRIGGERS de garde (le test de §3.1 : un job,
+-- un script, la v2) ; les fonctions SELF n'en sont que la façade propre.
+-- ⚠️ Il ne porte QUE sur l'acteur SELF : une personne sans aucun compte (un
+-- mineur) reçoit légitimement des droits — par PROGRAM ou PLATFORM_STAFF.
+-- Vérifié avant de graver (les chemins SELF hors 023) : l'acceptation d'une
+-- invitation (019/021) ne pose 'SELF' que pour la personne de l'ACCEPTANT —
+-- jamais pour un ayant droit (son droit naît 'PROGRAM' au clic, 021) ; le
+-- mur les traverse donc sans en casser aucun.
+-- 📌 AMENDEMENT d'une prose de 019 (immuable, notée ici — leçon ⑤ adaptée) :
+-- son en-tête dit « aucun contrôle de vitalité ne remplace » l'ancienne
+-- garde de compte. Cela reste vrai pour le DROIT (il appartient à la
+-- personne, il survit au compte) ; c'est amendé pour l'ACTE : agir en
+-- famille exige d'exister comme compte actif.
+--
 -- HORS PÉRIMÈTRE, dette nommée (arbitrage C6) : sessions.revoke_reason et
 -- phone_claims.revoke_reason restent déclaratifs — vérifié le 29/07/2026,
 -- AUCUN mur ne les lit (recherche exhaustive db/ + src/ : uniquement des
@@ -39,6 +58,128 @@
 -- d'audit. Le jour où un mur les lit, ils entrent dans ce patron.
 -- Pas de BEGIN/COMMIT interne : le runner enveloppe cette migration.
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- LE MUR E1, d'abord (le mur avant la porte — les fonctions suivent). Les
+-- deux gardes de 019 sont reprises EN ENTIER, attributs re-déclarés (piège
+-- CREATE OR REPLACE : un attribut omis retombe au défaut en silence) —
+-- l'insertion reste SECURITY DEFINER (elle lisait déjà programs au-delà du
+-- rôle), la mise à jour reste au rôle invoquant (accounts est lisible des
+-- deux rôles), search_path épinglé sur les deux.
+-- -----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION guard_program_grant_insert() RETURNS trigger AS $$
+DECLARE
+  p programs%ROWTYPE;
+  last_grant program_grants%ROWTYPE;
+BEGIN
+  SELECT * INTO p FROM programs WHERE id = NEW.program_id FOR SHARE;
+  IF p.status <> 'ACTIVE' THEN
+    RAISE EXCEPTION 'program_grants : le programme n''est plus proposé (%)', p.status
+      USING ERRCODE = 'P0108';
+  END IF;
+
+  IF NEW.granted_by = 'SELF' THEN
+    -- E1 : agir en famille exige d'exister comme compte ACTIF — au présent.
+    -- (FOR SHARE : sérialise avec une désactivation concurrente, patron 017.)
+    IF NOT EXISTS (SELECT 1 FROM accounts a
+                    WHERE a.person_id = NEW.person_id
+                      AND a.status = 'ACTIVE'
+                    FOR SHARE) THEN
+      RAISE EXCEPTION 'program_grants : un acte de la famille exige un compte actif de la personne'
+        USING ERRCODE = 'P0108';
+    END IF;
+  END IF;
+
+  IF p.access_mode = 'GRANTED' AND NEW.granted_by = 'SELF' THEN
+    SELECT * INTO last_grant FROM program_grants g
+     WHERE g.person_id = NEW.person_id
+       AND g.program_id = NEW.program_id
+     ORDER BY g.seq DESC
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'program_grants : un programme sur accès accordé ne s''ouvre pas soi-même'
+        USING ERRCODE = 'P0110';
+    END IF;
+
+    IF last_grant.revoke_reason IS DISTINCT FROM 'SELF' THEN
+      RAISE EXCEPTION 'program_grants : accès retiré par un tiers (motif %) — la famille ne peut pas le rouvrir',
+        last_grant.revoke_reason
+        USING ERRCODE = 'P0110';
+    END IF;
+  END IF;
+
+  IF NEW.granted_by = 'PROGRAM' THEN
+    IF p.access_mode <> 'GRANTED' THEN
+      RAISE EXCEPTION 'program_grants : un programme n''ouvre un droit que sur le mode accordé (LOT 4)'
+        USING ERRCODE = 'P0110';
+    END IF;
+
+    SELECT * INTO last_grant FROM program_grants g
+     WHERE g.person_id = NEW.person_id
+       AND g.program_id = NEW.program_id
+     ORDER BY g.seq DESC
+     LIMIT 1;
+
+    IF FOUND AND last_grant.revoke_reason = 'SELF' THEN
+      RAISE EXCEPTION 'program_grants : la famille a fermé ce programme — elle seule le rouvre'
+        USING ERRCODE = 'P0110';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public;
+
+CREATE OR REPLACE FUNCTION guard_program_grant_update() RETURNS trigger AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.person_id IS DISTINCT FROM OLD.person_id
+     OR NEW.program_id IS DISTINCT FROM OLD.program_id
+     OR NEW.granted_by IS DISTINCT FROM OLD.granted_by
+     OR NEW.granted_at IS DISTINCT FROM OLD.granted_at THEN
+    RAISE EXCEPTION 'program_grants : contenu immuable — réactiver = une NOUVELLE ligne'
+      USING ERRCODE = 'P0101';
+  END IF;
+
+  IF OLD.status = 'REVOKED' THEN
+    RAISE EXCEPTION 'program_grants : un droit révoqué est figé — réactiver = une NOUVELLE ligne'
+      USING ERRCODE = 'P0103';
+  END IF;
+
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
+    IF NEW.status <> 'REVOKED' THEN
+      RAISE EXCEPTION 'program_grants : % -> % interdit', OLD.status, NEW.status
+        USING ERRCODE = 'P0102';
+    END IF;
+    IF NEW.revoke_reason IS NULL THEN
+      RAISE EXCEPTION 'program_grants : une révocation porte toujours son motif'
+        USING ERRCODE = 'P0102';
+    END IF;
+    IF NEW.revoke_reason = 'SELF' THEN
+      -- E1 : « la famille a fermé » est l'entrée du mur de réactivation —
+      -- seul un compte ACTIF de la personne peut poser ce motif.
+      IF NOT EXISTS (SELECT 1 FROM accounts a
+                      WHERE a.person_id = NEW.person_id
+                        AND a.status = 'ACTIVE'
+                      FOR SHARE) THEN
+        RAISE EXCEPTION 'program_grants : un acte de la famille exige un compte actif de la personne'
+          USING ERRCODE = 'P0108';
+      END IF;
+    END IF;
+    NEW.revoked_at := now();   -- la base horodate, jamais le client
+  ELSIF NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+     OR NEW.revoke_reason IS DISTINCT FROM OLD.revoke_reason THEN
+    RAISE EXCEPTION 'program_grants : les horodatages de registre sont posés par la base'
+      USING ERRCODE = 'P0104';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+SET search_path = pg_catalog, public;
 
 -- -----------------------------------------------------------------------------
 -- LA FAMILLE, depuis son compte. La personne est résolue ICI : le service ne
@@ -53,16 +194,19 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-  v_person_id uuid;
+  acting accounts%ROWTYPE;
 BEGIN
-  SELECT a.person_id INTO v_person_id FROM accounts a
-   WHERE a.id = p_account_id FOR SHARE;
-  IF v_person_id IS NULL THEN
+  SELECT * INTO acting FROM accounts WHERE id = p_account_id FOR SHARE;
+  IF NOT FOUND THEN
     verdict := 'UNKNOWN_ACCOUNT'; RETURN NEXT; RETURN;
+  END IF;
+  -- Façade du mur E1 (le mur est dans le trigger) : verdict propre.
+  IF acting.status <> 'ACTIVE' THEN
+    verdict := 'ACCOUNT_NOT_ACTIVE'; RETURN NEXT; RETURN;
   END IF;
 
   INSERT INTO program_grants (person_id, program_id, granted_by)
-  VALUES (v_person_id, p_program_id, 'SELF');
+  VALUES (acting.person_id, p_program_id, 'SELF');
   verdict := 'ACTIVATED'; RETURN NEXT;
 END;
 $$;
@@ -133,10 +277,22 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  acting accounts%ROWTYPE;
 BEGIN
+  SELECT * INTO acting FROM accounts WHERE id = p_account_id FOR SHARE;
+  IF NOT FOUND THEN
+    verdict := 'UNKNOWN_ACCOUNT'; RETURN NEXT; RETURN;
+  END IF;
+  -- Façade du mur E1 (le mur est dans le trigger) : un compte mort ne pose
+  -- pas « la famille a fermé » — l'entrée du mur de réactivation.
+  IF acting.status <> 'ACTIVE' THEN
+    verdict := 'ACCOUNT_NOT_ACTIVE'; RETURN NEXT; RETURN;
+  END IF;
+
   UPDATE program_grants g
      SET status = 'REVOKED', revoke_reason = 'SELF'
-   WHERE g.person_id = (SELECT a.person_id FROM accounts a WHERE a.id = p_account_id)
+   WHERE g.person_id = acting.person_id
      AND g.program_id = p_program_id
      AND g.status = 'ACTIVE';
   IF FOUND THEN

@@ -296,6 +296,93 @@ describe('023 — la preuve d\'acteur au registre', () => {
     });
   });
 
+  test('MUR E1 (trigger, sous OWNER) : poser un droit SELF pour une personne sans compte actif → P0108 ; un TIERS passe', async () => {
+    // Une personne sans aucun compte — le profil du mineur.
+    seq += 1;
+    const bare = firstRow(
+      await owner.query<{ id: string }>('SELECT create_person($1, $2, NULL, NULL, NULL) AS id', [
+        nextIdentifier(),
+        generateErasureSalt(),
+      ]),
+    ).id;
+    const programId = await program();
+    await expect(
+      owner.query(
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')",
+        [bare, programId],
+      ),
+    ).rejects.toMatchObject({ code: 'P0108' });
+    // Le mur ne porte QUE sur SELF : le droit du mineur naît d'un tiers.
+    await expect(
+      owner.query(
+        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'PLATFORM_STAFF')",
+        [bare, programId],
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('MUR E1 (trigger, sous OWNER) : un compte mort ne pose pas « la famille a fermé » — revoke SELF → P0108', async () => {
+    const family = await account();
+    const programId = await program();
+    await app.query('SELECT verdict FROM grant_program_self($1, $2)', [
+      family.accountId,
+      programId,
+    ]);
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [
+      family.accountId,
+    ]);
+    await expect(
+      owner.query(
+        `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
+          WHERE person_id = $1 AND status = 'ACTIVE'`,
+        [family.personId],
+      ),
+    ).rejects.toMatchObject({ code: 'P0108' });
+    // Le motif d'un TIERS, lui, passe : le droit n'est pas verrouillé.
+    await expect(
+      owner.query(
+        `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
+          WHERE person_id = $1 AND status = 'ACTIVE'`,
+        [family.personId],
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  test('façade E1 : les fonctions SELF rendent ACCOUNT_NOT_ACTIVE sur compte désactivé, rien n\'est écrit', async () => {
+    const family = await account();
+    const programId = await program();
+    await app.query('SELECT verdict FROM grant_program_self($1, $2)', [
+      family.accountId,
+      programId,
+    ]);
+    await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [
+      family.accountId,
+    ]);
+
+    const revoke = firstRow(
+      await app.query<{ verdict: string }>(
+        'SELECT verdict FROM revoke_program_grant_self($1, $2)',
+        [family.accountId, programId],
+      ),
+    ).verdict;
+    expect(revoke).toBe('ACCOUNT_NOT_ACTIVE');
+    const still = firstRow(
+      await app.query<{ status: string }>(
+        'SELECT status FROM program_grants WHERE person_id = $1 ORDER BY seq DESC LIMIT 1',
+        [family.personId],
+      ),
+    );
+    expect(still.status).toBe('ACTIVE'); // rien n'a été révoqué
+
+    const grant = firstRow(
+      await app.query<{ verdict: string }>('SELECT verdict FROM grant_program_self($1, $2)', [
+        family.accountId,
+        await program(),
+      ]),
+    ).verdict;
+    expect(grant).toBe('ACCOUNT_NOT_ACTIVE');
+  });
+
   test('l\'ancienne forme à acteur DÉCLARÉ n\'existe plus (aucune attach_dependent à 7 paramètres)', async () => {
     const rows = await owner.query<{ nargs: number }>(
       `SELECT pronargs AS nargs FROM pg_proc WHERE proname = 'attach_dependent'`,

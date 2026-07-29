@@ -14,11 +14,15 @@ export type ActivateResult =
   | { outcome: 'ALREADY_ACTIVE' }
   | { outcome: 'NOT_SELF_SERVICE' }
   | { outcome: 'REVOKED_BY_THIRD_PARTY' }
+  /** Mur E1 (023) : agir en famille exige un compte ACTIF. */
+  | { outcome: 'ACCOUNT_NOT_ACTIVE' }
   | { outcome: 'UNKNOWN_PROGRAM' };
 
 export type DeactivateResult =
   | { outcome: 'DEACTIVATED' }
   | { outcome: 'NOT_ACTIVE' }
+  /** Mur E1 (023) : un compte mort ne pose pas « la famille a fermé ». */
+  | { outcome: 'ACCOUNT_NOT_ACTIVE' }
   | { outcome: 'UNKNOWN_PROGRAM' };
 
 export type StaffGrantResult =
@@ -95,6 +99,9 @@ export class CatalogService {
       if (result.rows[0]?.verdict === 'UNKNOWN_ACCOUNT') {
         throw new Error('catalogue : compte introuvable');
       }
+      if (result.rows[0]?.verdict === 'ACCOUNT_NOT_ACTIVE') {
+        return { outcome: 'ACCOUNT_NOT_ACTIVE' };
+      }
       return { outcome: 'ACTIVATED' };
     } catch (err) {
       if (isDbError(err, DB_ERROR.ACCESS_MODE_VIOLATION)) {
@@ -132,9 +139,14 @@ export class CatalogService {
       'SELECT verdict FROM revoke_program_grant_self($1, $2)',
       [accountId, program.id],
     );
-    return result.rows[0]?.verdict === 'DEACTIVATED'
-      ? { outcome: 'DEACTIVATED' }
-      : { outcome: 'NOT_ACTIVE' };
+    switch (result.rows[0]?.verdict) {
+      case 'DEACTIVATED':
+        return { outcome: 'DEACTIVATED' };
+      case 'ACCOUNT_NOT_ACTIVE':
+        return { outcome: 'ACCOUNT_NOT_ACTIVE' };
+      default:
+        return { outcome: 'NOT_ACTIVE' };
+    }
   }
 
   /**

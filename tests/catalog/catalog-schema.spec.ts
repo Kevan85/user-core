@@ -87,11 +87,18 @@ describe('catalogue — invariants en base', () => {
   // l'identique — c'est EUX qu'on teste ici). Le chemin bridé — les fonctions
   // par acteur et le refus de l'écriture directe — a sa propre suite
   // (registry-actor-proof.spec.ts).
-  async function grantToPerson(personId: string, programId: string): Promise<string> {
+  // E1 : l'acteur SELF exige un compte ACTIF de la personne — les fixtures
+  // sur personne sans compte actif passent par PLATFORM_STAFF (le mur ne
+  // porte que sur SELF : un mineur reçoit ses droits d'un tiers).
+  async function grantToPerson(
+    personId: string,
+    programId: string,
+    actor: 'SELF' | 'PLATFORM_STAFF' = 'SELF',
+  ): Promise<string> {
     return firstRow(
       await owner.query<{ id: string }>(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF') RETURNING id",
-        [personId, programId],
+        'INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, $3) RETURNING id',
+        [personId, programId, actor],
       ),
     ).id;
   }
@@ -211,12 +218,16 @@ describe('catalogue — invariants en base', () => {
 
   test('019 : un droit peut naître pour une personne SANS compte actif — le mineur est le cas nominal ; un programme retiré, lui, refuse toujours', async () => {
     // L'ancienne garde « aucun droit sous un compte désactivé » est tombée
-    // avec 019, délibérément : le droit appartient à la personne, et une
-    // personne sans compte (mineur) ou au compte mort en porte.
+    // avec 019 : le droit appartient à la personne, et une personne sans
+    // compte (mineur) ou au compte mort en porte. ⚠️ Amendé par E1 (023) :
+    // cela reste vrai pour le DROIT — posé par un TIERS (PROGRAM, STAFF) —
+    // mais l'ACTE de la famille (SELF), lui, exige un compte actif.
     const accountId = await newAccount();
     const programId = await newProgram('iota');
     await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
-    await expect(grant(accountId, programId)).resolves.toBeDefined();
+    await expect(
+      grantToPerson(await personOf(accountId), programId, 'PLATFORM_STAFF'),
+    ).resolves.toBeDefined();
 
     // Une personne sans AUCUN compte (le profil du mineur rattaché).
     seq += 1;
@@ -226,7 +237,7 @@ describe('catalogue — invariants en base', () => {
         generateErasureSalt(),
       ]),
     ).id;
-    await expect(grantToPerson(bare, programId)).resolves.toBeDefined();
+    await expect(grantToPerson(bare, programId, 'PLATFORM_STAFF')).resolves.toBeDefined();
 
     const live = await newAccount();
     const retired = await newProgram('kappa');
@@ -306,9 +317,10 @@ describe('catalogue — invariants en base', () => {
       ),
     ).dependent_person_id;
 
-    // « Scolaria pour Junior » : le droit est accordé À LA PERSONNE du mineur.
+    // « Scolaria pour Junior » : le droit est accordé À LA PERSONNE du mineur
+    // — par un TIERS (E1 : un mineur sans compte ne pose pas un acte SELF).
     const programId = await newProgram('omicron');
-    await grantToPerson(minor, programId);
+    await grantToPerson(minor, programId, 'PLATFORM_STAFF');
 
     // Le compte du responsable meurt (perdu, compromis). RIEN à transférer :
     // les accès étaient déjà ceux de Junior — c'est la raison d'être de toute

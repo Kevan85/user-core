@@ -55,6 +55,10 @@ export class CatalogController {
       case 'REVOKED_BY_THIRD_PARTY':
         // La famille a été retirée par un tiers : elle ne se remet pas seule.
         throw new ForbiddenException('accès retiré par le responsable du programme');
+      case 'ACCOUNT_NOT_ACTIVE':
+        // Mur E1 : théoriquement inatteignable (les sessions meurent avec le
+        // compte) — mais un mur rend un refus propre, jamais un 500.
+        throw new ForbiddenException('compte inactif');
       default:
         throw new NotFoundException('programme inconnu');
     }
@@ -71,6 +75,9 @@ export class CatalogController {
     const result = await this.catalog.deactivate(accountId, code);
     if (result.outcome === 'UNKNOWN_PROGRAM') {
       throw new NotFoundException('programme inconnu');
+    }
+    if (result.outcome === 'ACCOUNT_NOT_ACTIVE') {
+      throw new ForbiddenException('compte inactif');
     }
     return { status: result.outcome };
   }
