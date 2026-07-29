@@ -58,7 +58,17 @@ Le service **refuse de démarrer** si :
 5. **`NODE_ENV=production` et un secret porte une valeur publiée par `.env.example`**
    (mur C8, étape 3) : le fichier versionné est public par construction — égalité sur les
    noms à signature de secret, recherche en sous-chaîne pour les mots de passe d'URL,
-   et refus fail-closed si `.env.example` est illisible en production.
+   et refus fail-closed si `.env.example` est illisible en production ;
+6. murs armés, **le transport Sentry ne s'est pas armé après `init()`** (G1, étape 6) :
+   la vérité se demande au SDK, jamais à la présence du DSN — un DSN illisible ferait
+   partir le service aveugle en croyant être surveillé.
+
+**⚠️ Ce que l'observabilité NE couvre PAS** (écrit ici pour que « Sentry est branché » ne
+soit jamais lu comme « couverture totale ») : `defaultIntegrations: false` retire aussi
+les capteurs d'exception non gérée. Une exception qui échappe au filtre HTTP et au catch
+du worker — un `setTimeout`, un callback détaché — ne remonte pas : le processus meurt et
+c'est l'orchestrateur qui le voit. C'est un choix assumé (aucune intégration par défaut =
+aucune fuite par défaut) ; l'élargir se décide avec l'Auditeur, jamais en silence.
 
 ## 4. Exigences de déploiement non vérifiables par le service
 

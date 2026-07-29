@@ -147,3 +147,25 @@ describe('étape 5 — C2 : le DSN est obligatoire quand les murs sont armés (v
     expect(initObservability(relaxed)).toBe(false); // coupée : aucun client armé
   });
 });
+
+describe('étape 6 — G1 : la vérité se demande au SDK, jamais à la présence du DSN', () => {
+  test('DSN PRÉSENT mais illisible + murs armés → refus de boot (le transport ne s\'est pas armé)', () => {
+    // « cle-invalide » : le tiret est refusé par la validation interne du SDK
+    // — qu'on n'a PAS recopiée : on interroge le client après init().
+    expect(() =>
+      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'production' }),
+    ).toThrow(/ne s'est PAS armé/);
+  });
+
+  test('DSN illisible en mode permissif → false, pas de refus (le dev voit le console.error du SDK)', () => {
+    expect(
+      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'development' }),
+    ).toBe(false);
+  });
+
+  test('DSN lisible → true, et c\'est le SDK qui l\'a dit (client + transport)', () => {
+    expect(
+      initObservability({ dsn: 'https://clevalide@exemple.ingest.invalide/1', environment: 'production' }),
+    ).toBe(true);
+  });
+});

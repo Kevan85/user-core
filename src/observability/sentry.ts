@@ -106,7 +106,15 @@ export function scrubEvent(
   };
 }
 
-/** Rend true si l'observabilité est ACTIVE (DSN présent), false en dev sans DSN. */
+/**
+ * Rend true si l'observabilité est ARMÉE — et la vérité se demande AU SDK
+ * après init(), jamais à la présence du DSN (G1) : un DSN mal formé fait que
+ * le SDK désactive son transport SANS lever — le service partirait aveugle
+ * en croyant être surveillé, le fail-open exact que C2 ferme. On ne recopie
+ * pas la validation interne du SDK (deux définitions divergeraient — F1bis) :
+ * on l'interroge, comme assertFingerprintKeyAligned interroge la base.
+ * Murs de production armés + transport absent = refus de boot.
+ */
 export function initObservability(
   config: ObservabilityConfig,
   transport?: Sentry.NodeOptions['transport'],
@@ -127,7 +135,16 @@ export function initObservability(
     beforeSend: (event, hint) => scrubEvent(event, hint),
     transport,
   });
-  return true;
+
+  const client = Sentry.getClient();
+  const armed = client !== undefined && client.getTransport() !== undefined;
+  if (!armed && config.environment === 'production') {
+    throw new ConfigViolations([
+      'SENTRY_DSN présent mais le transport ne s\'est PAS armé (DSN illisible pour le SDK ?) — ' +
+        'partir aveugle en croyant être surveillé est le fail-open exact que C2 ferme (G1)',
+    ]);
+  }
+  return armed;
 }
 
 export function captureError(err: unknown): void {
