@@ -2,6 +2,12 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import {
+  assembleObservabilityFromEnv,
+  captureError,
+  flushObservability,
+  initObservability,
+} from './observability/sentry';
 import { assembleKeyringsFromEnv } from './crypto/keyring';
 import { CountingDispatcher } from './dispatch/simulator/counting-dispatcher';
 import { assemblePublisherConfig } from './outbox/publisher-config';
@@ -16,6 +22,8 @@ import { assertFingerprintKeyAligned } from './phone/phone-config';
 async function main(): Promise<void> {
   // Même mur que l'API (étape 3) : un secret publié refuse de démarrer.
   assertProductionSecretsNotPublic();
+  // Même règle que l'API (étape 5) : murs armés sans DSN = refus (C2).
+  initObservability(assembleObservabilityFromEnv());
   const assembly = assembleApiFromEnv();
   // Le worker ne se sert que du chiffrement et de l'empreinte, mais il valide
   // les QUATRE trousseaux (dette ②) : la config d'une machine est saine ou ne
@@ -49,13 +57,21 @@ async function main(): Promise<void> {
   process.once('SIGINT', () => void shutdown());
 
   while (!stopping) {
-    const report = await publisher.drain();
-    if (report.claimed > 0) {
-      // Zéro PII : des comptes, jamais un destinataire.
-      console.log(
-        `outbox: ${report.claimed} pris, ${report.published} publiés, ` +
-          `${report.retried} à retenter, ${report.failed} morts`,
-      );
+    try {
+      const report = await publisher.drain();
+      if (report.claimed > 0) {
+        // Zéro PII : des comptes, jamais un destinataire.
+        console.log(
+          `outbox: ${report.claimed} pris, ${report.published} publiés, ` +
+            `${report.retried} à retenter, ${report.failed} morts`,
+        );
+      }
+    } catch (err) {
+      // Une défaillance du drainage part vers l'observabilité AVANT de tuer
+      // le processus — un worker mort en silence est un fail-open.
+      captureError(err);
+      await flushObservability();
+      throw err;
     }
     await new Promise((resolve) => setTimeout(resolve, config.tickIntervalMs));
   }

@@ -61,7 +61,10 @@ Procédure :
 3. `npx ts-node scripts/rotate-phone-hmac.ts` (owner, `DATABASE_ADMIN_URL`) — une seule
    transaction : re-dérivation d'intégrité par le point unique (une divergence
    empreinte/chiffré arrête TOUT), re-hachage des ACTIVE, triggers réarmés, bascule de la
-   référence en dernier. Le script est idempotent (le rejouer : « rien à faire »).
+   référence en dernier. Le script est idempotent (le rejouer : « rien à faire ») et
+   **refuse si la table porte un trigger qu'il ne connaît pas** — un trigger né après
+   cette procédure ne sera jamais suspendu en silence ; mettre à jour sa liste EST
+   l'acte de relecture.
 4. **Redémarrer** le service (l'alignement clé/référence est re-vérifié au boot).
 5. Retirer l'ancienne clé du trousseau au déploiement suivant.
 

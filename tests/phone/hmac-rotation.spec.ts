@@ -158,6 +158,25 @@ describe('4e — rotation de la clé d\'empreinte : le mur, puis le script', () 
     expect(reference.hmac_key_id).toBe('H1');
   });
 
+  test('un trigger INCONNU sur la table → le script REFUSE avant toute écriture (jamais une suspension silencieuse)', async () => {
+    await owner.query(
+      `CREATE TRIGGER trg_test_inconnu BEFORE DELETE ON phone_claims
+        FOR EACH ROW EXECUTE FUNCTION forbid_delete()`,
+    );
+    try {
+      await expect(rotatePhoneHmacKey(owner, after)).rejects.toThrow(/trg_test_inconnu/);
+      // Rien n'a bougé : la référence est toujours H1, les lignes intactes.
+      const reference = firstRow(
+        await owner.query<{ hmac_key_id: string }>(
+          'SELECT hmac_key_id FROM hmac_key_reference WHERE singleton',
+        ),
+      );
+      expect(reference.hmac_key_id).toBe('H1');
+    } finally {
+      await owner.query('DROP TRIGGER trg_test_inconnu ON phone_claims');
+    }
+  });
+
   test('LE SCRIPT : rotation réelle de bout en bout — re-hachage, intégrité, bascule, triggers réarmés', async () => {
     // État hérité du test précédent : une ligne déjà sous H2, une sous H1.
     const report = await rotatePhoneHmacKey(owner, after);

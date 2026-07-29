@@ -36,6 +36,15 @@ export interface RotationReport {
   integrityFailures: number;
 }
 
+// La liste EXACTE des triggers que cette procédure a relus et assume de
+// suspendre (006/018/…). Un trigger de plus sur la table = refus du script :
+// mettre à jour cette liste EST l'acte de relecture.
+const KNOWN_TRIGGERS = [
+  'trg_phone_claims_guard_insert',
+  'trg_phone_claims_guard_update',
+  'trg_phone_claims_no_delete',
+] as const;
+
 export async function rotatePhoneHmacKey(
   pool: Pool,
   keyrings: KeyringAssembly,
@@ -62,6 +71,26 @@ export async function rotatePhoneHmacKey(
       `SELECT id FROM phone_claims WHERE status = 'ACTIVE' AND hmac_key_id <> $1 FOR UPDATE`,
       [target],
     );
+
+    // DISABLE TRIGGER USER suspendrait AUSSI un trigger né après cette
+    // procédure — silencieusement. D'où l'assertion : la table doit porter
+    // EXACTEMENT les triggers que cette rotation connaît ; un inconnu =
+    // refus AVANT la moindre écriture. Le script devient bruyant au prochain
+    // changement de schéma au lieu d'être silencieusement trop large.
+    const triggers = await client.query<{ tgname: string }>(
+      `SELECT tgname FROM pg_trigger
+        WHERE tgrelid = 'phone_claims'::regclass AND NOT tgisinternal
+        ORDER BY tgname`,
+    );
+    const found = triggers.rows.map((row) => row.tgname);
+    if (found.join(',') !== KNOWN_TRIGGERS.join(',')) {
+      throw new Error(
+        `rotation refusée : triggers de phone_claims inattendus (attendus ${KNOWN_TRIGGERS.join(
+          ', ',
+        )} ; trouvés ${found.join(', ')}) — un trigger que cette procédure ne connaît pas serait ` +
+          'suspendu en silence ; relire la rotation avant de continuer',
+      );
+    }
 
     // Les triggers d'immuabilité (006/018) protègent le REGISTRE VIVANT ;
     // la rotation est l'acte d'exploitation signé qui les suspend — DANS la

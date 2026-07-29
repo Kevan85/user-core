@@ -40,7 +40,7 @@ Conséquences pratiques :
 | 6 | Clés **publiques des programmes** (Ed25519) | — (en base, `program_client_keys`) | enregistrée via `scripts/program-client-admin.ts` | **chez le programme** — le cœur ne détient jamais une clé privée de client | Révocation par ligne (append-only) ; le programme régénère chez lui. |
 | 7 | Mot de passe du **rôle applicatif** | dans `DATABASE_URL` (`USER_CORE_APP_PASSWORD` : dev/CI seulement) | chaîne forte | générateur du gestionnaire de secrets | Posé par `ALTER ROLE` (acte d'exploitation), **jamais par une migration**. Rotation = `ALTER ROLE` + redéploiement. |
 | 8 | Mot de passe du **propriétaire** | dans `DATABASE_ADMIN_URL` | chaîne forte | idem | Migrations et exploitation **uniquement** — le service ne lit jamais cette variable, et refuse de tourner sous ce rôle (`assertBridledRole`). |
-| 9 | **DSN Sentry** | `SENTRY_DSN` | URL fournisseur | console Sentry | À l'étape 5. **Obligatoire en production** (C2 : un DSN absent = boot refusé — on ne part pas aveugle en silence), optionnel en dev. |
+| 9 | **DSN Sentry** | `SENTRY_DSN` | URL fournisseur | console Sentry | **Obligatoire quand les murs de production sont armés** (C2, via `productionWallsArmed()` : un DSN absent = boot refusé — on ne part pas aveugle en silence) ; optionnel en mode permissif déclaré. Livré à l'étape 5. |
 
 Les quatre trousseaux (1-4) ont **quatre cycles de vie distincts** et **aucune valeur
 partagée** : le boot refuse toute paire de clés identiques, entre trousseaux comme au sein
