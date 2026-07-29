@@ -10,7 +10,7 @@ import {
 import { dbErrorCode } from '../db/errors';
 import { buildPhoneColumns, normalizePhone } from '../phone/phone-columns';
 import type { ProgramOperationsConfig } from './program-operations-config';
-import { hashReference, type ReferenceKeyring } from './reference-hmac';
+import { hashReference, hashReferenceUnderAll, type ReferenceKeyring } from './reference-hmac';
 
 /**
  * LE CLIC (étape 3) : un programme en mode accordé déclare un ayant droit —
@@ -77,6 +77,9 @@ export class DependentAccessService {
 
     const line = buildPhoneColumns(this.crypto, phone);
     const ref = hashReference(this.references, reference);
+    // (024) La recherche d'idempotence couvre TOUTES les clés du trousseau :
+    // un re-clic traverse une rotation sans créer une deuxième fiche.
+    const lookup = hashReferenceUnderAll(this.references, reference);
 
     let identifier = this.generatePersonIdentifier();
     for (let draw = 0; draw < MAX_IDENTIFIER_DRAWS; draw += 1) {
@@ -86,7 +89,7 @@ export class DependentAccessService {
           invitation_id: string | null;
           verdict: string;
         }>(
-          'SELECT * FROM open_dependent_access($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
+          'SELECT * FROM open_dependent_access($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)',
           [
             programId,
             identifier,
@@ -98,6 +101,8 @@ export class DependentAccessService {
             line.hmacKeyId,
             ref.hmac,
             ref.keyId,
+            lookup.hmacs,
+            lookup.keyIds,
             this.config.dependentInvitationTtlSeconds,
             this.config.inviteClientCap,
             this.config.inviteClientCapWindowSeconds,

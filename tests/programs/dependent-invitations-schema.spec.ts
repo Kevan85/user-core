@@ -100,7 +100,7 @@ describe('021 — rattachement porté par l\'invitation (étape 2)', () => {
     const line = buildPhoneColumns(crypto, options.phone);
     return firstRow(
       await app.query(
-        'SELECT * FROM open_dependent_access($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
+        'SELECT * FROM open_dependent_access($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)',
         [
           options.programId,
           personIdentifier(),
@@ -112,6 +112,9 @@ describe('021 — rattachement porté par l\'invitation (étape 2)', () => {
           line.hmacKeyId,
           `hmac-ref-${options.ref}`,
           'R1',
+          // (024) la recherche couvre toutes les clés — ici, la seule active.
+          [`hmac-ref-${options.ref}`],
+          ['R1'],
           CAPS.ttl,
           options.clientCap ?? CAPS.clientCap,
           CAPS.clientWindow,

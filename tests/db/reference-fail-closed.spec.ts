@@ -37,7 +37,15 @@ describe('références singleton — échec FERMÉ, jamais NULL (014/015)', () =
         'SELECT hmac_key_id FROM hmac_key_reference WHERE singleton',
       ),
     );
-    await owner.query('DELETE FROM hmac_key_reference');
+    // Depuis 025, le DELETE est refusé même à owner (P0107) : la disparition
+    // par suppression est non représentable…
+    await expect(codeOf(() => owner.query('DELETE FROM hmac_key_reference'))).resolves.toBe(
+      DB_ERROR.DELETE_FORBIDDEN,
+    );
+    // …mais le filet P0112 doit rester TESTABLE : TRUNCATE (statement-level)
+    // simule l'absence que le trigger row-level ne couvre pas — c'est
+    // précisément le monde dans lequel le filet est la dernière défense.
+    await owner.query('TRUNCATE hmac_key_reference');
     try {
       await expect(codeOf(() => owner.query('SELECT active_hmac_key_id()'))).resolves.toBe(
         DB_ERROR.EMPTY_REFERENCE,

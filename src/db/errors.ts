@@ -28,6 +28,8 @@ export const DB_ERROR = {
   EMANCIPATION_CUT: 'P0113',
   /** Dernier lien actif : la fin laisserait la personne sans personne pour agir (017). */
   ORPHANED_DEPENDENT: 'P0114',
+  /** Rotation d'empreinte incomplète : la référence ne bascule pas avant la fin du re-hachage (025). */
+  ROTATION_INCOMPLETE: 'P0115',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];
