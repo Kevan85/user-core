@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
+import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
 import { assembleKeyringsFromEnv } from './crypto/keyring';
 import { CountingDispatcher } from './dispatch/simulator/counting-dispatcher';
 import { assemblePublisherConfig } from './outbox/publisher-config';
@@ -13,6 +14,8 @@ import { assertFingerprintKeyAligned } from './phone/phone-config';
  * sépare deux passages, il ne les superpose jamais.
  */
 async function main(): Promise<void> {
+  // Même mur que l'API (étape 3) : un secret publié refuse de démarrer.
+  assertProductionSecretsNotPublic();
   const assembly = assembleApiFromEnv();
   // Le worker ne se sert que du chiffrement et de l'empreinte, mais il valide
   // les QUATRE trousseaux (dette ②) : la config d'une machine est saine ou ne

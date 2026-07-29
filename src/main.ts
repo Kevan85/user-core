@@ -12,6 +12,7 @@ import { LocalAuthenticationProvider } from './auth/local-authentication-provide
 import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
+import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
 import { CatalogService } from './catalog/catalog.service';
 import { EmancipationService } from './persons/emancipation.service';
 import { ResponsibilitiesService } from './persons/responsibilities.service';
@@ -30,6 +31,9 @@ import { LyingProver } from './proving/simulator/lying-prover';
 // Le service ne migre JAMAIS la base au démarrage : les migrations sont un
 // acte d'exploitation séparé (npm run migrate), pas un effet de bord d'un boot.
 async function bootstrap(): Promise<void> {
+  // En production, un secret publié par .env.example refuse de démarrer —
+  // AVANT toute autre lecture de config (étape 3, arbitrage C8).
+  assertProductionSecretsNotPublic();
   const assembly = assembleApiFromEnv();
   const authConfig = assembleAuthFromEnv();
   // Les QUATRE trousseaux d'un bloc : violations listées d'un coup, et la
