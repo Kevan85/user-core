@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
-import { assembleCryptoFromEnv } from './crypto/keyring';
+import { assembleKeyringsFromEnv } from './crypto/keyring';
 import { CountingDispatcher } from './dispatch/simulator/counting-dispatcher';
 import { assemblePublisherConfig } from './outbox/publisher-config';
 import { OutboxPublisher } from './outbox/publisher';
@@ -14,7 +14,10 @@ import { assertFingerprintKeyAligned } from './phone/phone-config';
  */
 async function main(): Promise<void> {
   const assembly = assembleApiFromEnv();
-  const crypto = assembleCryptoFromEnv();
+  // Le worker ne se sert que du chiffrement et de l'empreinte, mais il valide
+  // les QUATRE trousseaux (dette ②) : la config d'une machine est saine ou ne
+  // l'est pas — jamais « saine pour le processus qui s'en sert ».
+  const crypto = assembleKeyringsFromEnv();
   const config = assemblePublisherConfig();
 
   await assertBridledRole(assembly.pool);

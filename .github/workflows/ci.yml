@@ -184,6 +184,28 @@ jobs:
           fi
           echo "OK : le cœur est agnostique du pays (motif G)"
 
+  garde-trousseau-unique:
+    name: "Garde motif H : UN SEUL point d'assemblage des trousseaux"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: USER_CORE_*_KEYS n'est lu que dans src/crypto/keyring.ts
+        # La dette ② (non-collision de valeur entre les quatre trousseaux) est
+        # soldée par un contrôle croisé au point d'assemblage unique. Ce
+        # contrôle ne vaut que si TOUT trousseau y passe : deux trousseaux
+        # étaient déjà nés hors du point (codes de possession, références
+        # d'idempotence), chacun avec sa copie du parseur, hors du contrôle
+        # croisé — le patron exact de P4, « oublié » par son propre auteur
+        # trois lots après la parade. Une discipline ne tient que si elle est
+        # mécanique : un cinquième trousseau parsé ailleurs ne peut plus naître.
+        run: |
+          if git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ \
+               ':!src/crypto/keyring.ts'; then
+            echo "ÉCHEC : trousseau assemblé hors du point unique (motif H) — passer par src/crypto/keyring.ts"
+            exit 1
+          fi
+          echo "OK : un seul point d'assemblage des trousseaux (motif H)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest

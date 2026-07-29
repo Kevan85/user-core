@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NB : ce fichier vit dans tools/, HORS du périmètre des gardes (db/ src/
 # scripts/) — il contient les motifs, il se ferait attraper lui-même.
-# Les SEPT gardes contractuelles (CLAUDE.md §3.7, §3.8), jouées sur l'INDEX
+# Les HUIT gardes contractuelles (CLAUDE.md §3.7, §3.8 + motif H), jouées sur l'INDEX
 # git — exactement comme la CI les jouera sur le commit poussé. Les motifs
 # sont recopiés VERBATIM de .github/workflows/ci.yml : si l'un des deux
 # fichiers change, l'autre suit dans le même commit.
@@ -52,5 +52,9 @@ run_guard "Motif F (un seul point de déchiffrement)" -n \
 run_guard "Motif G (le cœur est agnostique du pays, sensible à la casse)" -nE \
   "post_nom|postNom|postnom|POST_NOM|\+243" \
   -- db/ src/
+
+run_guard "Motif H (un seul point d'assemblage des trousseaux)" -rnE \
+  "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" \
+  -- src/ ':!src/crypto/keyring.ts'
 
 exit $status
