@@ -17,6 +17,10 @@ async function main(): Promise<void> {
   // Le worker ne se sert que du chiffrement et de l'empreinte, mais il valide
   // les QUATRE trousseaux (dette ②) : la config d'une machine est saine ou ne
   // l'est pas — jamais « saine pour le processus qui s'en sert ».
+  // Contrepartie assumée : il détient en mémoire deux trousseaux dont il n'a
+  // aucun usage (codes, références). Le jour où le worker se déploie sur une
+  // machine distincte avec son propre env, cette exigence inverse le moindre
+  // privilège — la règle se révise alors, elle ne se défend pas.
   const crypto = assembleKeyringsFromEnv();
   const config = assemblePublisherConfig();
 

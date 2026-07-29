@@ -55,6 +55,6 @@ run_guard "Motif G (le cœur est agnostique du pays, sensible à la casse)" -nE 
 
 run_guard "Motif H (un seul point d'assemblage des trousseaux)" -rnE \
   "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" \
-  -- src/ ':!src/crypto/keyring.ts'
+  -- src/ scripts/ ':!src/crypto/keyring.ts'
 
 exit $status

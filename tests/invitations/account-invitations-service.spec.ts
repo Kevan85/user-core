@@ -6,17 +6,18 @@ import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { AccountInvitationsService } from '../../src/invitations/account-invitations.service';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Les invitations vues par le COMPTE, sous rôle bridé. La liste ne montre
 // QUE la ligne prouvée du compte, jamais les suppressed, jamais les
 // expirées ; accepter/décliner passent par les fonctions de 012 (BOLA en
 // base) — le service traduit, il ne décide pas.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 describe('AccountInvitationsService', () => {
   let app: Pool;

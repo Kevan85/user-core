@@ -13,20 +13,21 @@ import { fingerprintOf } from '../../src/crypto/fingerprint';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // LES SIX MENSONGES, joués contre la VRAIE base. Le point de chacun : aucun
 // mensonge du fournisseur ne doit pouvoir activer une ligne — la preuve est
 // le code renvoyé par l'utilisateur, comparé EN BASE.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 
 const PHONE = '+243830000001';
 const TTL = 300;
@@ -293,10 +294,10 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
   });
 
   test('P1 — le HMAC du code n\'est pas un condensat nu : deux clés → deux empreintes', () => {
-    const other = assembleProofCodeKeyring({
+    const other = assembleProofCodeKeyring(fullKeyringEnv({
       USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
       USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-    });
+    }));
     const code = '123456';
     expect(hashProofCode(codeKeyring, code).hmac).not.toBe(hashProofCode(other, code).hmac);
   });

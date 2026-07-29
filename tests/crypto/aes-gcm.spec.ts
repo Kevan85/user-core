@@ -1,16 +1,17 @@
 import { randomBytes } from 'crypto';
 import { decrypt, DecryptionError, encrypt, keyIdOf } from '../../src/crypto/aes-gcm';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 const PHONE = '+243812345678';
 
 function keyring(keys: Record<string, string>, active: string) {
-  return assembleCryptoFromEnv({
+  return assembleCryptoFromEnv(fullKeyringEnv({
     USER_CORE_ENC_KEYS: JSON.stringify(keys),
     USER_CORE_ENC_ACTIVE_KEY_ID: active,
     USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
     USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-  }).encryption;
+  })).encryption;
 }
 
 const E1 = randomBytes(32).toString('base64');

@@ -17,6 +17,7 @@ import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 /**
  * LE PARCOURS D'UNE FAMILLE, DE BOUT EN BOUT, à travers les trois lots :
@@ -27,16 +28,16 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
  * C'est le test qui vérifie que les pièces tiennent ENSEMBLE — chaque lot a
  * ses invariants ; celui-ci vérifie la couture entre eux.
  */
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 
 const LINE = '+243870000001';
 const SECRET = 'S3cretFamille!';

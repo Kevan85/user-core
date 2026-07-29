@@ -6,6 +6,7 @@ import { AccountInvitationsService } from '../../src/invitations/account-invitat
 import { buildPhoneColumns } from '../../src/phone/phone-columns';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // ÉTAPE 6, note 1 : « suppressed = UNKNOWN en lecture » — LE MOT « TOUS »
 // EST LE MUR. Les chemins qui lisent program_invitations sont énumérés ici,
@@ -23,12 +24,12 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 //
 // ÉTAPE 6, note 2 : L'EXTINCTION SILENCIEUSE (nommée en 021) — une
 // supprimée qui expire ne produit RIEN, et l'absence se COMPTE.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 const YEAR = new Date().getUTCFullYear();
 const CAPS = [3600, 1000, 3600, 1000, 3600] as const; // ttl, clientCap, clientWin, lineCap, lineWin

@@ -5,20 +5,21 @@ import { DependentAccessService } from '../../src/programs/dependent-access.serv
 import { assembleReferenceKeyring } from '../../src/programs/reference-hmac';
 import type { ProgramOperationsConfig } from '../../src/programs/program-operations-config';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // LE CLIC par le service réel, contre la base réelle : la traduction des
 // verdicts de 021, le retry d'identifiant, et LA règle de ce fichier —
 // ZÉRO log, parce que le payload porte identité, numéro et référence en clair.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const references = assembleReferenceKeyring({
+}));
+const references = assembleReferenceKeyring(fullKeyringEnv({
   USER_CORE_REF_HMAC_KEYS: JSON.stringify({ R1: randomBytes(32).toString('base64') }),
   USER_CORE_REF_HMAC_ACTIVE_KEY_ID: 'R1',
-});
+}));
 
 const YEAR = new Date().getUTCFullYear();
 

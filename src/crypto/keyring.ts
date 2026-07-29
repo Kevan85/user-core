@@ -241,48 +241,30 @@ function buildCryptoAssembly(
   };
 }
 
+/**
+ * Les assembleurs « étroits » sont des PROJECTIONS de l'assemblage complet
+ * (D2) : il est impossible d'obtenir un trousseau — même un seul — sans que
+ * les QUATRE aient été parsés et le contrôle des six paires joué. Sans cela,
+ * un script d'exploitation (une rotation, un backfill) aurait importé la
+ * fonction au nom le plus évident et serait devenu le processus qui écrit
+ * avec des clés jamais contre-vérifiées — le patron exact de la renaissance
+ * de P4 dans le publisher.
+ */
 export function assembleCryptoFromEnv(env: NodeJS.ProcessEnv = process.env): CryptoAssembly {
-  const violations: string[] = [];
-  const enc = parseKeyring(env, ENC_SPEC, violations);
-  const fp = parseKeyring(env, HMAC_SPEC, violations);
-  violations.push(
-    ...collisionViolations([
-      { keysVar: ENC_SPEC.keysVar, material: enc.material },
-      { keysVar: HMAC_SPEC.keysVar, material: fp.material },
-    ]),
-  );
-  if (violations.length > 0) {
-    throw new ConfigViolations(violations);
-  }
-  return buildCryptoAssembly(enc, fp);
+  const all = assembleKeyringsFromEnv(env);
+  return { encryption: all.encryption, fingerprint: all.fingerprint };
 }
 
 export function assembleProofCodeKeyring(
   env: NodeJS.ProcessEnv = process.env,
 ): ProofCodeKeyring {
-  const violations: string[] = [];
-  const parsed = parseKeyring(env, PROOF_CODE_SPEC, violations);
-  violations.push(
-    ...collisionViolations([{ keysVar: PROOF_CODE_SPEC.keysVar, material: parsed.material }]),
-  );
-  if (violations.length > 0) {
-    throw new ConfigViolations(violations);
-  }
-  return { activeKeyId: parsed.activeKeyId, keys: parsed.material } as ProofCodeKeyring;
+  return assembleKeyringsFromEnv(env).proofCode;
 }
 
 export function assembleReferenceKeyring(
   env: NodeJS.ProcessEnv = process.env,
 ): ReferenceKeyring {
-  const violations: string[] = [];
-  const parsed = parseKeyring(env, REF_HMAC_SPEC, violations);
-  violations.push(
-    ...collisionViolations([{ keysVar: REF_HMAC_SPEC.keysVar, material: parsed.material }]),
-  );
-  if (violations.length > 0) {
-    throw new ConfigViolations(violations);
-  }
-  return { activeKeyId: parsed.activeKeyId, keys: parsed.material } as ReferenceKeyring;
+  return assembleKeyringsFromEnv(env).reference;
 }
 
 /**

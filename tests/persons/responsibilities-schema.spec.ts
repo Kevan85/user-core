@@ -5,17 +5,18 @@ import { encryptCivilIdentity, generateErasureSalt } from '../../src/crypto/pers
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Les murs de 017. Le standard du dépôt, durci pour les triggers DIFFÉRÉS :
 // le verdict tombe au COMMIT, donc les tests committent POUR DE VRAI (jamais
 // de BEGIN/ROLLBACK autour d'un mur différé — il ne prouverait rien), sous
 // owner, en CONTOURNANT attach_dependent() : c'est le test qui compte.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 const YEAR = new Date().getUTCFullYear();
 

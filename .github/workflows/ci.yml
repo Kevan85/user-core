@@ -198,8 +198,12 @@ jobs:
         # croisé — le patron exact de P4, « oublié » par son propre auteur
         # trois lots après la parade. Une discipline ne tient que si elle est
         # mécanique : un cinquième trousseau parsé ailleurs ne peut plus naître.
+        # scripts/ est DANS le périmètre (D1) : c'est par un script
+        # d'exploitation (une rotation, un backfill) que le second point
+        # d'assemblage serait né — exactement comme P4 était rené par le
+        # publisher.
         run: |
-          if git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ \
+          if git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ scripts/ \
                ':!src/crypto/keyring.ts'; then
             echo "ÉCHEC : trousseau assemblé hors du point unique (motif H) — passer par src/crypto/keyring.ts"
             exit 1

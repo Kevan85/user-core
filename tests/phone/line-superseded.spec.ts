@@ -9,6 +9,7 @@ import { OutboxPublisher } from '../../src/outbox/publisher';
 import { assembleProofCodeKeyring, hashProofCode } from '../../src/proving/proof-code';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // C1 — « la preuve la plus récente gagne » dans LES DEUX SENS (008… non :
 // CDC §6.5 + §3.4). Le sens ① (le supersédé a un compte) marchait déjà ;
@@ -18,16 +19,16 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 // en violation de contrainte brute. Ces tests prouvent que la reprise
 // RÉUSSIT, que rien ne part vers la ligne reprise, et que le silence est
 // TRACÉ.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 
 describe('C1 — reprise de ligne : les deux sens, avec et sans compte', () => {
   let app: Pool;

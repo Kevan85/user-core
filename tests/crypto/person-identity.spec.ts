@@ -10,6 +10,7 @@ import {
   generateErasureSalt,
   PersonCivilIdentity,
 } from '../../src/crypto/person-identity';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Le module d'identité civile : dérivation par personne (HKDF + sel), blob
 // AES-256-GCM, birth_year calculé par le SEUL écrivain. Tests unitaires —
@@ -20,12 +21,12 @@ const E2 = randomBytes(32).toString('base64');
 const H1 = randomBytes(32).toString('base64');
 
 function assembly(keys: Record<string, string>, active: string) {
-  return assembleCryptoFromEnv({
+  return assembleCryptoFromEnv(fullKeyringEnv({
     USER_CORE_ENC_KEYS: JSON.stringify(keys),
     USER_CORE_ENC_ACTIVE_KEY_ID: active,
     USER_CORE_HMAC_KEYS: JSON.stringify({ H1 }),
     USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-  });
+  }));
 }
 
 const IDENTITY: PersonCivilIdentity = {

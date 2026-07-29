@@ -6,16 +6,17 @@ import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Invariants de 006, sous rôle bridé ET sous owner (le standard du dépôt).
 // La clé d'empreinte active du SCHÉMA est « H1 » (migration 006) : le
 // trousseau de test la nomme pareil — c'est le contrat.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> {
   try {
