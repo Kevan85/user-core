@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { ConfigViolations } from '../../src/bootstrap/assembly';
+import { ConfigViolations, productionWallsArmed } from '../../src/bootstrap/assembly';
 import {
   assertProductionSecretsNotPublic,
   readEnvExample,
@@ -26,14 +26,50 @@ function freshSecret(): string {
   return randomBytes(24).toString('base64');
 }
 
+describe('productionWallsArmed — F1 : le mode permissif se déclare', () => {
+  test('seuls development et test relâchent les murs', () => {
+    expect(productionWallsArmed({ NODE_ENV: 'development' })).toBe(false);
+    expect(productionWallsArmed({ NODE_ENV: 'test' })).toBe(false);
+  });
+
+  test('absent, vide, faute de frappe, staging, production : les murs s\'ARMENT', () => {
+    expect(productionWallsArmed({})).toBe(true);
+    expect(productionWallsArmed({ NODE_ENV: '' })).toBe(true);
+    expect(productionWallsArmed({ NODE_ENV: 'produciton' })).toBe(true); // la faute de frappe du manifeste
+    expect(productionWallsArmed({ NODE_ENV: 'staging' })).toBe(true);
+    expect(productionWallsArmed({ NODE_ENV: 'production' })).toBe(true);
+  });
+});
+
 describe('assertProductionSecretsNotPublic — C8', () => {
-  test('hors production : aucun contrôle — le dev boote avec les valeurs publiées', () => {
+  test('mode permissif DÉCLARÉ : aucun contrôle — le dev boote avec les valeurs publiées', () => {
     expect(() =>
       assertProductionSecretsNotPublic(
         { NODE_ENV: 'test', USER_CORE_APP_PASSWORD: 'mot_de_passe_dev_publie' },
         readFake,
       ),
     ).not.toThrow();
+    expect(() =>
+      assertProductionSecretsNotPublic(
+        { NODE_ENV: 'development', USER_CORE_APP_PASSWORD: 'mot_de_passe_dev_publie' },
+        readFake,
+      ),
+    ).not.toThrow();
+  });
+
+  test('F1 : NODE_ENV absent ou mal orthographié → le mur JOUE (jamais désarmé en silence)', () => {
+    expect(() =>
+      assertProductionSecretsNotPublic(
+        { USER_CORE_APP_PASSWORD: 'mot_de_passe_dev_publie' },
+        readFake,
+      ),
+    ).toThrow(ConfigViolations);
+    expect(() =>
+      assertProductionSecretsNotPublic(
+        { NODE_ENV: 'produciton', USER_CORE_APP_PASSWORD: 'mot_de_passe_dev_publie' },
+        readFake,
+      ),
+    ).toThrow(ConfigViolations);
   });
 
   test('production + valeur publiée sur un nom à signature de secret → refus', () => {

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { ConfigViolations } from './assembly';
+import { ConfigViolations, productionWallsArmed } from './assembly';
 
 /**
  * LE MUR ANTI-SECRETS-PUBLICS (LOT prod, étape 3 — arbitrage C8).
@@ -41,7 +41,9 @@ export function assertProductionSecretsNotPublic(
   env: NodeJS.ProcessEnv = process.env,
   readExample: () => string | null = readEnvExample,
 ): void {
-  if (env.NODE_ENV !== 'production') {
+  // F1 : le mode permissif se DÉCLARE (development, test) — absent, vide ou
+  // mal orthographié, les murs s'arment. Prédicat unique (F1bis).
+  if (!productionWallsArmed(env)) {
     return;
   }
 

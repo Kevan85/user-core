@@ -66,6 +66,9 @@ Nommées ici, portées par le runbook de déploiement (étape 7) :
 - **TLS vers Postgres** (`sslmode=require` au minimum vers une base distante) — le service
   ne peut pas savoir ce que l'infra fournit ; c'est une exigence d'environnement, pas un
   mur de boot.
-- **`NODE_ENV=production` posé par le déploiement** : les murs de production s'arment par
-  cette variable ; un déploiement qui l'omet les désarme. Le runbook de déploiement en
-  fait une ligne de contrôle.
+- **`NODE_ENV` — le mode permissif se déclare, jamais l'inverse (F1)** : les murs de
+  production sont **le défaut**. Seuls `development` et `test` les relâchent ; l'absence,
+  une valeur vide, une faute de frappe ou un `staging` inconnu les **arment**. Un
+  déploiement réel n'a rien à poser ; un poste de dev déclare `development` (ligne
+  fournie par `.env.example`). Le pire cas est un boot refusé bruyamment sur un poste
+  mal configuré — jamais une production silencieusement désarmée.
