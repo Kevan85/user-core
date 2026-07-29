@@ -41,6 +41,7 @@ Conséquences pratiques :
 | 7 | Mot de passe du **rôle applicatif** | dans `DATABASE_URL` (`USER_CORE_APP_PASSWORD` : dev/CI seulement) | chaîne forte | générateur du gestionnaire de secrets | Posé par `ALTER ROLE` (acte d'exploitation), **jamais par une migration**. Rotation = `ALTER ROLE` + redéploiement. |
 | 8 | Mot de passe du **propriétaire** | dans `DATABASE_ADMIN_URL` | chaîne forte | idem | Migrations et exploitation **uniquement** — le service ne lit jamais cette variable, et refuse de tourner sous ce rôle (`assertBridledRole`). |
 | 9 | **DSN Sentry** | `SENTRY_DSN` | URL fournisseur | console Sentry | **Obligatoire quand les murs de production sont armés** (C2, via `productionWallsArmed()` : un DSN absent = boot refusé — on ne part pas aveugle en silence) ; optionnel en mode permissif déclaré. Livré à l'étape 5. |
+| 10 | Clé de **chiffrement au repos du dépôt de sauvegardes** | — (infra de sauvegarde, jamais lue par le service) | selon le support | gestionnaire de l'infra de sauvegarde | Règle SAUVEGARDES.md §3 : jamais stockée avec les dumps, NI au même endroit que le trousseau HMAC. Sa rotation suit le support ; les dumps qu'elle protégeait restent sensibles J+R durant. |
 
 Les quatre trousseaux (1-4) ont **quatre cycles de vie distincts** et **aucune valeur
 partagée** : le boot refuse toute paire de clés identiques, entre trousseaux comme au sein

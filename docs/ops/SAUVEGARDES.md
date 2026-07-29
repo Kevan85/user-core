@@ -44,6 +44,33 @@ gravées ici :
    ils portent les empreintes de l'époque, sous l'ancienne clé — une clé HMAC retirée du
    trousseau ne doit donc pas être considérée comme morte avant J+R.
 
+## 3bis. ⚠️ H1 — R ne vaut que s'il s'applique à TOUTES les copies
+
+**La valeur effective de R est le MAXIMUM de toutes les couches de rétention, pas celle
+du script.** Le script purge SON répertoire ; la promesse « effacé à J+R » porte, elle,
+sur **toute copie existante** d'un dump. Tout ce que le script ne voit pas la casse :
+
+- les **snapshots de l'hébergeur** sur le volume de sauvegarde (souvent 30-90 jours,
+  souvent activés par défaut) ;
+- le **versioning d'objets** et le **soft-delete / corbeille** d'un stockage objet —
+  plusieurs fournisseurs les activent par défaut : un objet « supprimé » y reste
+  récupérable ;
+- la **sauvegarde du serveur de sauvegardes** lui-même ;
+- toute **copie manuelle** vers un poste « pour déboguer ».
+
+Si une seule de ces couches conserve plus longtemps que R, **R est un chiffre décoratif
+et la crypto-destruction redevient le mensonge que le CDC nomme.** Exigences de
+déploiement (le script ne peut pas les vérifier — même famille que le TLS,
+SECRETS.md §4) :
+
+1. **toute copie d'un dump hérite de R** — la rétention de chaque support (snapshots,
+   versioning, corbeille, sauvegarde de la sauvegarde) est **plafonnée à R**, ou l'écart
+   est **documenté comme la valeur réelle de R** communiquée à Kevin ;
+2. **pas de copie manuelle hors du dépôt de sauvegarde** — ligne de contrôle du runbook
+   de déploiement ;
+3. au LOT effacement, la phrase écrite à Kevin porte la valeur **effective** (le maximum
+   des couches), jamais le paramètre du script sur parole.
+
 ## 4. La restauration se JOUE, elle ne se documente pas
 
 Le cycle réel — dump → base neuve → migrations vérifiées (versions **et** checksums,
