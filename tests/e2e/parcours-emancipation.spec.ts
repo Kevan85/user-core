@@ -124,7 +124,7 @@ describe('e2e — rattachement, émancipation, coupure nette (LOT 5)', () => {
          RETURNING id`,
       ),
     ).id;
-    await app.query(
+    await owner.query(
       `INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')`,
       [attached.dependentPersonId, programId],
     );

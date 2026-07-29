@@ -66,8 +66,6 @@ export class ResponsibilitiesService {
     actingAccountId: string,
     identity: PersonCivilIdentity,
   ): Promise<AttachDependentResult> {
-    const actingPersonId = await this.personOf(actingAccountId);
-
     const salt = generateErasureSalt();
     let encrypted;
     try {
@@ -90,13 +88,16 @@ export class ResponsibilitiesService {
     let identifier = this.generatePersonIdentifier();
     for (let draw = 0; draw < MAX_IDENTIFIER_DRAWS; draw += 1) {
       try {
+        // 023 : la fonction part du COMPTE agissant (la base résout la
+        // personne) et estampille elle-même l'acteur RESPONSIBLE — le
+        // paramètre d'acteur a disparu de la signature.
         const result = await this.pool.query<{
           dependent_person_id: string;
           responsibility_id: string;
         }>(
           `SELECT dependent_person_id, responsibility_id
-             FROM attach_dependent($1, $2, $3, $4, $5, $6, 'RESPONSIBLE')`,
-          [actingPersonId, identifier, salt, encrypted.token, encrypted.encKeyId, encrypted.birthYear],
+             FROM attach_dependent($1, $2, $3, $4, $5, $6)`,
+          [actingAccountId, identifier, salt, encrypted.token, encrypted.encKeyId, encrypted.birthYear],
         );
         const row = result.rows[0];
         if (row === undefined) {
@@ -130,19 +131,6 @@ export class ResponsibilitiesService {
     dependentPersonId: string,
     coResponsiblePublicIdentifier: string,
   ): Promise<AddCoResponsibleResult> {
-    const actingPersonId = await this.personOf(actingAccountId);
-
-    // BOLA : on n'ajoute un responsable qu'aux personnes dont ON est
-    // responsable — le lien actif de l'agissant est la preuve.
-    const acting = await this.pool.query(
-      `SELECT 1 FROM person_responsibilities
-        WHERE responsible_person_id = $1 AND dependent_person_id = $2 AND status = 'ACTIVE'`,
-      [actingPersonId, dependentPersonId],
-    );
-    if (acting.rows.length === 0) {
-      return { outcome: 'NOT_RESPONSIBLE' };
-    }
-
     const co = await this.pool.query<{ id: string }>(
       'SELECT id FROM persons WHERE public_identifier = $1',
       [coResponsiblePublicIdentifier],
@@ -152,17 +140,23 @@ export class ResponsibilitiesService {
       return { outcome: 'UNKNOWN_PERSON' };
     }
 
+    // 023 : le BOLA « on n'ajoute un responsable qu'aux personnes dont ON est
+    // responsable » se lit EN BASE (le lien actif de l'agissant est la
+    // preuve, et c'est la fonction qui la consulte) ; l'acteur RESPONSIBLE
+    // est estampillé par elle. FORBIDDEN (compte agissant inconnu ou
+    // inactif) est rendu comme NOT_RESPONSIBLE : un compte qui ne peut pas
+    // agir n'est responsable de personne — et une session vivante implique
+    // déjà un compte actif.
     try {
-      const inserted = await this.pool.query<{ id: string }>(
-        `INSERT INTO person_responsibilities (responsible_person_id, dependent_person_id, opened_by)
-         VALUES ($1, $2, 'RESPONSIBLE') RETURNING id`,
-        [coPerson.id, dependentPersonId],
+      const result = await this.pool.query<{ verdict: string; responsibility_id: string | null }>(
+        'SELECT verdict, responsibility_id FROM open_responsibility_by_responsible($1, $2, $3)',
+        [actingAccountId, coPerson.id, dependentPersonId],
       );
-      const row = inserted.rows[0];
-      if (row === undefined) {
-        throw new Error('co-responsable : aucune ligne rendue');
+      const row = result.rows[0];
+      if (row?.verdict === 'OPENED' && row.responsibility_id !== null) {
+        return { outcome: 'OK', responsibilityId: row.responsibility_id };
       }
-      return { outcome: 'OK', responsibilityId: row.id };
+      return { outcome: 'NOT_RESPONSIBLE' };
     } catch (err) {
       if (isDbError(err, DB_ERROR.DEAD_PARENT)) {
         return { outcome: 'CO_RESPONSIBLE_CANNOT_ACT' };
@@ -249,17 +243,6 @@ export class ResponsibilitiesService {
     return row.age;
   }
 
-  private async personOf(accountId: string): Promise<string> {
-    const result = await this.pool.query<{ person_id: string }>(
-      'SELECT person_id FROM accounts WHERE id = $1',
-      [accountId],
-    );
-    const row = result.rows[0];
-    if (row === undefined) {
-      throw new Error('responsabilités : compte introuvable');
-    }
-    return row.person_id;
-  }
 }
 
 function exactAgeInYears(birthDate: string): number {

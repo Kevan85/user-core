@@ -116,11 +116,12 @@ describe('/v1/grants — ProgramGrantsService (étape 3)', () => {
     const identifier = await adultIdentifier();
     expect((await service.openForKnownPerson(programId, identifier)).outcome).toBe('GRANTED');
 
-    // La famille ferme (revoke SELF — le geste de son app, droit du rôle).
+    // La famille ferme — par SON chemin réel (023) : la fonction résout la
+    // personne du compte et estampille 'SELF' elle-même.
     await app.query(
-      `UPDATE program_grants g SET status = 'REVOKED', revoke_reason = 'SELF'
-        FROM persons p
-       WHERE p.id = g.person_id AND p.public_identifier = $1 AND g.program_id = $2 AND g.status = 'ACTIVE'`,
+      `SELECT verdict FROM revoke_program_grant_self(
+         (SELECT a.id FROM accounts a JOIN persons p ON p.id = a.person_id
+           WHERE p.public_identifier = $1), $2)`,
       [identifier, programId],
     );
 

@@ -106,7 +106,7 @@ describe('CatalogService', () => {
     await catalog.grantAsStaff(staff, family, 'scolarite-2');
 
     // L'école retire l'accès (un parent exclu, un impayé traité ailleurs…).
-    await app.query(
+    await owner.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
         WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [family, programId],
@@ -131,7 +131,7 @@ describe('CatalogService', () => {
     await catalog.deactivate(family, 'scolarite-3'); // SELF
     await catalog.activate(family, 'scolarite-3'); // permis
     // Puis l'école coupe pour de bon.
-    await app.query(
+    await owner.query(
       `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'ADMIN'
         WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
       [family, programId],
@@ -153,7 +153,7 @@ describe('CatalogService', () => {
       const programId = await newProgram(`ecole-${round}`, 'GRANTED');
       await catalog.grantAsStaff(staff, family, `ecole-${round}`);
 
-      const client = await app.connect();
+      const client = await owner.connect();
       try {
         await client.query('BEGIN');
         // La famille se coupe…

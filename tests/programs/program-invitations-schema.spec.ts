@@ -451,7 +451,7 @@ describe('program_invitations — invariants en base', () => {
     const account = await newAccount();
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -460,19 +460,17 @@ describe('program_invitations — invariants en base', () => {
   test('la famille a fermé (SELF) → le programme ne ré-impose PAS (P0110, gravé)', async () => {
     const programId = await newProgram('prog-kevin');
     const account = await newAccount();
+    // Depuis 023, le chemin bridé de chaque acteur est SA fonction — l'erreur
+    // du trigger la traverse inchangée.
     await app.query(
-      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+      "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
-    await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
-      [account, programId],
-    );
+    await app.query('SELECT verdict FROM revoke_program_grant_self($1, $2)', [account, programId]);
     // Ni sous rôle bridé, ni sous OWNER : le trigger tient aux deux étages.
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -493,11 +491,7 @@ describe('program_invitations — invariants en base', () => {
     // Cycle : le programme ouvre (invitation), la famille ferme, ré-invitation.
     const first = await open(programId, line);
     expect(await accept(first.invitation_id!, holder)).toBe('ACCEPTED');
-    await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
-      [holder, programId],
-    );
+    await app.query('SELECT verdict FROM revoke_program_grant_self($1, $2)', [holder, programId]);
 
     const second = await open(programId, line);
     expect(await accept(second.invitation_id!, holder)).toBe('ACCEPTED');
@@ -515,17 +509,16 @@ describe('program_invitations — invariants en base', () => {
     const programId = await newProgram('prog-rouvre');
     const account = await newAccount();
     await app.query(
-      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+      "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
     await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'PROGRAM'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
+      "SELECT verdict FROM revoke_program_grant_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).resolves.toBeDefined();

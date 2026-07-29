@@ -44,6 +44,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '020_emancipation.sql',
       '021_dependent_invitations.sql',
       '022_invited_dependent_identity.sql',
+      '023_registry_actor_proof.sql',
     ]);
   });
 

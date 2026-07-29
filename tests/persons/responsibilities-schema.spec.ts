@@ -93,7 +93,10 @@ describe('person_responsibilities — les murs (017)', () => {
     ).id;
   }
 
-  async function link(responsible: string, dependent: string, client: Pool = app): Promise<string> {
+  // Depuis 023, le rôle bridé n'insère plus les liens en direct : le helper
+  // écrit sous owner (les murs SECURITY DEFINER jouent à l'identique — ce
+  // sont EUX qu'on teste ici) ; le chemin bridé a sa suite dédiée.
+  async function link(responsible: string, dependent: string, client: Pool = owner): Promise<string> {
     return firstRow(
       await client.query<{ id: string }>(
         `INSERT INTO person_responsibilities (responsible_person_id, dependent_person_id, opened_by)
@@ -121,7 +124,9 @@ describe('person_responsibilities — les murs (017)', () => {
   }
 
   test('attach_dependent (rôle bridé) : la personne mineure et son lien naissent ensemble, identifiés', async () => {
-    const { personId } = await adult();
+    // 023 : la fonction part du COMPTE agissant (la base résout la personne)
+    // et estampille elle-même l'acteur — le paramètre a disparu.
+    const { accountId } = await adult();
     const salt = generateErasureSalt();
     const enc = encryptCivilIdentity(crypto.encryption, salt, {
       nameComponents: ['Kabeya', 'Mwamba', 'Junior'],
@@ -131,8 +136,8 @@ describe('person_responsibilities — les murs (017)', () => {
     const row = firstRow(
       await app.query<{ dependent_person_id: string; responsibility_id: string }>(
         `SELECT dependent_person_id, responsibility_id
-           FROM attach_dependent($1, $2, $3, $4, $5, $6, 'RESPONSIBLE')`,
-        [personId, nextIdentifier(), salt, enc.token, enc.encKeyId, enc.birthYear],
+           FROM attach_dependent($1, $2, $3, $4, $5, $6)`,
+        [accountId, nextIdentifier(), salt, enc.token, enc.encKeyId, enc.birthYear],
       ),
     );
     const stored = firstRow(
@@ -147,11 +152,11 @@ describe('person_responsibilities — les murs (017)', () => {
   });
 
   test('attach_dependent : un ayant droit naît IDENTIFIÉ (blob, clé, année exigés)', async () => {
-    const { personId } = await adult();
+    const { accountId } = await adult();
     await expect(
       codeOf(() =>
-        app.query(`SELECT * FROM attach_dependent($1, $2, $3, NULL, NULL, NULL, 'RESPONSIBLE')`, [
-          personId,
+        app.query(`SELECT * FROM attach_dependent($1, $2, $3, NULL, NULL, NULL)`, [
+          accountId,
           nextIdentifier(),
           generateErasureSalt(),
         ]),

@@ -82,9 +82,14 @@ describe('catalogue — invariants en base', () => {
     return grantToPerson(await personOf(accountId), programId);
   }
 
+  // Depuis 023, le rôle bridé n'écrit plus program_grants : les fixtures de
+  // CE fichier passent par owner (les triggers SECURITY DEFINER y jouent à
+  // l'identique — c'est EUX qu'on teste ici). Le chemin bridé — les fonctions
+  // par acteur et le refus de l'écriture directe — a sa propre suite
+  // (registry-actor-proof.spec.ts).
   async function grantToPerson(personId: string, programId: string): Promise<string> {
     return firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF') RETURNING id",
         [personId, programId],
       ),
@@ -147,7 +152,7 @@ describe('catalogue — invariants en base', () => {
     const programId = await newProgram('zeta');
     const first = await grant(accountId, programId);
 
-    await app.query(
+    await owner.query(
       "UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF' WHERE id = $1",
       [first],
     );
@@ -166,10 +171,10 @@ describe('catalogue — invariants en base', () => {
     const id = await grant(accountId, programId);
 
     await expect(
-      codeOf(() => app.query("UPDATE program_grants SET status = 'REVOKED' WHERE id = $1", [id])),
+      codeOf(() => owner.query("UPDATE program_grants SET status = 'REVOKED' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FORBIDDEN_TRANSITION);
 
-    await app.query(
+    await owner.query(
       "UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF' WHERE id = $1",
       [id],
     );
@@ -182,7 +187,7 @@ describe('catalogue — invariants en base', () => {
     expect(row.age).toBeLessThan(60);
 
     await expect(
-      codeOf(() => app.query("UPDATE program_grants SET status = 'ACTIVE' WHERE id = $1", [id])),
+      codeOf(() => owner.query("UPDATE program_grants SET status = 'ACTIVE' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FROZEN_ROW);
     await expect(
       codeOf(() =>
@@ -284,12 +289,14 @@ describe('catalogue — invariants en base', () => {
       birthDate: `${year}-03-12`,
     });
     seq += 1;
+    // 023 : la fonction part du COMPTE agissant et estampille elle-même
+    // l'acteur — le paramètre d'acteur a disparu.
     const minor = firstRow(
       await app.query<{ dependent_person_id: string }>(
         `SELECT dependent_person_id
-           FROM attach_dependent($1, $2, $3, $4, $5, $6, 'RESPONSIBLE')`,
+           FROM attach_dependent($1, $2, $3, $4, $5, $6)`,
         [
-          await personOf(responsibleAccount),
+          responsibleAccount,
           String(7_660_000_000 + seq),
           salt,
           enc.token,

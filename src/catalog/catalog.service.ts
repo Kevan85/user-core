@@ -76,25 +76,32 @@ export class CatalogService {
     }));
   }
 
-  /** La famille active un programme POUR ELLE-MÊME (BOLA : accountId du jeton). */
+  /**
+   * La famille active un programme POUR ELLE-MÊME (BOLA : accountId du jeton).
+   * Depuis 023, l'écriture passe par grant_program_self() : la personne est
+   * résolue du compte PAR LA BASE, et l'acteur 'SELF' est estampillé par la
+   * fonction — jamais par ce service.
+   */
   async activate(accountId: string, code: string): Promise<ActivateResult> {
     const program = await this.findProgram(code);
     if (program === null) {
       return { outcome: 'UNKNOWN_PROGRAM' };
     }
-    const personId = await this.personOf(accountId);
     try {
-      await this.pool.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')",
-        [personId, program.id],
+      const result = await this.pool.query<{ verdict: string }>(
+        'SELECT verdict FROM grant_program_self($1, $2)',
+        [accountId, program.id],
       );
+      if (result.rows[0]?.verdict === 'UNKNOWN_ACCOUNT') {
+        throw new Error('catalogue : compte introuvable');
+      }
       return { outcome: 'ACTIVATED' };
     } catch (err) {
       if (isDbError(err, DB_ERROR.ACCESS_MODE_VIOLATION)) {
         // La base a tranché : soit le programme ne s'ouvre pas soi-même, soit
         // un TIERS a retiré cet accès et la famille ne peut pas le rouvrir.
         // On distingue les deux pour le message, jamais pour la décision.
-        const previous = await this.lastGrant(personId, program.id);
+        const previous = await this.lastGrant(await this.personOf(accountId), program.id);
         return previous === null
           ? { outcome: 'NOT_SELF_SERVICE' }
           : { outcome: 'REVOKED_BY_THIRD_PARTY' };
@@ -116,15 +123,18 @@ export class CatalogService {
     if (program === null) {
       return { outcome: 'UNKNOWN_PROGRAM' };
     }
-    // BOLA : la jointure par SA personne est la ceinture — un compte ne coupe
-    // que le sien, même en nommant le programme d'un autre.
-    const result = await this.pool.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1)
-          AND program_id = $2 AND status = 'ACTIVE'`,
+    // BOLA : la personne est résolue du compte PAR LA BASE (023) — un compte
+    // ne coupe que le sien, même en nommant le programme d'un autre. Et le
+    // motif 'SELF', entrée du mur de réactivation, est estampillé par la
+    // fonction : ce service ne peut plus maquiller un retrait de tiers en
+    // choix de famille.
+    const result = await this.pool.query<{ verdict: string }>(
+      'SELECT verdict FROM revoke_program_grant_self($1, $2)',
       [accountId, program.id],
     );
-    return result.rowCount === 0 ? { outcome: 'NOT_ACTIVE' } : { outcome: 'DEACTIVATED' };
+    return result.rows[0]?.verdict === 'DEACTIVATED'
+      ? { outcome: 'DEACTIVATED' }
+      : { outcome: 'NOT_ACTIVE' };
   }
 
   /**
@@ -138,24 +148,25 @@ export class CatalogService {
     targetAccountId: string,
     code: string,
   ): Promise<StaffGrantResult> {
-    const actorRole = await this.roleOf(actorAccountId);
-    if (actorRole !== 'PLATFORM_STAFF' && actorRole !== 'PLATFORM_ADMIN') {
-      return { outcome: 'FORBIDDEN' };
-    }
     const program = await this.findProgram(code);
     if (program === null) {
       return { outcome: 'UNKNOWN_PROGRAM' };
     }
-    if ((await this.roleOf(targetAccountId)) === null) {
-      return { outcome: 'UNKNOWN_ACCOUNT' };
-    }
+    // Le contrôle de rôle du staff vit EN BASE depuis 023 (leçon ③ : la
+    // donnée était déjà dans accounts, le mur ne la consultait pas d'ici).
     try {
-      await this.pool.query(
-        `INSERT INTO program_grants (person_id, program_id, granted_by)
-         VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PLATFORM_STAFF')`,
-        [targetAccountId, program.id],
+      const result = await this.pool.query<{ verdict: string }>(
+        'SELECT verdict FROM grant_program_staff($1, $2, $3)',
+        [actorAccountId, targetAccountId, program.id],
       );
-      return { outcome: 'GRANTED' };
+      switch (result.rows[0]?.verdict) {
+        case 'GRANTED':
+          return { outcome: 'GRANTED' };
+        case 'FORBIDDEN':
+          return { outcome: 'FORBIDDEN' };
+        default:
+          return { outcome: 'UNKNOWN_ACCOUNT' };
+      }
     } catch (err) {
       if (this.isUniqueViolation(err, 'uq_program_grants_active')) {
         return { outcome: 'ALREADY_ACTIVE' };
@@ -170,14 +181,6 @@ export class CatalogService {
       [code],
     );
     return result.rows[0] ?? null;
-  }
-
-  private async roleOf(accountId: string): Promise<string | null> {
-    const result = await this.pool.query<{ role: string }>(
-      "SELECT role FROM accounts WHERE id = $1 AND status = 'ACTIVE'",
-      [accountId],
-    );
-    return result.rows[0]?.role ?? null;
   }
 
   private async lastGrant(personId: string, programId: string): Promise<{ id: string } | null> {
