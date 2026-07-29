@@ -56,16 +56,36 @@ function run(command: string[], stdoutFile?: string): Promise<void> {
     const child = spawn(head, rest, {
       stdio: ['ignore', stdoutFile === undefined ? 'ignore' : 'pipe', 'inherit'],
     });
+
+    // Le verdict attend LES DEUX fins : la sortie du processus ET le flush du
+    // fichier — résoudre à la seule fermeture du processus lisait un fichier
+    // pas encore écrit (course vue en CI : « dump vide » sur un dump sain).
+    let exitCode: number | null = null;
+    let flushed = stdoutFile === undefined;
+    const settle = (): void => {
+      if (exitCode === null || !flushed) {
+        return;
+      }
+      if (exitCode === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${head} : sortie ${exitCode}`));
+      }
+    };
+
     if (stdoutFile !== undefined && child.stdout !== null) {
-      child.stdout.pipe(createWriteStream(stdoutFile));
+      const sink = createWriteStream(stdoutFile);
+      sink.on('error', reject);
+      sink.on('finish', () => {
+        flushed = true;
+        settle();
+      });
+      child.stdout.pipe(sink);
     }
     child.on('error', reject);
     child.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`${head} : sortie ${code}`));
-      }
+      exitCode = code ?? 1;
+      settle();
     });
   });
 }
