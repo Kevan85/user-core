@@ -10,10 +10,12 @@ services:
       POSTGRES_PASSWORD: user_core_dev
       POSTGRES_DB: user_core
     ports:
-      # 5434 côté hôte : User-Core est une infrastructure séparée — il ne
+      # 5435 côté hôte : User-Core est une infrastructure séparée — il ne
       # partage jamais le Postgres d'une verticale ni d'un autre cœur
-      # (Scolaria occupe 5432 en dev, payment-core 5433).
-      - "5434:5432"
+      # (Scolaria occupe 5432 en dev, payment-core 5433, messaging-core 5434 —
+      # ce dernier a pris 5434 après nous ; déplacer User-Core coûte une ligne,
+      # déplacer un chantier actif coûterait une session).
+      - "5435:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
