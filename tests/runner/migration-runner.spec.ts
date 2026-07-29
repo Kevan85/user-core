@@ -45,6 +45,8 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '021_dependent_invitations.sql',
       '022_invited_dependent_identity.sql',
       '023_registry_actor_proof.sql',
+      '024_reference_rotation_idempotency.sql',
+      '025_hmac_rotation_wall.sql',
     ]);
   });
 

@@ -37,3 +37,23 @@ export function hashReference(keyring: ReferenceKeyring, reference: string): Has
     hmac: createHmac('sha256', material).update(reference, 'utf8').digest('hex'),
   };
 }
+
+/**
+ * (024) L'empreinte de la MÊME référence sous CHAQUE clé du trousseau — la
+ * recherche d'idempotence les couvre toutes : un re-clic reconnaît sa
+ * référence même écrite sous une clé antérieure. L'écriture, elle, reste à
+ * la clé active (hashReference). Tableaux parallèles, la paire active
+ * comprise — la fonction SQL refuse toute autre forme (fail-closed).
+ */
+export function hashReferenceUnderAll(
+  keyring: ReferenceKeyring,
+  reference: string,
+): { keyIds: string[]; hmacs: string[] } {
+  const keyIds: string[] = [];
+  const hmacs: string[] = [];
+  for (const [keyId, material] of keyring.keys) {
+    keyIds.push(keyId);
+    hmacs.push(createHmac('sha256', material).update(reference, 'utf8').digest('hex'));
+  }
+  return { keyIds, hmacs };
+}

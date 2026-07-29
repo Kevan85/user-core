@@ -12,6 +12,9 @@ import { LocalAuthenticationProvider } from './auth/local-authentication-provide
 import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
+import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import { ObservabilityExceptionFilter } from './observability/observability.filter';
+import { assembleObservabilityFromEnv, initObservability } from './observability/sentry';
 import { CatalogService } from './catalog/catalog.service';
 import { EmancipationService } from './persons/emancipation.service';
 import { ResponsibilitiesService } from './persons/responsibilities.service';
@@ -30,6 +33,12 @@ import { LyingProver } from './proving/simulator/lying-prover';
 // Le service ne migre JAMAIS la base au démarrage : les migrations sont un
 // acte d'exploitation séparé (npm run migrate), pas un effet de bord d'un boot.
 async function bootstrap(): Promise<void> {
+  // En production, un secret publié par .env.example refuse de démarrer —
+  // AVANT toute autre lecture de config (étape 3, arbitrage C8).
+  assertProductionSecretsNotPublic();
+  // L'observabilité s'assemble AVANT tout trafic : murs armés sans DSN = un
+  // déploiement aveugle, refusé (C2). Dev sans DSN : coupée, simplement.
+  initObservability(assembleObservabilityFromEnv());
   const assembly = assembleApiFromEnv();
   const authConfig = assembleAuthFromEnv();
   // Les QUATRE trousseaux d'un bloc : violations listées d'un coup, et la
@@ -173,6 +182,10 @@ async function bootstrap(): Promise<void> {
       jwks,
     }),
   );
+
+  // Toute exception INATTENDUE part vers l'observabilité (les refus HTTP
+  // délibérés, eux, sont des verdicts — ils ne remontent pas).
+  app.useGlobalFilters(new ObservabilityExceptionFilter(app.getHttpAdapter()));
 
   // Arrêt propre — on cesse d'accepter, on finit, on ferme le pool.
   const shutdown = async (): Promise<void> => {

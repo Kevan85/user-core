@@ -29,6 +29,24 @@ export class ConfigViolations extends Error {
   }
 }
 
+/**
+ * F1 — le mode PERMISSIF se déclare ; tout le reste ARME les murs de
+ * production. Absent, vide, faute de frappe (« produciton »), « staging »,
+ * valeur inconnue : les murs tiennent. Le pire cas devient un boot refusé
+ * bruyamment sur un poste mal configuré — jamais une production
+ * silencieusement désarmée (leçon ⑥ : une garde qui ne lève pas s'ouvre).
+ *
+ * PRÉDICAT UNIQUE (F1bis) : toute règle « en production seulement » passe
+ * par ICI — deux définitions de « production » dans le même service
+ * finiraient par se contredire (même patron que le point d'assemblage
+ * unique des trousseaux). L'étape 5 (DSN Sentry obligatoire) le consulte.
+ */
+const RELAXED_ENVIRONMENTS = new Set(['development', 'test']);
+
+export function productionWallsArmed(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !RELAXED_ENVIRONMENTS.has(env.NODE_ENV ?? '');
+}
+
 export function assembleApiFromEnv(env: NodeJS.ProcessEnv = process.env): ApiAssembly {
   const violations: string[] = [];
 
