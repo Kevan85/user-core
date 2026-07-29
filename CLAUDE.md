@@ -303,7 +303,17 @@ les mineurs.
   jamais, registres techniques intacts). ⚠️ **Implication non résolue** : le trousseau actuel
   (LOT 2) chiffre tout sous une clé partagée → l'effacement est « tout ou rien ». Effacer **une
   personne** exigera une **granularité de clé par personne** (dérivation + sel oubliable, ou
-  équivalent) — **à concevoir au lot « personnes », pas à improviser.**
+  équivalent) — **à concevoir au lot « personnes », pas à improviser.** *(Livré au LOT 5 :
+  HKDF + sel par personne, cf. §8.1.)*
+- ⚠️ **« EFFACÉ » VEUT DIRE « EFFACÉ À J+R »** (LOT prod, étape 6). La crypto-destruction
+  n'est **effective** qu'après expiration de la rétention des sauvegardes : tout dump
+  antérieur porte encore l'ancien sel, donc la donnée reste techniquement recouvrable tant
+  qu'une copie vivante existe. **Et la valeur effective de `R` est le MAXIMUM de TOUTES les
+  couches de rétention, jamais celle du script** — snapshots d'hébergeur, versioning et
+  corbeille d'un stockage objet (souvent actifs **par défaut**), sauvegarde du serveur de
+  sauvegardes, copie manuelle faite un jour pour déboguer. Une seule couche qui dépasse et la
+  promesse est fausse. **`R` appartient à Kevin** (§3.11) : on paramètre, et **on lui
+  communique la valeur EFFECTIVE, jamais le paramètre.** Détail : `docs/ops/SAUVEGARDES.md`.
 - **Protection renforcée du mineur** : consentement parental tracé, et **coupure nette à
   l'émancipation** (aucun ancien responsable ne garde d'accès sur un majeur — cf. CDC §2.1).
 - **Résidence des données** : rester capable de localiser la donnée (Postgres unique, pas de
@@ -416,6 +426,44 @@ autrement.
   **lot dédié**, avec trois questions produit/réglementaires **pour Kevin** (à commencer par :
   *qui a le droit de demander l'effacement d'un mineur ?*).
 
+### 8.2 Ce que le LOT prod a gravé (livré le 29/07/2026, migrations `023`→`025`)
+
+Le système est **déployable, pas déployé** (le prover reste le simulateur, la bascule Scolaria
+attend). Ce qui est acquis, et qui ne se redémontre plus :
+
+- **Le registre PROUVE l'acteur, il ne le croit plus** (`023`) : **une fonction `SECURITY
+  DEFINER` par acteur — le NOM de la fonction EST l'acteur.** Une fonction qui demande l'acteur
+  en **argument ne prouve rien** (c'est le défaut qu'on a corrigé : `attach_dependent` a été
+  refondue sans son `p_opened_by`). Le rôle applicatif a perdu l'écriture directe des deux
+  registres, `REVOKE` posé **table ET colonne**.
+  **Critère de périmètre, réutilisable :** *une valeur entre dans ce patron si elle est
+  l'**ENTRÉE D'UN INVARIANT**, pas si elle « ressemble » aux autres.* `revoke_reason = 'SELF'`
+  alimente le mur de réactivation (« ce que la famille a fermé, elle seule le rouvre ») — donc
+  elle entre. `sessions.revoke_reason` décrit un événement qu'aucun mur ne lit — dette nommée
+  à part, avec sa **condition de réouverture** écrite dans `023`.
+- **Un acte `SELF` exige un compte ACTIF**, muré dans le trigger (pas dans la fonction), et
+  **conditionné au seul acteur `SELF`** — une personne sans aucun compte (un mineur) reçoit
+  toujours un droit posé par un tiers. Sans ce mur, un compte désactivé posait
+  `revoke_reason = 'SELF'` et **verrouillait durablement un programme** contre le programme.
+- **La rotation d'empreinte a son MUR AVANT son script** (`025`, `P0115`) : l'unicité mondiale
+  porte sur le **COUPLE** `(hmac_key_id, phone_hmac)` — une bascule de référence avant la fin du
+  re-hachage laisse coexister **deux revendications ACTIVES sur la même ligne physique**, sans
+  qu'aucun index ne rougisse. Le script vient après : une transaction, triggers suspendus et
+  réarmés dedans, **refus de courir s'il découvre un trigger qu'il ne connaît pas**, fail-closed
+  sur l'intégrité. La **fenêtre d'indisponibilité est structurelle** — elle se planifie.
+- **Les murs de production sont le DÉFAUT** : `productionWallsArmed()`, **prédicat unique**.
+  Seuls `development` et `test` relâchent ; absent, vide, `staging` ou `produciton` **arment**.
+- **Zéro PII chez un tiers** : l'événement Sentry est **reconstruit** en liste blanche (le
+  message n'est **jamais** expédié), breadcrumbs morts à trois étages, **espion sur le
+  transport** qui compte les envois. Pas de SDK de secrets (ce serait une 4ᵉ couture, §3.9) —
+  contrepartie écrite : **toute rotation est un redéploiement**.
+- **Un dump + le trousseau HMAC = toute la base.** L'espace des numéros est **énumérable** :
+  les deux réunis se cassent par force brute. Jamais au même endroit, dump chiffré au repos,
+  et **une clé HMAC retirée n'est pas morte avant J+R**.
+- **Cinq runbooks sous `docs/ops/`** (propriété **Exécuteur**), dont : une restauration
+  **remonte le temps des registres append-only** — acte d'incident majeur décidé avec Kevin,
+  jamais un outil de correction.
+
 ## 9. Où est quoi
 
 ```
@@ -423,9 +471,17 @@ user-core/
 ├── CLAUDE.md                    ← ce fichier (mode d'emploi des agents)
 ├── docs/
 │   ├── CAHIER_DES_CHARGES.md    ← le quoi/pourquoi complet (V1.0)
-│   └── CONTRAT_D_INTEGRATION.md ← ce qu'un programme peut demander, et ce qui lui est
-│                                   refusé pour toujours (catalogue = liste OUVERTE :
-│                                   un code programme est une DONNÉE, jamais un enum SQL)
+│   ├── CONTRAT_D_INTEGRATION.md ← ce qu'un programme peut demander, et ce qui lui est
+│   │                               refusé pour toujours (catalogue = liste OUVERTE :
+│   │                               un code programme est une DONNÉE, jamais un enum SQL)
+│   └── ops/                     ← RUNBOOKS — propriété de l'EXÉCUTEUR (le socle
+│       ├── README.md                doctrinal ci-dessus reste à l'Auditeur)
+│       ├── SECRETS.md           ← inventaire des 10 secrets, injection sans SDK, murs de boot
+│       ├── ROTATION.md          ← une procédure par trousseau ; rotation = redéploiement
+│       ├── SAUVEGARDES.md       ← R appartient à Kevin ; « effacé » = « effacé à J+R » ;
+│       │                           dump + trousseau HMAC = toute la base
+│       ├── DEPLOIEMENT.md       ← migrations PUIS boot ; le service ne migre jamais au démarrage
+│       └── INCIDENT.md          ← fuite de PII, compromission de clé, révocation, restauration
 └── (code : posé par l'Exécuteur, plan par plan — rien sans validation Auditeur)
 ```
 
@@ -483,10 +539,37 @@ expliquant *pourquoi* la règle existe. **TESTE TOUJOURS UNE GARDE AVANT DE LA G
 quand elle mord la prose, **reformule la prose** (§3.7).
 
 **⑧ Refuser une consigne AVEC PREUVE est le travail, pas une friction.** Score du chantier au
-17/07/2026 : **8 refus argumentés de l'Exécuteur, fondés 8 fois** — dont un « piège » de
-l'Auditeur matériellement faux, un backfill validé qui aurait fabriqué des identifiants
-devinables, et une porte validée refusée parce que son mur n'existait pas encore. **Un agent
-qui dit « amen » n'apporte rien ; celui qui prouve vaut ce qu'il coûte.** Symétriquement :
-**refuser d'affirmer ce qu'on n'a pas vérifié, même quand on a raison** — l'Exécuteur a livré
-un rapport en marquant « CI non vérifiée » pendant une panne GitHub, alors que tout était vert.
-C'est la règle.
+29/07/2026 : **10 refus/corrections argumentés de l'Exécuteur, fondés 10 fois** — dont un
+« piège » de l'Auditeur matériellement faux, un backfill validé qui aurait fabriqué des
+identifiants devinables, et une porte validée refusée parce que son mur n'existait pas encore.
+**Un agent qui dit « amen » n'apporte rien ; celui qui prouve vaut ce qu'il coûte.**
+Symétriquement : **refuser d'affirmer ce qu'on n'a pas vérifié, même quand on a raison** —
+l'Exécuteur a livré un rapport en marquant « CI non vérifiée » pendant une panne GitHub, alors
+que tout était vert, et il a **déclaré une CI ROUGE** au lieu d'annoncer un vert qu'il n'avait
+pas. C'est la règle.
+⚠️ **Et ça marche dans les DEUX sens.** Le 10ᵉ refus portait sur l'**Auditeur** : « cette
+correction ne casse rien » — c'était faux, 27 fichiers de test cassaient, parce que l'Auditeur
+avait raisonné sur `src/` sans regarder `tests/`. **Le bon geste de l'Exécuteur n'a pas été
+d'abandonner la correction, mais de constater que l'erreur ne changeait pas la décision et de
+faire le travail en plus.** Une erreur de l'auditeur n'annule pas sa consigne : elle annule sa
+justification, et il faut alors en chercher une vraie.
+
+**⑨ Vérifier la PRÉSENCE n'est pas vérifier l'ARMEMENT.** Le mur du DSN Sentry (C2) exigeait
+que la variable **existe** — pour empêcher un déploiement de partir aveugle. Mais un DSN
+illisible fait que le SDK **désactive son transport sans lever** : la variable était là, le mur
+passait, et **le service partait aveugle en croyant être surveillé**. Le trou n'avait pas
+disparu, il avait **reculé d'un cran**. La parade n'est pas de recopier la règle de validation
+du fournisseur (deux définitions divergent toujours — cf. le prédicat unique de §8.2) : c'est
+de **lui demander s'il est armé**, après coup. *Le patron de la maison : on interroge la
+référence, on ne la reproduit pas* (comme `assertFingerprintKeyAligned` interroge la base).
+**Devant toute garde, demander : est-ce que je vérifie que la protection EXISTE, ou qu'elle
+FONCTIONNE ?**
+
+**⑩ Le DÉFAUT d'une garde doit être fermé — c'est le mode permissif qui se déclare.**
+`if (NODE_ENV !== 'production') return;` ouvrait toutes les protections sur une variable
+absente, vide, ou mal orthographiée (`produciton` dans un manifeste suffisait), et la parade
+proposée était **une ligne de contrôle dans un runbook** — donc rien (leçon ①). La forme
+fermée n'invente aucune détection : elle **inverse la charge**. `productionWallsArmed()` ne
+relâche que sur `development` et `test` ; tout le reste arme. **Le pire cas devient un boot
+refusé bruyamment sur un poste mal configuré, jamais une production silencieusement nue.**
+Corollaire : *si un oubli rend le système plus permissif, la garde est à l'envers.*
