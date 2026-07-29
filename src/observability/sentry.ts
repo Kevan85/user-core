@@ -33,6 +33,12 @@ import { ConfigViolations, productionWallsArmed } from '../bootstrap/assembly';
 export interface ObservabilityConfig {
   dsn: string | null;
   environment: string;
+  /**
+   * productionWallsArmed() au moment de l'assemblage — LA dérivation, une
+   * seule fois (F1bis) : personne en aval ne re-déduit « production » d'une
+   * égalité de chaîne.
+   */
+  armed: boolean;
 }
 
 export function assembleObservabilityFromEnv(
@@ -46,7 +52,7 @@ export function assembleObservabilityFromEnv(
         'fail-open (C2) — le DSN est obligatoire (voir .env.example)',
     ]);
   }
-  return { dsn, environment: armed ? 'production' : 'development' };
+  return { dsn, environment: armed ? 'production' : 'development', armed };
 }
 
 // Le NOM d'une erreur est un identifiant de classe — s'il ne ressemble pas à
@@ -138,7 +144,7 @@ export function initObservability(
 
   const client = Sentry.getClient();
   const armed = client !== undefined && client.getTransport() !== undefined;
-  if (!armed && config.environment === 'production') {
+  if (!armed && config.armed) {
     throw new ConfigViolations([
       'SENTRY_DSN présent mais le transport ne s\'est PAS armé (DSN illisible pour le SDK ?) — ' +
         'partir aveugle en croyant être surveillé est le fail-open exact que C2 ferme (G1)',

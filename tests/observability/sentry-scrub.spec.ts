@@ -32,7 +32,7 @@ const DETAIL_MARKER = 'DETAIL-POSTGRES-MARQUEUR';
 describe('étape 5 — le scrubbing, prouvé sur le transport', () => {
   beforeAll(() => {
     const active = initObservability(
-      { dsn: 'https://clepublique@exemple.ingest.invalide/1', environment: 'test' },
+      { dsn: 'https://clepublique@exemple.ingest.invalide/1', environment: 'test', armed: false },
       spyTransport,
     );
     expect(active).toBe(true);
@@ -141,6 +141,7 @@ describe('étape 5 — C2 : le DSN est obligatoire quand les murs sont armés (v
     });
     expect(armed.dsn).not.toBeNull();
     expect(armed.environment).toBe('production');
+    expect(armed.armed).toBe(true); // LA dérivation unique du prédicat (F1bis)
 
     const relaxed = assembleObservabilityFromEnv({ NODE_ENV: 'development' });
     expect(relaxed.dsn).toBeNull();
@@ -153,19 +154,19 @@ describe('étape 6 — G1 : la vérité se demande au SDK, jamais à la présenc
     // « cle-invalide » : le tiret est refusé par la validation interne du SDK
     // — qu'on n'a PAS recopiée : on interroge le client après init().
     expect(() =>
-      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'production' }),
+      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'production', armed: true }),
     ).toThrow(/ne s'est PAS armé/);
   });
 
   test('DSN illisible en mode permissif → false, pas de refus (le dev voit le console.error du SDK)', () => {
     expect(
-      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'development' }),
+      initObservability({ dsn: 'https://cle-invalide@exemple.ingest.invalide/1', environment: 'development', armed: false }),
     ).toBe(false);
   });
 
   test('DSN lisible → true, et c\'est le SDK qui l\'a dit (client + transport)', () => {
     expect(
-      initObservability({ dsn: 'https://clevalide@exemple.ingest.invalide/1', environment: 'production' }),
+      initObservability({ dsn: 'https://clevalide@exemple.ingest.invalide/1', environment: 'production', armed: true }),
     ).toBe(true);
   });
 });
