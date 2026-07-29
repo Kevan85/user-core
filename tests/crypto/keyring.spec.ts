@@ -1,21 +1,22 @@
 import { randomBytes } from 'crypto';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { ConfigViolations } from '../../src/bootstrap/assembly';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 function key(bytes = 32): string {
   return randomBytes(bytes).toString('base64');
 }
 
+// Depuis D2, l'assembleur étroit est une PROJECTION de l'assemblage complet :
+// l'env doit porter les quatre familles, même pour n'en lire que deux.
 function validEnv(): NodeJS.ProcessEnv {
-  return {
+  return fullKeyringEnv({
     USER_CORE_ENC_KEYS: JSON.stringify({ E1: key(), E2: key() }),
     USER_CORE_ENC_ACTIVE_KEY_ID: 'E2',
-    USER_CORE_HMAC_KEYS: JSON.stringify({ H1: key() }),
-    USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-  };
+  });
 }
 
-describe('assembleCryptoFromEnv — deux trousseaux, deux cycles de vie', () => {
+describe('assembleCryptoFromEnv — projection chiffrement + empreinte de l\'assemblage complet', () => {
   test('assemblage nominal : clé active + anciennes clés lisibles', () => {
     const crypto = assembleCryptoFromEnv(validEnv());
     expect(crypto.encryption.activeKeyId).toBe('E2');
@@ -53,23 +54,21 @@ describe('assembleCryptoFromEnv — deux trousseaux, deux cycles de vie', () => 
 
   test('la MÊME valeur dans les deux trousseaux → refus (cycles de vie distincts)', () => {
     const shared = key();
-    const env = {
+    const env = fullKeyringEnv({
       USER_CORE_ENC_KEYS: JSON.stringify({ E1: shared }),
       USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
       USER_CORE_HMAC_KEYS: JSON.stringify({ H1: shared }),
       USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-    };
+    });
     expect(() => assembleCryptoFromEnv(env)).toThrow(/MÊME valeur/);
   });
 
   test('un secret de clé ne fuit JAMAIS dans un message de violation', () => {
     const secret = key();
-    const env = {
+    const env = fullKeyringEnv({
       USER_CORE_ENC_KEYS: JSON.stringify({ E1: secret }),
       USER_CORE_ENC_ACTIVE_KEY_ID: 'ABSENT',
-      USER_CORE_HMAC_KEYS: JSON.stringify({ H1: key() }),
-      USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-    };
+    });
     try {
       assembleCryptoFromEnv(env);
       throw new Error('un refus était attendu');

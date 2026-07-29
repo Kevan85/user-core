@@ -6,19 +6,20 @@ import { ProgramGrantsService } from '../../src/programs/program-grants.service'
 import { assembleReferenceKeyring } from '../../src/programs/reference-hmac';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // L'ouverture sur personne connue : les murs de 019 rendus en réponses
 // propres — adulte à compte, ayant droit né du clic, matrice de réactivation.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const references = assembleReferenceKeyring({
+}));
+const references = assembleReferenceKeyring(fullKeyringEnv({
   USER_CORE_REF_HMAC_KEYS: JSON.stringify({ R1: randomBytes(32).toString('base64') }),
   USER_CORE_REF_HMAC_ACTIVE_KEY_ID: 'R1',
-});
+}));
 
 const YEAR = new Date().getUTCFullYear();
 
@@ -115,11 +116,12 @@ describe('/v1/grants — ProgramGrantsService (étape 3)', () => {
     const identifier = await adultIdentifier();
     expect((await service.openForKnownPerson(programId, identifier)).outcome).toBe('GRANTED');
 
-    // La famille ferme (revoke SELF — le geste de son app, droit du rôle).
+    // La famille ferme — par SON chemin réel (023) : la fonction résout la
+    // personne du compte et estampille 'SELF' elle-même.
     await app.query(
-      `UPDATE program_grants g SET status = 'REVOKED', revoke_reason = 'SELF'
-        FROM persons p
-       WHERE p.id = g.person_id AND p.public_identifier = $1 AND g.program_id = $2 AND g.status = 'ACTIVE'`,
+      `SELECT verdict FROM revoke_program_grant_self(
+         (SELECT a.id FROM accounts a JOIN persons p ON p.id = a.person_id
+           WHERE p.public_identifier = $1), $2)`,
       [identifier, programId],
     );
 

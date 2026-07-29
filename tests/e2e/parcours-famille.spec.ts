@@ -10,6 +10,7 @@ import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // LE PARCOURS DU LOT /v1, de bout en bout et par les SERVICES : le clic de
 // l'école → le droit de l'enfant naît AVANT tout compte parent → le parent
@@ -17,20 +18,20 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 // chemin heureux ne prouve rien) → l'invitation se découvre, nom d'affichage
 // seul → l'acceptation crée les liens. Puis la famille existante (zéro
 // nouvelle preuve), et le numéro recyclé (dans et hors fenêtre).
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const references = assembleReferenceKeyring({
+}));
+const references = assembleReferenceKeyring(fullKeyringEnv({
   USER_CORE_REF_HMAC_KEYS: JSON.stringify({ R1: randomBytes(32).toString('base64') }),
   USER_CORE_REF_HMAC_ACTIVE_KEY_ID: 'R1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 const phoneConfig = assemblePhoneConfig({ PROOF_LINE_CAP: '10' });
 
 const YEAR = new Date().getUTCFullYear();

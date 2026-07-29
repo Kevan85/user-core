@@ -7,6 +7,7 @@ import { assembleProofCodeKeyring } from '../../src/proving/proof-code';
 import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 /**
  * ZÉRO PII — la preuve globale du LOT 2, sur un CYCLE COMPLET :
@@ -20,16 +21,16 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
  *      plus puissant), et on cherche le numéro. S'il est quelque part, il est
  *      trouvé ici.
  */
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 
 const LINE = '+243851234567';
 const NATIONAL = '851234567'; // le numéro sans indicatif : un fragment compte aussi

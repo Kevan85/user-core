@@ -86,11 +86,12 @@ export class ProgramGrantsService {
     }
 
     try {
-      await this.pool.query(
-        `INSERT INTO program_grants (person_id, program_id, granted_by)
-         VALUES ($1, $2, 'PROGRAM')`,
-        [personId, programId],
-      );
+      // 023 : ce chemin ne peut estampiller que 'PROGRAM' — la fonction le
+      // grave, ce service n'écrit plus l'acteur.
+      await this.pool.query('SELECT verdict FROM grant_program_as_program($1, $2)', [
+        personId,
+        programId,
+      ]);
       return { outcome: 'GRANTED' };
     } catch (err) {
       if (isActiveGrantCollision(err)) {
@@ -149,13 +150,10 @@ export class ProgramGrantsService {
    * La RÉVOCATION par le programme : son droit, motif 'PROGRAM', la matrice
    * de 019 fait le reste (la famille ne rouvrira pas ; le programme, si).
    *
-   * 📌 Dette C12, ALIGNÉE ET NON RÉSOLUE (arbitrage étape 4, patron LOT 5) :
-   * revoke_reason est DÉCLARATIF dans un GRANT UPDATE — ce service pourrait
-   * écrire 'SELF' et maquiller un retrait d'école en choix de famille. Même
-   * famille exacte que opened_by/granted_by (C12, LOT 5) : aucune surface
-   * d'attaque externe (le rôle applicatif est le seul écrivain, et c'est CE
-   * code), mais la preuve de l'acteur au registre attend le LOT prod — une
-   * fonction SECURITY DEFINER par acteur, pas un réflexe d'instinct ici.
+   * Dette C12 PAYÉE (023, LOT prod étape 2) : le rôle applicatif n'a plus
+   * aucun droit d'UPDATE sur program_grants — le motif est estampillé par
+   * revoke_program_grant_as_program(), ce service ne peut plus maquiller un
+   * retrait d'école en choix de famille.
    */
   async revokeForKnownPerson(
     programId: string,
@@ -170,13 +168,13 @@ export class ProgramGrantsService {
       return { outcome: 'NOT_FOUND' };
     }
 
-    const revoked = await this.pool.query(
-      `UPDATE program_grants
-          SET status = 'REVOKED', revoke_reason = 'PROGRAM'
-        WHERE person_id = $1 AND program_id = $2 AND status = 'ACTIVE'`,
+    const revoked = await this.pool.query<{ verdict: string }>(
+      'SELECT verdict FROM revoke_program_grant_as_program($1, $2)',
       [personId, programId],
     );
-    return revoked.rowCount === 1 ? { outcome: 'REVOKED' } : { outcome: 'NOT_ACTIVE' };
+    return revoked.rows[0]?.verdict === 'REVOKED'
+      ? { outcome: 'REVOKED' }
+      : { outcome: 'NOT_ACTIVE' };
   }
 }
 

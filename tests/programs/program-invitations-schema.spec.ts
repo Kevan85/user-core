@@ -5,17 +5,18 @@ import { fingerprintOf } from '../../src/crypto/fingerprint';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Invariants de la migration 012 : LE PIÈGE (l'invitation ne dit jamais si le
 // numéro est connu), les deux plafonds (ligne = silence journalisé, client =
 // refus franc), le rattachement (la preuve de ligne est le seul sésame), et
 // la règle de Kevin (ce que la famille a fermé, elle seule le rouvre).
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 const TTL = 3600;
 const WINDOW = 86400;
@@ -450,7 +451,7 @@ describe('program_invitations — invariants en base', () => {
     const account = await newAccount();
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -459,19 +460,17 @@ describe('program_invitations — invariants en base', () => {
   test('la famille a fermé (SELF) → le programme ne ré-impose PAS (P0110, gravé)', async () => {
     const programId = await newProgram('prog-kevin');
     const account = await newAccount();
+    // Depuis 023, le chemin bridé de chaque acteur est SA fonction — l'erreur
+    // du trigger la traverse inchangée.
     await app.query(
-      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+      "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
-    await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
-      [account, programId],
-    );
+    await app.query('SELECT verdict FROM revoke_program_grant_self($1, $2)', [account, programId]);
     // Ni sous rôle bridé, ni sous OWNER : le trigger tient aux deux étages.
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).rejects.toMatchObject({ code: 'P0110' });
@@ -492,11 +491,7 @@ describe('program_invitations — invariants en base', () => {
     // Cycle : le programme ouvre (invitation), la famille ferme, ré-invitation.
     const first = await open(programId, line);
     expect(await accept(first.invitation_id!, holder)).toBe('ACCEPTED');
-    await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
-      [holder, programId],
-    );
+    await app.query('SELECT verdict FROM revoke_program_grant_self($1, $2)', [holder, programId]);
 
     const second = await open(programId, line);
     expect(await accept(second.invitation_id!, holder)).toBe('ACCEPTED');
@@ -514,17 +509,16 @@ describe('program_invitations — invariants en base', () => {
     const programId = await newProgram('prog-rouvre');
     const account = await newAccount();
     await app.query(
-      "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+      "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
     await app.query(
-      `UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'PROGRAM'
-        WHERE person_id = (SELECT person_id FROM accounts WHERE id = $1) AND program_id = $2 AND status = 'ACTIVE'`,
+      "SELECT verdict FROM revoke_program_grant_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
       [account, programId],
     );
     await expect(
       app.query(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, 'PROGRAM')",
+        "SELECT verdict FROM grant_program_as_program((SELECT person_id FROM accounts WHERE id = $1), $2)",
         [account, programId],
       ),
     ).resolves.toBeDefined();

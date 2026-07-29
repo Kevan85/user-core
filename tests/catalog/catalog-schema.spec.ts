@@ -5,17 +5,18 @@ import { encryptCivilIdentity, generateErasureSalt } from '../../src/crypto/pers
 import { DB_ERROR, dbErrorCode } from '../../src/db/errors';
 import { createAccount as createAccountFixture } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // Invariants de 008 (transposés à la PERSONNE par 019), sous rôle bridé ET
 // sous owner. Le catalogue est un DROIT D'ACCÈS : activé / désactivé,
 // historisé, jamais un facturier — et depuis 019, il appartient à la
 // PERSONNE (« Scolaria pour Junior », jamais « la famille a Scolaria »).
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 async function codeOf(run: () => Promise<unknown>): Promise<string | undefined> {
   try {
     await run();
@@ -81,11 +82,23 @@ describe('catalogue — invariants en base', () => {
     return grantToPerson(await personOf(accountId), programId);
   }
 
-  async function grantToPerson(personId: string, programId: string): Promise<string> {
+  // Depuis 023, le rôle bridé n'écrit plus program_grants : les fixtures de
+  // CE fichier passent par owner (les triggers SECURITY DEFINER y jouent à
+  // l'identique — c'est EUX qu'on teste ici). Le chemin bridé — les fonctions
+  // par acteur et le refus de l'écriture directe — a sa propre suite
+  // (registry-actor-proof.spec.ts).
+  // E1 : l'acteur SELF exige un compte ACTIF de la personne — les fixtures
+  // sur personne sans compte actif passent par PLATFORM_STAFF (le mur ne
+  // porte que sur SELF : un mineur reçoit ses droits d'un tiers).
+  async function grantToPerson(
+    personId: string,
+    programId: string,
+    actor: 'SELF' | 'PLATFORM_STAFF' = 'SELF',
+  ): Promise<string> {
     return firstRow(
-      await app.query<{ id: string }>(
-        "INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF') RETURNING id",
-        [personId, programId],
+      await owner.query<{ id: string }>(
+        'INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, $3) RETURNING id',
+        [personId, programId, actor],
       ),
     ).id;
   }
@@ -146,7 +159,7 @@ describe('catalogue — invariants en base', () => {
     const programId = await newProgram('zeta');
     const first = await grant(accountId, programId);
 
-    await app.query(
+    await owner.query(
       "UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF' WHERE id = $1",
       [first],
     );
@@ -165,10 +178,10 @@ describe('catalogue — invariants en base', () => {
     const id = await grant(accountId, programId);
 
     await expect(
-      codeOf(() => app.query("UPDATE program_grants SET status = 'REVOKED' WHERE id = $1", [id])),
+      codeOf(() => owner.query("UPDATE program_grants SET status = 'REVOKED' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FORBIDDEN_TRANSITION);
 
-    await app.query(
+    await owner.query(
       "UPDATE program_grants SET status = 'REVOKED', revoke_reason = 'SELF' WHERE id = $1",
       [id],
     );
@@ -181,7 +194,7 @@ describe('catalogue — invariants en base', () => {
     expect(row.age).toBeLessThan(60);
 
     await expect(
-      codeOf(() => app.query("UPDATE program_grants SET status = 'ACTIVE' WHERE id = $1", [id])),
+      codeOf(() => owner.query("UPDATE program_grants SET status = 'ACTIVE' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FROZEN_ROW);
     await expect(
       codeOf(() =>
@@ -205,12 +218,16 @@ describe('catalogue — invariants en base', () => {
 
   test('019 : un droit peut naître pour une personne SANS compte actif — le mineur est le cas nominal ; un programme retiré, lui, refuse toujours', async () => {
     // L'ancienne garde « aucun droit sous un compte désactivé » est tombée
-    // avec 019, délibérément : le droit appartient à la personne, et une
-    // personne sans compte (mineur) ou au compte mort en porte.
+    // avec 019 : le droit appartient à la personne, et une personne sans
+    // compte (mineur) ou au compte mort en porte. ⚠️ Amendé par E1 (023) :
+    // cela reste vrai pour le DROIT — posé par un TIERS (PROGRAM, STAFF) —
+    // mais l'ACTE de la famille (SELF), lui, exige un compte actif.
     const accountId = await newAccount();
     const programId = await newProgram('iota');
     await app.query("UPDATE accounts SET status = 'DEACTIVATED' WHERE id = $1", [accountId]);
-    await expect(grant(accountId, programId)).resolves.toBeDefined();
+    await expect(
+      grantToPerson(await personOf(accountId), programId, 'PLATFORM_STAFF'),
+    ).resolves.toBeDefined();
 
     // Une personne sans AUCUN compte (le profil du mineur rattaché).
     seq += 1;
@@ -220,7 +237,7 @@ describe('catalogue — invariants en base', () => {
         generateErasureSalt(),
       ]),
     ).id;
-    await expect(grantToPerson(bare, programId)).resolves.toBeDefined();
+    await expect(grantToPerson(bare, programId, 'PLATFORM_STAFF')).resolves.toBeDefined();
 
     const live = await newAccount();
     const retired = await newProgram('kappa');
@@ -283,12 +300,14 @@ describe('catalogue — invariants en base', () => {
       birthDate: `${year}-03-12`,
     });
     seq += 1;
+    // 023 : la fonction part du COMPTE agissant et estampille elle-même
+    // l'acteur — le paramètre d'acteur a disparu.
     const minor = firstRow(
       await app.query<{ dependent_person_id: string }>(
         `SELECT dependent_person_id
-           FROM attach_dependent($1, $2, $3, $4, $5, $6, 'RESPONSIBLE')`,
+           FROM attach_dependent($1, $2, $3, $4, $5, $6)`,
         [
-          await personOf(responsibleAccount),
+          responsibleAccount,
           String(7_660_000_000 + seq),
           salt,
           enc.token,
@@ -298,9 +317,10 @@ describe('catalogue — invariants en base', () => {
       ),
     ).dependent_person_id;
 
-    // « Scolaria pour Junior » : le droit est accordé À LA PERSONNE du mineur.
+    // « Scolaria pour Junior » : le droit est accordé À LA PERSONNE du mineur
+    // — par un TIERS (E1 : un mineur sans compte ne pose pas un acte SELF).
     const programId = await newProgram('omicron');
-    await grantToPerson(minor, programId);
+    await grantToPerson(minor, programId, 'PLATFORM_STAFF');
 
     // Le compte du responsable meurt (perdu, compromis). RIEN à transférer :
     // les accès étaient déjà ceux de Junior — c'est la raison d'être de toute

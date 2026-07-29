@@ -6,17 +6,18 @@ import { dbErrorCode } from '../../src/db/errors';
 import { buildPhoneColumns } from '../../src/phone/phone-columns';
 import { createAccount } from '../helpers/accounts';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // 021 — le rattachement porté par l'invitation : le clic (personne + droit +
 // invitation, une transaction), l'idempotence par empreinte, l'acceptation
 // qui crée les LIENS, la fenêtre TTL. Sous rôle bridé (les fonctions SONT le
 // chemin) et sous owner quand un mur doit tenir au-delà des droits.
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
+}));
 
 const YEAR = new Date().getUTCFullYear();
 const CAPS = { ttl: 3600, clientCap: 1000, clientWindow: 3600, lineCap: 1000, lineWindow: 3600 };

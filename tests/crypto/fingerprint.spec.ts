@@ -5,18 +5,19 @@ import {
   fingerprintUnder,
 } from '../../src/crypto/fingerprint';
 import { assembleCryptoFromEnv } from '../../src/crypto/keyring';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 const PHONE = '+243812345678';
 const H1 = randomBytes(32).toString('base64');
 const H2 = randomBytes(32).toString('base64');
 
 function keyring(keys: Record<string, string>, active: string) {
-  return assembleCryptoFromEnv({
+  return assembleCryptoFromEnv(fullKeyringEnv({
     USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
     USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
     USER_CORE_HMAC_KEYS: JSON.stringify(keys),
     USER_CORE_HMAC_ACTIVE_KEY_ID: active,
-  }).fingerprint;
+  })).fingerprint;
 }
 
 describe('Empreinte HMAC déterministe (recherche d\'unicité, jamais le clair)', () => {

@@ -15,6 +15,7 @@ import { LyingProver } from '../../src/proving/simulator/lying-prover';
 import { createAccount } from '../helpers/accounts';
 import { testAuthAssembly } from '../helpers/auth';
 import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
+import { fullKeyringEnv } from '../helpers/keyring-env';
 
 // LE PARCOURS DU LOT, de bout en bout et par les SERVICES (aucune fixture
 // owner sur le chemin nominal) : rattachement → droits de la personne →
@@ -22,16 +23,16 @@ import { adminUrl, appUrl, firstRow, truncateTables } from '../helpers/db';
 // prévenu dans son compte, irréversibilité — et le test ② de C1 rejoué dans
 // le flux réel (l'émancipation entamée jamais achevée ne bloque pas la
 // reprise de la ligne par sa détentrice légitime).
-const crypto = assembleCryptoFromEnv({
+const crypto = assembleCryptoFromEnv(fullKeyringEnv({
   USER_CORE_ENC_KEYS: JSON.stringify({ E1: randomBytes(32).toString('base64') }),
   USER_CORE_ENC_ACTIVE_KEY_ID: 'E1',
   USER_CORE_HMAC_KEYS: JSON.stringify({ H1: randomBytes(32).toString('base64') }),
   USER_CORE_HMAC_ACTIVE_KEY_ID: 'H1',
-});
-const codeKeyring = assembleProofCodeKeyring({
+}));
+const codeKeyring = assembleProofCodeKeyring(fullKeyringEnv({
   USER_CORE_PROOF_CODE_KEYS: JSON.stringify({ C1: randomBytes(32).toString('base64') }),
   USER_CORE_PROOF_CODE_ACTIVE_KEY_ID: 'C1',
-});
+}));
 const phoneConfig = assemblePhoneConfig({ PROOF_LINE_CAP: '10' });
 
 // Une date de naissance « il y a N ans et quelques jours » : l'âge EXACT vaut
@@ -123,8 +124,9 @@ describe('e2e — rattachement, émancipation, coupure nette (LOT 5)', () => {
          RETURNING id`,
       ),
     ).id;
-    await app.query(
-      `INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'SELF')`,
+    // E1 : le droit du mineur est posé par un TIERS (SELF exige un compte actif).
+    await owner.query(
+      `INSERT INTO program_grants (person_id, program_id, granted_by) VALUES ($1, $2, 'PLATFORM_STAFF')`,
       [attached.dependentPersonId, programId],
     );
 
