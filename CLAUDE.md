@@ -162,7 +162,13 @@ git grep -rnE "account|phone|claim|session|from '\.\./(auth|phone|catalog|outbox
 ```
 git grep -rn "decrypt(" -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts'
 ```
+**Motif H — UN SEUL point d'assemblage des trousseaux (LOT prod), périmètre `src/ scripts/` :**
+```
+git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ scripts/ ':!src/crypto/keyring.ts'
+```
 Ces motifs doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
+**Ils sont HUIT** — A, B, D, E, F, G, H et l'anti-abonnement de §3.8 — joués par
+`tools/check-guards.sh`, et **tous les huit sont des checks REQUIS** de `main` (§4).
 
 ⚠️ **Pourquoi le motif F existe** — c'est la leçon la plus dure du dépôt. `phone_hmac` (qui
 verrouille la ligne) et `phone_encrypted` (qu'on appellera) peuvent **mentir l'un sur l'autre** :
@@ -171,6 +177,21 @@ parade — déchiffrer, **re-dériver l'empreinte**, comparer — a été posée
 deuxième point de déchiffrement est né trois lots plus tard (le publisher) et l'a « oublié » »**,
 sans qu'aucun test ne rougisse. **Une discipline ne tient que si elle est mécanique** : tout
 déchiffrement passe par le point unique, et la CI refuse qu'un second naisse.
+
+⚠️ **Pourquoi le motif H existe — le motif F, une deuxième fois, sur les CLÉS.** Il y a **quatre
+trousseaux à quatre cycles de vie** (chiffrement · empreinte téléphone · codes de possession ·
+références d'idempotence des programmes), et un contrôle croisé au démarrage refuse qu'une même
+valeur serve deux usages — *y compris deux clés d'un même trousseau, sinon une rotation n'aurait
+rien tourné*. **Ce contrôle ne vaut que si TOUT trousseau y passe** : deux des quatre étaient
+déjà nés **hors** du point d'assemblage, chacun avec sa copie du parseur, donc hors du contrôle.
+C'est le patron exact de la parade P4 « oubliée » par son propre auteur trois lots après sa pose
+(leçon ①). `scripts/` est **dans** le périmètre, délibérément : c'est par un script
+d'exploitation — une rotation, un backfill — que le second point serait né, exactement comme P4
+était rené par le publisher.
+📌 **Ce que le motif H ne garde PAS, et qu'il ne faut pas confondre** : il garde l'**assemblage
+depuis l'environnement**, pas la **dérivation**. Une clé dérivée d'une clé déjà assemblée
+(HKDF + sel par personne, `src/crypto/person-identity.ts`, §8.1) ne lit aucune variable
+d'environnement : elle ne le déclenche pas, et c'est correct.
 
 ⚠️ **Pourquoi le motif D est sensible à la casse** (arbitrage tranché le 14/07/2026, contre la
 forme d'abord demandée par l'Auditeur — l'Exécuteur a refusé **avec preuve**, et il avait
