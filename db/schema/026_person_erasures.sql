@@ -47,9 +47,17 @@
 -- -----------------------------------------------------------------------------
 CREATE TABLE erasure_policy (
   singleton               boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-  retraction_days         integer NOT NULL CHECK (retraction_days BETWEEN 0 AND 90),
+  -- Jamais 0 : « pas de fenêtre » se dit IMMEDIATE. Un DELAYED à 0 jour
+  -- serait une réflexion promise et jamais donnée — la contradiction est
+  -- non représentable, une migration signée ne peut pas l'introduire.
+  retraction_days         integer NOT NULL CHECK (retraction_days BETWEEN 1 AND 90),
   notification_lead_hours integer NOT NULL CHECK (notification_lead_hours BETWEEN 1 AND 168),
-  updated_at              timestamptz NOT NULL DEFAULT now()
+  updated_at              timestamptz NOT NULL DEFAULT now(),
+  -- Le préavis vit DANS la fenêtre : un préavis plus long qu'elle serait dû
+  -- avant la demande — une notification qui ment sur la date, sur le seul
+  -- sujet où la date est tout.
+  CONSTRAINT chk_erasure_policy_lead_within_window
+    CHECK (notification_lead_hours <= retraction_days * 24)
 );
 
 INSERT INTO erasure_policy (retraction_days, notification_lead_hours) VALUES (7, 48);

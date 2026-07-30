@@ -165,6 +165,18 @@ describe("effacement — le régime en base (026)", () => {
         app.query('UPDATE erasure_policy SET retraction_days = 0'),
       ).rejects.toMatchObject({ code: '42501' });
     });
+
+    test('R1 — un DELAYED à 0 jour est non représentable : « pas de fenêtre » se dit IMMEDIATE', async () => {
+      await expect(
+        owner.query('UPDATE erasure_policy SET retraction_days = 0'),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+
+    test('R2 — le préavis vit DANS la fenêtre : lead > retraction_days * 24 est non représentable', async () => {
+      await expect(
+        owner.query('UPDATE erasure_policy SET retraction_days = 1, notification_lead_hours = 168'),
+      ).rejects.toMatchObject({ code: '23514' });
+    });
   });
 
   describe('person_erasures — le registre append-only', () => {
