@@ -13,13 +13,17 @@ export type ReadIdentityResult =
   | { outcome: 'OK'; identity: PersonCivilIdentity }
   | { outcome: 'NOT_PROVIDED' }
   /** Le registre se contredit (C4) : incident d'intégrité, JAMAIS un 400. */
-  | { outcome: 'INTEGRITY_VIOLATION' };
+  | { outcome: 'INTEGRITY_VIOLATION' }
+  /** État DÉCLARÉ par la base (026/027) — jamais inféré d'un blob absent ou illisible. */
+  | { outcome: 'ERASED' };
 
 export type ProvideIdentityResult =
   | { outcome: 'OK'; identity: PersonCivilIdentity }
   | { outcome: 'INVALID'; reason: string }
   /** La date fournie change l'année posée : set-once en base (P0101). */
-  | { outcome: 'BIRTH_DATE_LOCKED' };
+  | { outcome: 'BIRTH_DATE_LOCKED' }
+  /** Le mur est le trigger P0116 (026) ; ce verdict n'est que l'erreur propre. */
+  | { outcome: 'ERASED' };
 
 export const IDENTITY_SERVICE = 'IDENTITY_SERVICE';
 
@@ -44,6 +48,12 @@ export class IdentityService {
 
   async read(accountId: string): Promise<ReadIdentityResult> {
     const stored = await this.readStored(accountId);
+    // ERASED se teste AVANT NOT_PROVIDED (C6) : après la destruction, le blob
+    // d'une effacée est NULL — la rapporter « n'a jamais fourni d'identité »
+    // serait un fait différent, servi en silence.
+    if (stored.erased) {
+      return { outcome: 'ERASED' };
+    }
     if (stored.civil_identity_encrypted === null || stored.birth_year === null) {
       return { outcome: 'NOT_PROVIDED' };
     }
@@ -68,6 +78,9 @@ export class IdentityService {
 
   async provide(accountId: string, identity: PersonCivilIdentity): Promise<ProvideIdentityResult> {
     const stored = await this.readStored(accountId);
+    if (stored.erased) {
+      return { outcome: 'ERASED' };
+    }
 
     let encrypted;
     try {
@@ -91,6 +104,11 @@ export class IdentityService {
       if (isDbError(err, DB_ERROR.IMMUTABLE)) {
         return { outcome: 'BIRTH_DATE_LOCKED' };
       }
+      // L'effacement peut tomber entre la lecture et l'écriture : le mur
+      // P0116 (026) tranche, ce service traduit.
+      if (isDbError(err, DB_ERROR.PERSON_ERASED)) {
+        return { outcome: 'ERASED' };
+      }
       throw err;
     }
     return { outcome: 'OK', identity };
@@ -104,6 +122,7 @@ export class IdentityService {
     enc_key_id: string | null;
     erasure_salt: Buffer;
     birth_year: number | null;
+    erased: boolean;
   }> {
     const result = await this.pool.query<{
       person_id: string;
@@ -111,8 +130,10 @@ export class IdentityService {
       enc_key_id: string | null;
       erasure_salt: Buffer;
       birth_year: number | null;
+      erased: boolean;
     }>(
-      `SELECT a.person_id, r.civil_identity_encrypted, r.enc_key_id, r.erasure_salt, r.birth_year
+      `SELECT a.person_id, r.civil_identity_encrypted, r.enc_key_id, r.erasure_salt, r.birth_year,
+              r.erased
          FROM accounts a, LATERAL read_person_identity(a.person_id) r
         WHERE a.id = $1`,
       [accountId],

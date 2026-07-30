@@ -100,12 +100,18 @@ export class AccountInvitationsService {
       civil_identity_encrypted: string | null;
       erasure_salt: Buffer;
       birth_year: number | null;
+      erased: boolean;
     }>(
-      'SELECT civil_identity_encrypted, erasure_salt, birth_year FROM read_invited_dependent_identities($1, $2)',
+      'SELECT civil_identity_encrypted, erasure_salt, birth_year, erased FROM read_invited_dependent_identities($1, $2)',
       [invitationId, accountId],
     );
     const dependents: { displayName: string }[] = [];
     for (const row of rows.rows) {
+      if (row.erased) {
+        // État DÉCLARÉ par la base (027) : un effacé n'est ni une corruption
+        // ni un « non fourni » — il n'a simplement plus de nom à afficher.
+        continue;
+      }
       if (row.civil_identity_encrypted === null || row.birth_year === null) {
         continue; // théorique : le clic exige l'identité (021, P0111)
       }

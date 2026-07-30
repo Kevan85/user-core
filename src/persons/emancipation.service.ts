@@ -259,12 +259,19 @@ export class EmancipationService {
       civil_identity_encrypted: string | null;
       erasure_salt: Buffer;
       birth_year: number | null;
+      erased: boolean;
     }>(
-      'SELECT civil_identity_encrypted, erasure_salt, birth_year FROM read_person_identity($1)',
+      'SELECT civil_identity_encrypted, erasure_salt, birth_year, erased FROM read_person_identity($1)',
       [personId],
     );
     const row = stored.rows[0];
     if (row === undefined) {
+      return false;
+    }
+    if (row.erased) {
+      // État DÉCLARÉ par la base (027), jamais inféré d'un blob absent : une
+      // personne effacée ne s'émancipe pas par ce chemin — refus silencieux,
+      // comme tout verdict externe de ce flux.
       return false;
     }
     if (row.civil_identity_encrypted === null || row.birth_year === null) {
