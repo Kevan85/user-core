@@ -343,6 +343,47 @@ les mineurs.
 Un plan qui détient une donnée personnelle **sans finalité écrite**, ou qui rend l'effacement
 d'une personne **impossible par construction**, = **plan REFUSÉ**.
 
+### 3.14bis Les deux murs de l'effacement (démontrés à la source le 30/07/2026)
+
+Le **régime** est verrouillé au CDC §10 n°14 (qui déclenche · le choix immédiat ou 7 jours ·
+la notification 48 h · le refus d'effacer un dernier responsable). Ce qui suit n'est pas le
+régime : ce sont les deux murs **techniques** sans lesquels il ne tient pas. Ils sont nés d'une
+lecture du code existant, pas d'une précaution générale.
+
+**① Une personne effacée n'est PLUS INSCRIPTIBLE — et ce mur vit en base.**
+Effacer, ici, c'est détruire le sel dont la clé de la PII est dérivée. Mais le chemin qui permet
+de *corriger une faute de frappe dans un nom* (`IdentityService.provide`) re-chiffre sous le sel
+**courant** et écrit par un `UPDATE persons` direct, le rôle applicatif détenant
+`GRANT UPDATE (civil_identity_encrypted, …)` depuis 014. **Sans mur, le premier usage ordinaire
+qui suit un effacement RÉ-IDENTIFIE la personne** — aucun attaquant requis, le logiciel le fait
+seul en croyant bien faire. Le cas décisif est l'**adulte en self-service**, dont le compte reste
+actif. C'est §3.1 dans sa forme la plus nue (« et la v2 de cet endpoint ? ») et la leçon ④ (une
+porte n'arrive jamais avant son mur) : **le mur d'inscription précède ou accompagne la porte
+d'effacement, dans le même lot, en base. Un `if` dans un service = plan REFUSÉ.**
+
+**② « EFFACÉ » EST UN ÉTAT QUE LA BASE DÉCLARE — jamais une conclusion tirée d'un échec de
+déchiffrement.** Le dépôt possède deux détecteurs d'intégrité qui rendent bruyant, exprès, tout
+chiffré qui ne s'ouvre plus : la re-dérivation d'année (`decryptCivilIdentity`) et — bien plus
+grave — **la parade P4** (`resolveVerifiedAddress`), celle qui existe pour qu'un message de
+l'écosystème n'atteigne jamais un inconnu. **Un effacé n'est pas une corruption** : neutraliser
+une empreinte ou re-chiffrer un numéro ferait donc hurler la parade P4 sur des actes
+parfaitement légitimes. Le risque n'est pas le bruit, c'est ce que le bruit provoque : **le
+prochain auteur assouplira la comparaison pour retrouver le silence** — leçon ⑦ transposée d'une
+garde CI à un détecteur. Donc : un **registre d'effacement append-only**, un verdict `ERASED`
+**distinct** de `INTEGRITY_VIOLATION` sur TOUS les chemins de lecture, et le principe de la
+leçon ⑨ — **on INTERROGE la référence, on ne DEVINE pas l'état en trébuchant dessus.**
+
+📌 **Corollaire d'ordre, vérifié, à trois raisons indépendantes** : on **RÉVOQUE d'abord, on
+neutralise ensuite.** (a) une revendication laissée `ACTIVE` sous une clé neutralisée
+**bloquerait toute rotation d'empreinte à jamais** (P0115, 025) ; (b) une révoquée n'occupe plus
+l'unicité mondiale (index partiel, 006) ; (c) `resolve_notification_address` (009) rend `NULL`
+pour toute revendication non `ACTIVE`, **donc la parade P4 n'est jamais atteinte** et ne crie
+pas. Le prix à payer est connu : une révoquée est **figée** (P0103, 006), la neutralisation exige
+donc une porte contrôlée — jamais une suspension de triggers sur un chemin en ligne (leçon ⑥ :
+`scripts/rotate-phone-hmac.ts` a le droit de suspendre parce qu'il est un acte d'exploitation
+**service arrêté**, sous l'owner ; un `erase_person()` appelable par le rôle applicatif ne l'a
+pas).
+
 ---
 
 ## 4. Git Workflow

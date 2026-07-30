@@ -360,6 +360,20 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 | 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
+| 5 | **`R` — la rétention EFFECTIVE des sauvegardes**, c'est-à-dire le **MAXIMUM de TOUTES les couches** (snapshots d'hébergeur, versioning/corbeille d'un stockage objet — souvent actifs par défaut, sauvegarde du serveur de sauvegardes, copies manuelles), **jamais le paramètre du script**. Sans elle, « effacé » ne peut pas être daté : la crypto-destruction n'est effective qu'à **J+R** (CLAUDE.md §3.14, `docs/ops/SAUVEGARDES.md` §2/§3bis). **Statut au 30/07/2026 : NON RÉPONDABLE et assumée comme telle — Kevin change d'hébergeur, le projet ayant pris une autre dimension.** | Kevin (hébergeur) |
+
+> **⚠️ Un CHANGEMENT D'HÉBERGEUR est le pire moment de vie de `R`, et il faut le dire avant, pas
+> après.** Il ne le déplace pas : il l'**augmente** et le **dédouble**, par deux couches que
+> personne n'inventorie parce qu'elles ne sont pas des sauvegardes dans la tête de qui les crée —
+> (1) la **copie de migration** elle-même (le dump qu'on transporte, celui qu'on garde « le temps
+> de vérifier que tout marche »), (2) les **snapshots de l'ancien hébergeur**, qui **survivent
+> régulièrement à la résiliation du service** et échappent par construction à tout script de
+> purge, puisqu'on n'y a plus accès. Conséquences de conception, valables **immédiatement** :
+> le LOT effacement se construit avec `R` **paramétré et obligatoire** (patron déjà en place :
+> `BACKUP_RETENTION_DAYS`, le script refuse de courir sans elle) · **aucun délai chiffré ne
+> s'affiche à une famille** avant que la valeur effective soit connue · la **destruction prouvée
+> des données chez l'ancien hébergeur** est une ligne de contrôle de la bascule, pas une
+> intention. C'est l'application directe de §3.11 : on paramètre, on ne devine pas.
 
 > **⚠️ Reclassement du 15/07/2026 (Kevin) — mineurs & émancipation ne sont PLUS des inconnues
 > à obtenir, mais des DÉCISIONS assumées.** Kevin constate qu'**aucun cadre juridique clair
@@ -403,3 +417,28 @@ paramètre (config/env), on ne fige pas une hypothèse.
     15/07/2026) — régime volontaire du niveau des standards internationaux, minimisation,
     consentement tracé, effacement par crypto-destruction ; cf. CLAUDE.md §3.14. Vaut pour
     toute donnée personnelle, pas seulement les mineurs.
+14. **LE RÉGIME D'EFFACEMENT** (Kevin, 21 et 30/07/2026 — complet, ne pas rouvrir) :
+    - **Qui déclenche** : effacer un **MINEUR** est un **acte STAFF** sur base légale — **ni le
+      parent, ni l'enfant** ; l'**adulte / émancipé s'efface lui-même** (self-service). Un seul
+      verdict en base, **deux chemins**, donc **deux fonctions** (§8.2 : le NOM de la fonction
+      EST l'acteur).
+    - **Le demandeur CHOISIT son délai**, et le choix lui est présenté avec ses conséquences :
+      soit **« ma décision s'applique maintenant »**, l'**irréversibilité étant explicitement
+      énoncée** avant de valider, soit un **délai de réflexion de 7 jours**. La valeur du délai
+      est un **paramètre** (patron `emancipation_policy` : table de référence, lecture qui échoue
+      FERMÉ, migration signée) — **jamais un littéral dans du code**.
+    - **Notification 48 h avant l'exécution** sur le chemin différé. Elle n'exige **aucune
+      plomberie neuve** : un `event_type` de plus et **une ligne de données** dans
+      `event_channel_policy` (009), déposée dans le compte via `account_notifications` si aucun
+      canal externe n'est permis. Y ajouter une couture serait une **4ᵉ couture** (§3.9), donc
+      refusée.
+    - **L'effacement d'un DERNIER RESPONSABLE est REFUSÉ tant qu'un autre responsable n'a pas
+      été désigné.** ⚠️ **Ce mur existe déjà** : c'est P0114, différé au commit
+      (`017_person_responsibilities.sql`) — il tombe de lui-même si l'effacement clôt les liens
+      de responsabilité, et le remplacement atomique est déjà prévu par `end_responsibility()`.
+      **Conséquence assumée, à ne pas découvrir plus tard** : un adulte **seul** responsable d'un
+      mineur **ne peut pas s'effacer seul** — désigner le remplaçant est un **acte STAFF**, ce
+      qui est cohérent avec « dans un conflit de garde, le système ne tranche pas à la place d'un
+      juge » (§8.1).
+    - **`R` reste une inconnue ouverte** (§9 n°5) : le régime se construit, la **promesse datée**
+      ne s'affiche pas encore.
