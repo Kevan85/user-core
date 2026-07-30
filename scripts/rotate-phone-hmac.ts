@@ -37,9 +37,14 @@ export interface RotationReport {
 }
 
 // La liste EXACTE des triggers que cette procédure a relus et assume de
-// suspendre (006/018/…). Un trigger de plus sur la table = refus du script :
+// suspendre (006/018/026). Un trigger de plus sur la table = refus du script :
 // mettre à jour cette liste EST l'acte de relecture.
+// Relecture 026 (erasure_wall) : mur d'INSERT — une personne effacée ne
+// re-déclare pas de ligne. La rotation n'insère rien (UPDATE de lignes
+// ACTIVE uniquement), et les revendications d'une personne effacée sont
+// révoquées, donc hors du périmètre re-haché : suspension sans effet.
 const KNOWN_TRIGGERS = [
+  'trg_phone_claims_erasure_wall',
   'trg_phone_claims_guard_insert',
   'trg_phone_claims_guard_update',
   'trg_phone_claims_no_delete',

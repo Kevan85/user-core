@@ -30,6 +30,8 @@ export const DB_ERROR = {
   ORPHANED_DEPENDENT: 'P0114',
   /** Rotation d'empreinte incomplète : la référence ne bascule pas avant la fin du re-hachage (025). */
   ROTATION_INCOMPLETE: 'P0115',
+  /** Personne effacée — toute ré-identification est interdite (026). */
+  PERSON_ERASED: 'P0116',
 } as const;
 
 export type DbErrorCode = (typeof DB_ERROR)[keyof typeof DB_ERROR];

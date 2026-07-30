@@ -47,6 +47,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '023_registry_actor_proof.sql',
       '024_reference_rotation_idempotency.sql',
       '025_hmac_rotation_wall.sql',
+      '026_person_erasures.sql',
     ]);
   });
 
