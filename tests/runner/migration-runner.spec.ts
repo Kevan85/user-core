@@ -50,6 +50,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '026_person_erasures.sql',
       '027_erasure_read_walls.sql',
       '028_erase_person.sql',
+      '029_erasure_notice.sql',
     ]);
   });
 
