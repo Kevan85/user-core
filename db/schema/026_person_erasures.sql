@@ -225,6 +225,19 @@ BEGIN
         RAISE EXCEPTION 'person_erasures : exécution avant l''échéance — la fenêtre de réflexion court encore'
           USING ERRCODE = 'P0102';
       END IF;
+      -- L'ordre doctrinal (révoquer PUIS neutraliser PUIS achever) cesse
+      -- d'être une promesse du corps d'erase_person() : COMPLETED avec une
+      -- revendication vivante est NON REPRÉSENTABLE. Sans ce mur, cet état
+      -- ferait avorter une rotation d'empreinte entière sur un message
+      -- « intégrité en défaut » — qui serait FAUX. PENDING compte : une
+      -- vérification en vol pourrait encore l'activer (le mur 026 ne couvre
+      -- que l'INSERT).
+      IF EXISTS (SELECT 1 FROM phone_claims c
+                  WHERE c.person_id = OLD.person_id
+                    AND c.status IN ('PENDING', 'ACTIVE')) THEN
+        RAISE EXCEPTION 'person_erasures : une revendication vivante subsiste — révoquer d''abord, achever ensuite'
+          USING ERRCODE = 'P0102';
+      END IF;
       NEW.completed_at := now();
     END IF;
   ELSE

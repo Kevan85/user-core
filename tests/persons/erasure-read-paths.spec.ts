@@ -297,7 +297,16 @@ describe('effacement — les chemins de lecture déclarent (027)', () => {
   });
 
   describe('les lectures d’adresse se taisent — le complément à la raison (c)', () => {
-    test('read_phone_encrypted et resolve_notification_address : NULL pour une effacée, même sur une revendication ACTIVE', async () => {
+    // COMPLETED + revendication vivante est NON REPRÉSENTABLE (mur 026,
+    // étape 3) : la fixture suit l'ordre doctrinal — révoquer, puis achever.
+    async function revokeClaim(claimId: string): Promise<void> {
+      await owner.query(
+        `UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'ADMIN' WHERE id = $1`,
+        [claimId],
+      );
+    }
+
+    test('read_phone_encrypted : une REVOKED ordinaire rend encore sa valeur ; celle d’une effacée rend NULL', async () => {
       const { accountId, personId } = await adult();
       const claimId = await activeClaim(personId, nextPhone());
 
@@ -309,6 +318,16 @@ describe('effacement — les chemins de lecture déclarent (027)', () => {
       );
       expect(alive.direct).not.toBeNull();
       expect(alive.active).not.toBeNull();
+
+      await revokeClaim(claimId);
+      // Le contraste qui prouve le mur : révoquée mais NON effacée, la
+      // lecture directe (sans filtre de statut) rend ENCORE la valeur.
+      const revoked = firstRow(
+        await app.query<{ direct: string | null }>('SELECT read_phone_encrypted($1) AS direct', [
+          claimId,
+        ]),
+      );
+      expect(revoked.direct).not.toBeNull();
 
       await eraseSelf(accountId);
       const silent = firstRow(
@@ -324,6 +343,7 @@ describe('effacement — les chemins de lecture déclarent (027)', () => {
     test('resolveVerifiedAddress (requireActive=false, le chemin découvert) : NO_ADDRESS, et la parade P4 ne crie pas', async () => {
       const { accountId, personId } = await adult();
       const claimId = await activeClaim(personId, nextPhone());
+      await revokeClaim(claimId);
       await eraseSelf(accountId);
 
       const resolution = await resolveVerifiedAddress(app, crypto, claimId, false);

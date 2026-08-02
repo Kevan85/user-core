@@ -269,9 +269,12 @@ export class EmancipationService {
       return false;
     }
     if (row.erased) {
-      // État DÉCLARÉ par la base (027), jamais inféré d'un blob absent : une
-      // personne effacée ne s'émancipe pas par ce chemin — refus silencieux,
-      // comme tout verdict externe de ce flux.
+      // GARDE REMISE À L'ENDROIT (leçon ⑩) : la branche suivante est
+      // PERMISSIVE — « blob NULL → true, le mur d'année tranche seul ». Or
+      // après effacement le blob EST NULL : sans ce refus, une personne
+      // effacée tombait dans la branche qui autorise, et seul le mur P0116
+      // aval l'aurait rattrapée — par une exception brute au lieu d'un refus
+      // propre. L'état est DÉCLARÉ par la base (027), jamais inféré.
       return false;
     }
     if (row.civil_identity_encrypted === null || row.birth_year === null) {
