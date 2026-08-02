@@ -14,6 +14,7 @@ restauration (acte majeur, avec Kevin).
 | Tourner une clé (procédure par trousseau, fenêtre HMAC) | [ROTATION.md](ROTATION.md) |
 | Les secrets : inventaire des 10, injection sans SDK, murs de boot | [SECRETS.md](SECRETS.md) |
 | Sauvegardes, rétention R, restauration jouée, H1 (R = max des couches) | [SAUVEGARDES.md](SAUVEGARDES.md) |
+| Effacement : le circuit, les compteurs du worker, les résidus assumés, J+R | [EFFACEMENT.md](EFFACEMENT.md) |
 
 Trois faits que tout lecteur d'ici doit avoir en tête :
 

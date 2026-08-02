@@ -64,3 +64,20 @@ Renvoi : [SAUVEGARDES.md §4](SAUVEGARDES.md). À relire AVANT le geste :
 **toute restauration remonte le temps des registres append-only** — preuves, révocations
 et consentements postérieurs au dump cessent d'exister. C'est un acte d'incident majeur
 **décidé avec Kevin**, jamais un outil de correction.
+
+**⚠️ Depuis le LOT effacement : une restauration RÉ-INTRODUIT des personnes effacées.**
+Tout effacement `COMPLETED` entre la date du dump et l'incident redevient une personne
+lisible — sel d'origine, blob, empreintes, profil. Et le registre `person_erasures`
+restauré **ne connaît plus ces effacements** : ils ne se « rejoueront » pas seuls.
+La liste de contrôle de la restauration gagne donc deux lignes :
+
+1. **AVANT d'écraser quoi que ce soit** : extraire de la base mourante (si elle est
+   lisible) les lignes `person_erasures` en `COMPLETED` postérieures à la date du dump —
+   à défaut, reconstituer la liste depuis les journaux du worker (`effacement: N
+   exécutés`, UUID de demande dans les traces de blocage) ;
+2. **APRÈS restauration** : rejouer chaque effacement de cette liste (demande staff +
+   exécution — les fonctions de 026/028 sont idempotentes et l'acte est re-tracé).
+
+**Si la liste est irrécupérable, la promesse d'effacement est ROMPUE pour la fenêtre**
+(dump → incident) : c'est un incident de données personnelles à part entière — il se
+déclare (cas n°1), il ne se tait pas.

@@ -71,6 +71,20 @@ SECRETS.md §4) :
 3. au LOT effacement, la phrase écrite à Kevin porte la valeur **effective** (le maximum
    des couches), jamais le paramètre du script sur parole.
 
+**⚠️ Changement d'hébergeur (statut 30/07/2026 : en cours, `R` NON RÉPONDABLE — CDC §9
+n°5).** La bascule AJOUTE deux couches que personne n'inventorie spontanément : la **copie
+de migration** elle-même (le dump transporté, gardé « le temps de vérifier ») et les
+**snapshots de l'ancien hébergeur**, qui survivent régulièrement à la résiliation et
+échappent par construction à tout script de purge. **La destruction prouvée des données
+chez l'ancien hébergeur est une ligne de contrôle de la bascule**, pas une intention.
+
+**⚠️ Ce qu'un dump contient TOUJOURS, même après un effacement** (LOT effacement, résidu
+F1 — détail : [EFFACEMENT.md §4](EFFACEMENT.md)) : l'empreinte de la ligne d'une personne
+effacée survit dans trois registres append-only (`possession_proof_refusals`,
+`program_invitations`, `program_invitation_refusals`). **Le test de présence « dump +
+trousseau HMAC » est donc BORNÉ par l'effacement, pas FERMÉ** — la règle « jamais un dump
+au même endroit que le trousseau » (§3) ne faiblit pas après un effacement.
+
 ## 4. La restauration se JOUE, elle ne se documente pas
 
 Le cycle réel — dump → base neuve → migrations vérifiées (versions **et** checksums,
