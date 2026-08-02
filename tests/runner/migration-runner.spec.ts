@@ -49,6 +49,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '025_hmac_rotation_wall.sql',
       '026_person_erasures.sql',
       '027_erasure_read_walls.sql',
+      '028_erase_person.sql',
     ]);
   });
 
