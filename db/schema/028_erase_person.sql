@@ -238,10 +238,17 @@ BEGIN
    WHERE person_id = er.person_id
      AND status IN ('PENDING', 'ACTIVE');
 
-  -- 3. NEUTRALISER ensuite : les deux colonnes de valeur de TOUTES ses
-  --    revendications (empreinte déterministe comprise — c'est elle qui
-  --    permettrait de tester la présence d'un numéro dans un dump). Tirage
-  --    non déterministe : jamais un HMAC valide, aucune collision possible.
+  -- 3. NEUTRALISER ensuite : les deux colonnes de valeur de ses revendications
+  --    (phone_claims, et LUI SEUL). ⚠️ LE TEST DE PRÉSENCE (dump + trousseau
+  --    HMAC → « ce numéro était-il là ? ») EST BORNÉ, PAS FERMÉ : la même
+  --    empreinte survit, délibérément, dans TROIS registres strictement
+  --    append-only laissés intacts — possession_proof_refusals.phone_hmac
+  --    (007), program_invitations.phone_hmac (012) et
+  --    program_invitation_refusals.phone_hmac (012). Percer un forbid_update
+  --    de registre coûterait plus qu'il ne rend ; le résidu est ASSUMÉ et
+  --    documenté au runbook (docs/ops/SAUVEGARDES.md — lot effacement,
+  --    étape runbooks), qui en hérite. Tirage non déterministe : jamais un
+  --    HMAC valide, aucune collision possible.
   UPDATE phone_claims
      SET phone_hmac = 'ERASED:' || gen_random_uuid(),
          phone_encrypted = 'ERASED:' || gen_random_uuid()
@@ -249,6 +256,15 @@ BEGIN
 
   -- 4. La crypto-destruction : blob à NULL (les dumps FUTURS) ET sel neuf
   --    (les dumps PASSÉS) — aucun des deux seul ne suffit (en-tête).
+  --    ⚠️ Le tirage SQL ne contredit PAS la doctrine de 016 (« jamais un
+  --    random() qui fabrique des identifiants devinables ») : 016 vise
+  --    random(), non cryptographique, et les IDENTIFIANTS PUBLICS.
+  --    gen_random_uuid() tire de la source forte de PostgreSQL, et un sel de
+  --    remplacement n'a d'autre charge que d'être différent et non devinable
+  --    (244 bits d'entropie sur 256 — les 12 bits de version/variante d'UUID
+  --    sont fixes). Deux migrations qui semblent se contredire sans se
+  --    répondre laisseraient le prochain lecteur choisir sa doctrine au
+  --    hasard — d'où cette note.
   UPDATE persons
      SET erasure_salt = decode(
            replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
