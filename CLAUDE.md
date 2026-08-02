@@ -220,12 +220,21 @@ discutent pas) : les mots-clés SQL s'écrivent en **MAJUSCULES** (`ORDER BY`, j
 `pg_catalog` / `pg_class`, et ils ne définissent aucun schéma.
 
 ⚠️ **Le motif A attrape des mots FRANÇAIS ordinaires — c'est le prix, pas un défaut.** `cart`
-vit dans « **cart**e SIM » et « é**cart** » ; `order` vit dans « acc**order** ». Trois fois déjà,
-la garde a rougi sur de la prose parfaitement légitime. **La réponse est TOUJOURS de reformuler
-le commentaire, JAMAIS d'affaiblir le motif** : la forme « évidente » `\border\b` **laisserait
-passer `order_id`** — en regex, `_` est un caractère de mot, donc `order_id` n'a pas de
-frontière après `order` (vérifié). On perdrait la colonne qu'on voulait interdire pour gagner
-le droit d'écrire « accorder ». **Une garde se contourne par la plume, jamais par le motif.**
+vit dans « **cart**e SIM » et « é**cart** » ; `order` vit dans « acc**order** » ; et `tenant` vit
+dans « main**tenant** » — celui-là a mordu au LOT effacement, sur la phrase même qui énonce le
+choix de Kevin (« ma décision s'applique **maintenant** » → reformulée en « tout de suite »).
+**Cinq fois déjà**, la garde a rougi sur de la prose parfaitement légitime. **La réponse est
+TOUJOURS de reformuler le commentaire, JAMAIS d'affaiblir le motif** : la forme « évidente »
+`\border\b` **laisserait passer `order_id`** — en regex, `_` est un caractère de mot, donc
+`order_id` n'a pas de frontière après `order` (vérifié). On perdrait la colonne qu'on voulait
+interdire pour gagner le droit d'écrire « accorder ». **Une garde se contourne par la plume,
+jamais par le motif.**
+
+✅ **Et la 6ᵉ morsure a enfin démontré l'argument de juillet** : au même lot, le motif a refusé un
+**IDENTIFIANT** — la contrainte `chk_..._effective_ordered`, renommée `chk_..._chronology`.
+C'était la **première fois** que la garde attrapait du **code** et non de la prose. L'arbitrage de
+2026 (« le motif attrape des mots français, on garde la forme large ») était donc juste : la
+tolérance sur la prose **achetait** cette prise-là.
 
 Les rôles sont transverses (`ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où
 User-Core sait ce qu'est un enseignant, il est mort.
@@ -526,6 +535,55 @@ attend). Ce qui est acquis, et qui ne se redémontre plus :
   **remonte le temps des registres append-only** — acte d'incident majeur décidé avec Kevin,
   jamais un outil de correction.
 
+### 8.3 Ce que le LOT effacement a gravé (livré le 02/08/2026, migrations `026`→`029`)
+
+Le LOT 5 avait livré **le crochet** ; `014` disait lui-même que « *« effaçable » décrit une
+capacité de conception, pas une fonction livrée* ». **Ce n'est plus vrai : la porte existe.** Le
+régime est au CDC §10 n°14, les deux murs techniques au §3.14bis ; ici, ce qui ne se redémontre
+plus.
+
+- **La crypto-destruction, DEUX gestes, et il faut les deux** : le blob passe à `NULL` (cela
+  retire le chiffré des dumps **FUTURS**) **et** le sel est remplacé par un tirage neuf (cela
+  rend irrécupérable le chiffré des dumps **PASSÉS**). **Aucun des deux seul ne suffit.**
+- **Les murs sont arrivés AVANT la porte, étape par étape** (leçon ④ appliquée au calendrier) :
+  P0116 et le registre à l'étape 1, le verdict `ERASED` à l'étape 2, la destruction seulement à
+  l'étape 3. Le lot est resté **inerte en production** pendant ses deux premières étapes, exprès.
+- **La fenêtre de réflexion VIT** : P0116 n'est armé que sur `COMPLETED`. Un mur qui mordait dès
+  la *demande* aurait détruit la rétractation voulue par Kevin — une personne qui perd sa ligne
+  pendant la fenêtre n'aurait plus pu revenir en arrière. **Un mur trop large tue ce qu'il garde.**
+- **Les deux bouts de la fenêtre sont murés** : rétractation refusée après l'échéance, **et
+  exécution refusée avant** — un worker pressé ne détruit pas la réflexion par l'autre bout.
+- **Les portes n'ouvrent que la FORME EXACTE de la destruction, sous effacement dû** — et les
+  colonnes qu'elles ouvrent sont **hors des `GRANT` de colonne** du rôle applicatif : **deux
+  verrous indépendants**, prouvés dans les deux sens.
+- **`révoquer → neutraliser` est MURÉ, pas promis** (`COMPLETED` refuse toute revendication
+  vivante) — sinon une `ACTIVE` sous clé neutralisée **bloquerait toute rotation à jamais**
+  (P0115) et la rotation avorterait sur un message d'intégrité **faux**.
+- **Un mur n'est pas une panne** : les compteurs `bloqués` (P0114, attendu) et `en PANNE` sont
+  **distincts**, avec contrôle négatif. Un refus métier connu ne doit jamais servir d'abri à un
+  incident réel.
+- **La liste MONTRÉE = la liste AGIE** (`SKIPPED_ERASED` **tracé**) : un ayant droit effacé
+  disparaissait de l'affichage mais recevait quand même son lien — un parent serait devenu le
+  responsable légal d'une personne qu'on ne lui a jamais montrée.
+- **Le refus du dernier responsable n'a PAS été recodé** : P0114 existait déjà, il a été **testé**
+  (leçon ③, 3ᵉ fois). La façade rend le refus **à la demande**, pour qu'un mur différé ne se
+  manifeste jamais en panne muette et répétée dans un worker.
+- **Ce qui survit est ÉCRIT** (`docs/ops/EFFACEMENT.md` §4) : `birth_year`, `public_identifier`,
+  `secret_hash`, `provider_ref` **chez le fournisseur** (couche externe), le graphe familial, et
+  **`phone_hmac` dans trois registres append-only** → **le test de présence d'un numéro est BORNÉ,
+  PAS FERMÉ**. Un tableau de vérité incomplet est un mensonge poli.
+- 📌 **Dette `E-1`, ouverte** : les **droits d'accès restent `ACTIFS`** après effacement — un
+  programme qui demande « cette personne a-t-elle accès ? » reçoit **OUI**. Arbitrage Kevin ; point
+  de greffe déjà écrit dans l'en-tête d'`erase_person()`.
+- ⚠️ **H1 — la SEULE garantie de ce lot qui ne vit pas en base** : l'énoncé d'irréversibilité du
+  mode `IMMEDIATE` est porté par l'**interface**. La base ne peut pas vérifier qu'un humain a lu
+  une phrase, et un paramètre `p_acknowledged` **ne prouverait rien** (§8.2). Elle est **nommée à
+  ses quatre emplacements** — car dans ce dépôt tout invariant vit en base, et **une exception tue
+  se lit comme une protection**.
+- **9ᵉ garde mécanique** : `.githooks/commit-msg` refuse toute attribution d'outil dans un message
+  de commit (§4). Les huit motifs lisent des **chemins** ; aucun ne lisait un **message** — la
+  règle tenait sur la relecture, c'est-à-dire sur rien (leçon ①).
+
 ## 9. Où est quoi
 
 ```
@@ -543,7 +601,10 @@ user-core/
 │       ├── SAUVEGARDES.md       ← R appartient à Kevin ; « effacé » = « effacé à J+R » ;
 │       │                           dump + trousseau HMAC = toute la base
 │       ├── DEPLOIEMENT.md       ← migrations PUIS boot ; le service ne migre jamais au démarrage
-│       └── INCIDENT.md          ← fuite de PII, compromission de clé, révocation, restauration
+│       ├── INCIDENT.md          ← fuite de PII, compromission de clé, révocation, restauration
+│       │                           (dont : une restauration RÉ-INTRODUIT des effacés)
+│       └── EFFACEMENT.md        ← le circuit, les deux compteurs du worker, et le TABLEAU DES
+│                                   RÉSIDUS (test de présence BORNÉ, pas fermé ; droits ACTIFS)
 └── (code : posé par l'Exécuteur, plan par plan — rien sans validation Auditeur)
 ```
 
@@ -635,3 +696,27 @@ fermée n'invente aucune détection : elle **inverse la charge**. `productionWal
 relâche que sur `development` et `test` ; tout le reste arme. **Le pire cas devient un boot
 refusé bruyamment sur un poste mal configuré, jamais une production silencieusement nue.**
 Corollaire : *si un oubli rend le système plus permissif, la garde est à l'envers.*
+
+**⑪ Une garde peut échouer en ne se LANÇANT pas — la troisième forme de la leçon ②.**
+`.githooks/pre-commit` était en mode `100644`. Sous Windows il fonctionnait (git y ignore le bit
+d'exécution) et il a **réellement bloqué des commits** ; sur tout clone POSIX, git **ignore un
+hook non exécutable** — **les huit gardes ne se seraient jamais lancées au commit**, et seule la
+CI aurait rattrapé, c'est-à-dire trop tard pour ce que le hook prévient. §4 affirmait que le hook
+« survit aux machines neuves » : la phrase n'était vraie que sur la machine où l'on regardait.
+La leçon ② connaissait deux formes — une garde qui **tourne sans bloquer** (les 3 checks non
+requis), une garde jouée sur le **mauvais instantané** (`--cached` avant `git add`). En voici une
+troisième, et la plus discrète : **une garde qui ne DÉMARRE pas.** Aucun symptôme, aucun message,
+et une preuve d'efficacité rassurante sur le poste de celui qui la teste.
+⚠️ **Le motif général, à porter au prochain chantier** : *une garde a trois états, pas deux —
+absente, présente-mais-inerte, armée. Vérifier la présence ne suffit pas (leçon ⑨) ; vérifier
+qu'elle a bloqué UNE fois, ici, ne suffit pas non plus.* Demander : **sur quelle machine, et
+qu'est-ce qui la déclenche ?**
+
+**⑫ « Effacé » n'est pas « disparu » — et un tableau de vérité incomplet est un mensonge poli.**
+L'en-tête d'`erase_person()` affirmait neutraliser l'empreinte « *— c'est elle qui permettrait de
+tester la présence d'un numéro dans un dump* ». Mesuré : le geste ne touche qu'**une** table sur
+quatre ; la même empreinte survit dans **trois registres append-only**, laissés intacts
+délibérément. La décision était bonne ; **la phrase était fausse, à l'endroit exact où le prochain
+auteur irait chercher la vérité.** D'où la règle : **tout lot qui détruit publie la liste de ce
+qu'il NE détruit PAS**, et cette liste est exhaustive ou elle ne sert à rien — elle a dû être
+complétée deux fois (les registres d'empreintes, puis les **droits d'accès restés ACTIFS**).
