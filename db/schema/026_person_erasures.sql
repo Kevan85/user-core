@@ -376,6 +376,13 @@ SET search_path = pg_catalog, public;
 -- L'ADULTE / ÉMANCIPÉ, sur SA personne. Un compte ACTIF est exigé : par
 -- P0113, son détenteur n'est l'ayant droit actif de personne — c'est bien un
 -- majeur qui agit seul.
+-- ⚠️ IMMEDIATE détruit SANS DÉLAI. L'énoncé d'irréversibilité à la personne
+-- (CDC §10 n°14) est une garantie de FAÇADE : la base ne peut pas vérifier
+-- qu'un humain a lu une phrase, et un paramètre « p_acknowledged » ne
+-- prouverait rien (023 : une preuve demandée en argument n'en est pas une).
+-- TOUT NOUVEL APPELANT de cette fonction — job, script, endpoint d'admin,
+-- v2 — doit porter cet énoncé lui-même : la base ne le tiendra pas à sa
+-- place. Garantie non murable, donc NOMMÉE ici, à son emplacement.
 CREATE FUNCTION request_erasure_self(p_account_id uuid, p_mode erasure_mode)
 RETURNS TABLE (verdict text, erasure_id uuid)
 LANGUAGE plpgsql

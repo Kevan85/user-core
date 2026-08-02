@@ -124,8 +124,11 @@ async function bootstrap(): Promise<void> {
     ),
   );
   // LOT effacement — la façade : verdicts propres, throttle dédié (même
-  // famille de budget que l'inscription), zéro invariant (tout est en base,
-  // 026-029).
+  // famille de budget que l'inscription — les surfaces sont donc COUPLÉES :
+  // régler AUTH_REGISTER_THROTTLE_* déplace aussi ce budget ; le jour où
+  // l'une doit bouger seule, c'est une variable dédiée, pas une surprise).
+  // Les invariants sont en base (026-029) — à l'exception NOMMÉE de
+  // l'énoncé d'irréversibilité (H1, contrôleur).
   const erasureService = new ErasureService(
     assembly.pool,
     new LoginThrottle(

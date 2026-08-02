@@ -62,6 +62,11 @@ export class ErasureController {
     }
     // CDC §10 n°14 : l'irréversibilité est énoncée AVANT de valider. La
     // façade exige que le client l'ait explicitement portée à la personne.
+    // ⚠️ C'est la SEULE garantie de ce lot qui repose sur la façade seule —
+    // et elle est ici parce qu'elle ne peut pas être ailleurs : la base ne
+    // vérifie pas qu'un humain a lu une phrase (H1, en-tête de
+    // request_erasure_self dans 026). Un appelant qui contourne cette façade
+    // reprend cette charge à son compte.
     if (mode === 'IMMEDIATE' && body.acknowledgeIrreversible !== true) {
       throw new BadRequestException(
         "l'effacement immédiat est IRRÉVERSIBLE — le champ acknowledgeIrreversible: true est requis après que la personne en a été informée",
