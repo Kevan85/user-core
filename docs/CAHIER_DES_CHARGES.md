@@ -360,7 +360,7 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 | 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
-| 5 | **`R` — la rétention EFFECTIVE des sauvegardes**, c'est-à-dire le **MAXIMUM de TOUTES les couches** (snapshots d'hébergeur, versioning/corbeille d'un stockage objet — souvent actifs par défaut, sauvegarde du serveur de sauvegardes, copies manuelles), **jamais le paramètre du script**. Sans elle, « effacé » ne peut pas être daté : la crypto-destruction n'est effective qu'à **J+R** (CLAUDE.md §3.14, `docs/ops/SAUVEGARDES.md` §2/§3bis). **Statut au 30/07/2026 : NON RÉPONDABLE et assumée comme telle — Kevin change d'hébergeur, le projet ayant pris une autre dimension.** | Kevin (hébergeur) |
+| 5 | **`R` — la rétention EFFECTIVE des sauvegardes**, c'est-à-dire le **MAXIMUM de TOUTES les couches** (snapshots d'hébergeur, versioning/corbeille d'un stockage objet — souvent actifs par défaut, sauvegarde du serveur de sauvegardes, copies manuelles), **jamais le paramètre du script**. Sans elle, « effacé » ne peut pas être daté : la crypto-destruction n'est effective qu'à **J+R** (CLAUDE.md §3.14, `docs/ops/SAUVEGARDES.md` §2/§3bis). **Statut au 30/07/2026 : NON RÉPONDABLE et assumée comme telle — Kevin change d'hébergeur, le projet ayant pris une autre dimension.** ⚠️ **Position de Kevin, 02/08/2026 : « je ne ferai pas ce choix par précipitation » — attente ASSUMÉE, sans date et SANS COÛT DE RETARD.** Le LOT effacement est livré et fusionné sans elle : `R` est un paramètre obligatoire (`BACKUP_RETENTION_DAYS`, le script refuse de courir sans), la destruction fonctionne à l'identique, et **aucune date d'effacement effectif n'est exposée** (l'API ne rend que la fin de fenêtre de rétractation, raison gravée au point d'exposition). **Ce qui attend n'est pas du code : c'est UNE PHRASE** — le droit de dater la promesse. Les quatre questions à poser à l'hébergeur **au moment de comparer les offres** sont listées en `docs/ops/EFFACEMENT.md` §3 et `SAUVEGARDES.md` §3bis. | Kevin (hébergeur) |
 
 > **⚠️ Un CHANGEMENT D'HÉBERGEUR est le pire moment de vie de `R`, et il faut le dire avant, pas
 > après.** Il ne le déplace pas : il l'**augmente** et le **dédouble**, par deux couches que
@@ -442,3 +442,24 @@ paramètre (config/env), on ne fige pas une hypothèse.
       juge » (§8.1).
     - **`R` reste une inconnue ouverte** (§9 n°5) : le régime se construit, la **promesse datée**
       ne s'affiche pas encore.
+    - ✅ **LIVRÉ ET FUSIONNÉ le 02/08/2026** (PR #26, migrations `026`→`029`) — ce que le régime
+      est devenu en base : CLAUDE.md §8.3, les deux murs §3.14bis, le mode d'emploi
+      `docs/ops/EFFACEMENT.md`. **Le chemin STAFF ne connaît que `IMMEDIATE`** : mesuré, un délai
+      y serait ni annonçable (la personne n'a pas de compte où déposer le préavis) ni rétractable
+      (se rétracter exige de se connecter) — *un délai qui ne peut être ni annoncé ni rétracté
+      n'est pas une fenêtre de réflexion, c'est une attente.*
+    - 📌 **`E-1`, question produit OUVERTE portée par Kevin** — *que doit apprendre un programme
+      quand une personne qu'il connaît est effacée ?* **État actuel, mesuré : il n'apprend rien.**
+      Les droits d'accès appartiennent à la PERSONNE depuis `019` et **restent `ACTIFS`** après
+      l'effacement : un programme qui demande « cette personne a-t-elle accès ? » reçoit **OUI**.
+      Ce n'est pas un oubli — le schéma **refuse de préjuger** de l'arbitrage. Trois issues
+      possibles (couper les droits · les laisser · émettre un fait sortant sans motif), et la
+      réponse doit être **instruite avec le contrat de comptes d'Organization-Core**, dont la
+      surface de confidentialité (§12) traite exactement ce sujet. Point de greffe technique déjà
+      écrit dans l'en-tête d'`erase_person()` (`028`).
+    - ⚠️ **Ce que ce régime NE promet PAS, et qui doit être dit tel quel à une famille** : le nom,
+      la date de naissance et le numéro sont détruits ; **une empreinte technique du numéro
+      survit** dans trois registres append-only (journal des refus, registres d'invitations). Le
+      **test de présence** d'un numéro est donc **BORNÉ, pas FERMÉ** — il exige de détenir *à la
+      fois* le trousseau d'empreinte et un numéro précis, et ne rend qu'un oui/non. La contrepartie
+      est écrite depuis le LOT prod : **le trousseau ne vit jamais avec les sauvegardes.**
