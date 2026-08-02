@@ -367,6 +367,33 @@ describe("effacement — le régime en base (026)", () => {
       expect(row.mode).toBe('IMMEDIATE');
     });
 
+    test('staff : DELAYED est refusé (G1) — un délai ni annonçable ni rétractable n’est pas une fenêtre', async () => {
+      const staff = await createAccount(app, nextIdentifier(), { role: 'PLATFORM_STAFF' });
+      const responsible = await adult();
+      const minorId = await attachMinor(responsible.accountId);
+      const co = await adult();
+      await app.query('SELECT * FROM open_responsibility_by_responsible($1, $2, $3)', [
+        responsible.accountId,
+        co.personId,
+        minorId,
+      ]);
+
+      const verdict = firstRow(
+        await app.query<RequestVerdict>(`SELECT * FROM request_erasure_staff($1, $2, 'DELAYED')`, [
+          staff,
+          minorId,
+        ]),
+      );
+      expect(verdict.verdict).toBe('DELAYED_NOT_APPLICABLE');
+      const count = firstRow(
+        await owner.query<{ n: string }>(
+          'SELECT count(*) AS n FROM person_erasures WHERE person_id = $1',
+          [minorId],
+        ),
+      );
+      expect(count.n).toBe('0'); // rien n'est écrit, compté en lignes
+    });
+
     test('staff : personne inconnue — verdict propre', async () => {
       const staff = await createAccount(app, nextIdentifier(), { role: 'PLATFORM_STAFF' });
       const verdict = firstRow(

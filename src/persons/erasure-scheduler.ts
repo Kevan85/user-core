@@ -1,13 +1,22 @@
 import { Pool } from 'pg';
-import { dbErrorCode } from '../db/errors';
+import { DB_ERROR, dbErrorCode } from '../db/errors';
 
 export interface ErasureTickReport {
   /** Préavis déposés dans l'outbox ce tour-ci. */
   noticed: number;
   /** Effacements exécutés (crypto-destruction accomplie). */
   executed: number;
-  /** Exécutions refusées par un mur (P0114 en tête) : comptées, jamais muettes. */
+  /**
+   * Refus du MUR du dernier responsable (P0114) — un état métier ATTENDU,
+   * dont la sortie est un acte staff. Jamais confondu avec une panne.
+   */
   blocked: number;
+  /**
+   * Tout le reste : interblocage, connexion coupée, bug — une PANNE à
+   * investiguer. Un humain formé à voir passer `blocked` ne doit jamais
+   * apprendre à ignorer celle-ci (G2).
+   */
+  failed: number;
 }
 
 /**
@@ -30,7 +39,7 @@ export class ErasureScheduler {
   constructor(private readonly pool: Pool) {}
 
   async tick(): Promise<ErasureTickReport> {
-    const report: ErasureTickReport = { noticed: 0, executed: 0, blocked: 0 };
+    const report: ErasureTickReport = { noticed: 0, executed: 0, blocked: 0, failed: 0 };
 
     // WHERE notified_at IS NULL est OBLIGATOIRE : le set-once de 026 LÈVE
     // (P0104) sur un second passage, il ne no-ope pas. Le filtre évite la
@@ -45,6 +54,10 @@ export class ErasureScheduler {
                       - make_interval(hours => erasure_notification_lead_hours())
         ORDER BY effective_after`,
     );
+    // Pas de LIMIT, et c'est un CHOIX (G3) : une demande d'effacement est un
+    // acte humain, rare par nature — le backlog d'un tick se compte en unités,
+    // pas en milliers. Le jour où un lot borné devient nécessaire, le patron
+    // existe déjà (claim_outbox_batch) ; on ne le copie pas « au cas où ».
     for (const notice of notices.rows) {
       const result = await this.pool.query<{ verdict: string }>(
         'SELECT * FROM record_erasure_notice($1)',
@@ -69,11 +82,22 @@ export class ErasureScheduler {
           report.executed += 1;
         }
       } catch (err) {
-        report.blocked += 1;
-        // Zéro PII : un code d'erreur et l'UUID technique de la DEMANDE.
-        console.error(
-          `effacement : exécution bloquée (${dbErrorCode(err) ?? 'inconnue'}) — demande ${erasure.id}`,
-        );
+        // G2 — un MUR n'est pas une PANNE, et les confondre tue le canal :
+        // `blocked` est un état normal qu'un humain apprend à voir passer —
+        // une vraie panne cachée derrière ce compteur ne serait jamais
+        // investiguée. Zéro PII des deux côtés : code, nom, UUID technique.
+        if (dbErrorCode(err) === DB_ERROR.ORPHANED_DEPENDENT) {
+          report.blocked += 1;
+          console.error(
+            `effacement : refusé par le mur du dernier responsable (P0114) — demande ${erasure.id} — un remplaçant (acte staff) est attendu`,
+          );
+        } else {
+          report.failed += 1;
+          const label = dbErrorCode(err) ?? (err instanceof Error ? err.name : 'inconnue');
+          console.error(
+            `effacement : PANNE d'exécution (${label}) — demande ${erasure.id} — à investiguer, ce n'est PAS un refus métier`,
+          );
+        }
       }
     }
 

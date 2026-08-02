@@ -16,10 +16,14 @@
 -- =============================================================================
 
 -- La politique de canal : une DONNÉE, révisable par migration signée, jamais
--- du code. Aucun canal externe en V1 — prudence par défaut : le préavis se
--- lit dans le compte (la demande y est née, le compte est encore ACTIF
--- pendant toute la fenêtre — C1). Ouvrir un canal externe, si Kevin le
--- décide, sera UNE ligne de données.
+-- du code. Aucun canal externe en V1, et la raison DÉCISIVE n'est pas la
+-- prudence : un SMS « votre effacement est imminent », envoyé sur une ligne
+-- entre-temps RECYCLÉE, apprendrait à un inconnu qu'un compte de
+-- l'écosystème était rattaché à ce numéro — la faute exacte que
+-- PHONE_LINE_SUPERSEDED ferme (009). La prudence se discute ; ce risque-là,
+-- non. Le préavis se lit donc dans le compte (la demande y est née, le
+-- compte est ACTIF pendant toute la fenêtre — C1). Ouvrir un canal externe,
+-- si Kevin le décide, sera UNE ligne de données.
 INSERT INTO event_channel_policy (event_type, allowed_channels, in_account, note) VALUES
   ('PERSON_ERASURE_IMMINENT', '{}', true,
    'Préavis : l''effacement demandé s''exécutera à l''échéance. Déposé dans le compte du demandeur — aucun canal externe en V1 (prudence par défaut, révisable par migration). La rétractation reste possible jusqu''à l''échéance.');

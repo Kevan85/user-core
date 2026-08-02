@@ -71,11 +71,17 @@ async function main(): Promise<void> {
         );
       }
       const erasureReport = await erasures.tick();
-      if (erasureReport.noticed > 0 || erasureReport.executed > 0 || erasureReport.blocked > 0) {
+      if (
+        erasureReport.noticed > 0 ||
+        erasureReport.executed > 0 ||
+        erasureReport.blocked > 0 ||
+        erasureReport.failed > 0
+      ) {
         // Zéro PII : des comptes d'actes, jamais une personne.
         console.log(
           `effacement: ${erasureReport.noticed} préavis, ` +
-            `${erasureReport.executed} exécutés, ${erasureReport.blocked} bloqués`,
+            `${erasureReport.executed} exécutés, ${erasureReport.blocked} bloqués (mur), ` +
+            `${erasureReport.failed} en PANNE`,
         );
       }
     } catch (err) {

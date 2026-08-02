@@ -223,7 +223,7 @@ describe('effacement — le chemin différé (029 + scheduler)', () => {
           ).id;
 
           const first = await scheduler.tick();
-          expect(first).toEqual({ noticed: 1, executed: 1, blocked: 1 });
+          expect(first).toEqual({ noticed: 1, executed: 1, blocked: 1, failed: 0 });
 
           expect(await outboxCount(noticeCase.personId)).toBe(1);
           const states = await owner.query<{ id: string; status: string }>(
@@ -239,12 +239,45 @@ describe('effacement — le chemin différé (029 + scheduler)', () => {
           // Second tour : le préavis ne se rejoue pas (WHERE notified_at IS
           // NULL), l'exécuté est clos en base — seul le bloqué re-compte.
           const second = await scheduler.tick();
-          expect(second).toEqual({ noticed: 0, executed: 0, blocked: 1 });
+          expect(second).toEqual({ noticed: 0, executed: 0, blocked: 1, failed: 0 });
           expect(await outboxCount(noticeCase.personId)).toBe(1);
         } finally {
           consoleSpy.mockRestore();
         }
       });
+    });
+  });
+
+  describe('G2 — un MUR n’est pas une PANNE', () => {
+    test('une défaillance non-P0114 compte en failed, avec une trace qui ne ressemble pas à un refus métier', async () => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const { accountId } = await adult();
+        await requestSelf(accountId, 'IMMEDIATE');
+
+        // Panne forcée : le rôle applicatif perd EXECUTE sur erase_person —
+        // toute cause hors-mur (connexion, interblocage, bug) prend ce chemin.
+        await owner.query('REVOKE EXECUTE ON FUNCTION erase_person(uuid) FROM user_core_app');
+        try {
+          const report = await scheduler.tick();
+          expect(report).toEqual({ noticed: 0, executed: 0, blocked: 0, failed: 1 });
+        } finally {
+          await owner.query('GRANT EXECUTE ON FUNCTION erase_person(uuid) TO user_core_app');
+        }
+
+        const panneLogs = consoleSpy.mock.calls.filter((args) =>
+          String(args[0]).includes('PANNE'),
+        );
+        const murLogs = consoleSpy.mock.calls.filter((args) => String(args[0]).includes('P0114'));
+        expect(panneLogs.length).toBe(1);
+        expect(murLogs.length).toBe(0);
+
+        // La demande n'est pas perdue : la panne réparée, le tick suivant exécute.
+        const healed = await scheduler.tick();
+        expect(healed).toEqual({ noticed: 0, executed: 1, blocked: 0, failed: 0 });
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
   });
 

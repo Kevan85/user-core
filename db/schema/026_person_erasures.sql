@@ -427,9 +427,12 @@ $$;
 -- LE STAFF, pour une personne SANS compte actif (le mineur en premier lieu).
 -- Le contrôle de rôle vit ICI, en base (patron grant_program_staff, 023). Le
 -- système ENREGISTRE l'acte sur base légale ; il ne juge pas la légalité.
--- Mode par défaut IMMEDIATE : un délai de réflexion n'a pas de sens quand la
--- demande n'émane pas de la personne (à confirmer par Kevin — une ligne
--- d'appel, jamais une migration).
+-- IMMEDIATE est le SEUL mode de ce chemin (G1) : par construction, la
+-- personne visée n'a aucun compte actif — un DELAYED ne pourrait être NI
+-- annoncé (le préavis mourrait en NO_ACCOUNT puis OUTBOX MORTE, salissant le
+-- canal d'alerte) NI rétracté (la rétractation est self, compte ACTIF exigé).
+-- Un délai qui ne peut être ni annoncé ni rétracté n'est pas une fenêtre de
+-- réflexion : c'est une attente. Refus par verdict propre, pas par doc.
 CREATE FUNCTION request_erasure_staff(
   p_actor_account_id uuid,
   p_person_id        uuid,
@@ -449,6 +452,11 @@ BEGIN
      OR actor.status <> 'ACTIVE'
      OR actor.role NOT IN ('PLATFORM_STAFF', 'PLATFORM_ADMIN') THEN
     verdict := 'FORBIDDEN'; RETURN NEXT; RETURN;
+  END IF;
+
+  -- G1 : le chemin staff ne connaît pas le délai (voir l'en-tête).
+  IF p_mode = 'DELAYED' THEN
+    verdict := 'DELAYED_NOT_APPLICABLE'; RETURN NEXT; RETURN;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM persons WHERE id = p_person_id) THEN
