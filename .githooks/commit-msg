@@ -1,0 +1,36 @@
+#!/bin/sh
+# =============================================================================
+# Le message de commit ne porte JAMAIS d'attribution d'outil d'IA (CLAUDE.md
+# §4 : « ZÉRO mention d'un outil d'IA dans les commits, PR, code ou docs —
+# le projet est attribué à Kevin »).
+#
+# Pourquoi ce hook existe (LOT effacement, étape 1) : un trailer
+# « Co-Authored-By » d'outil a failli entrer dans l'historique. Ce qui l'a
+# arrêté ce jour-là était une RELECTURE — pas une garde. Les 8 motifs de
+# tools/check-guards.sh lisent des CHEMINS (db/ src/ scripts/) : aucun ne lit
+# un message. Une discipline ne tient que si elle est mécanique (leçon ①) —
+# ce hook lit le message, et refuse.
+#
+# Périmètre VOLONTAIREMENT étroit : les formes de TRAILER et de signature
+# (« Co-Authored-By: », « Generated with », ligne 🤖) portant un nom d'outil
+# connu — jamais le mot nu dans la prose (un « fix: hommage à claude bernard »
+# passe ; leçon ⑦ : une garde qui mord la prose se fait contourner). Si un
+# HUMAIN homonyme co-signe un jour, c'est l'Auditeur qui amende ce motif —
+# jamais l'Exécuteur de sa propre initiative (même règle que le motif D).
+# =============================================================================
+msg_file="$1"
+
+tools='claude|anthropic|openai|chatgpt|gpt-[0-9]|copilot|gemini|cursor|windsurf|aider|codex|devin'
+
+if grep -niE "^co-authored-by:.*(${tools})" "$msg_file" >/dev/null 2>&1; then
+  echo "COMMIT REFUSÉ — trailer d'attribution d'outil d'IA détecté (CLAUDE.md §4) :" >&2
+  grep -niE "^co-authored-by:.*(${tools})" "$msg_file" >&2
+  exit 1
+fi
+
+if grep -niE "(generated (with|by)|générés? (avec|par)).*(${tools})|^[[:space:]]*🤖" "$msg_file" >/dev/null 2>&1; then
+  echo "COMMIT REFUSÉ — signature d'outil d'IA détectée dans le message (CLAUDE.md §4)." >&2
+  exit 1
+fi
+
+exit 0

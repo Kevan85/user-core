@@ -259,12 +259,22 @@ export class EmancipationService {
       civil_identity_encrypted: string | null;
       erasure_salt: Buffer;
       birth_year: number | null;
+      erased: boolean;
     }>(
-      'SELECT civil_identity_encrypted, erasure_salt, birth_year FROM read_person_identity($1)',
+      'SELECT civil_identity_encrypted, erasure_salt, birth_year, erased FROM read_person_identity($1)',
       [personId],
     );
     const row = stored.rows[0];
     if (row === undefined) {
+      return false;
+    }
+    if (row.erased) {
+      // GARDE REMISE À L'ENDROIT (leçon ⑩) : la branche suivante est
+      // PERMISSIVE — « blob NULL → true, le mur d'année tranche seul ». Or
+      // après effacement le blob EST NULL : sans ce refus, une personne
+      // effacée tombait dans la branche qui autorise, et seul le mur P0116
+      // aval l'aurait rattrapée — par une exception brute au lieu d'un refus
+      // propre. L'état est DÉCLARÉ par la base (027), jamais inféré.
       return false;
     }
     if (row.civil_identity_encrypted === null || row.birth_year === null) {

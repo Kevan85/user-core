@@ -17,6 +17,7 @@ import { ObservabilityExceptionFilter } from './observability/observability.filt
 import { assembleObservabilityFromEnv, initObservability } from './observability/sentry';
 import { CatalogService } from './catalog/catalog.service';
 import { EmancipationService } from './persons/emancipation.service';
+import { ErasureService } from './persons/erasure.service';
 import { ResponsibilitiesService } from './persons/responsibilities.service';
 import { assembleKeyringsFromEnv } from './crypto/keyring';
 import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
@@ -122,6 +123,19 @@ async function bootstrap(): Promise<void> {
       authConfig.registerThrottleWindowSeconds,
     ),
   );
+  // LOT effacement — la façade : verdicts propres, throttle dédié (même
+  // famille de budget que l'inscription — les surfaces sont donc COUPLÉES :
+  // régler AUTH_REGISTER_THROTTLE_* déplace aussi ce budget ; le jour où
+  // l'une doit bouger seule, c'est une variable dédiée, pas une surprise).
+  // Les invariants sont en base (026-029) — à l'exception NOMMÉE de
+  // l'énoncé d'irréversibilité (H1, contrôleur).
+  const erasureService = new ErasureService(
+    assembly.pool,
+    new LoginThrottle(
+      authConfig.registerThrottleMaxAttempts,
+      authConfig.registerThrottleWindowSeconds,
+    ),
+  );
   // Étape 5 — les invitations à ayants droit : le nom d'affichage se lit par
   // le mur de 022 (quatre conditions en base) et se déchiffre par le point
   // unique. Le service reçoit donc le trousseau.
@@ -174,6 +188,7 @@ async function bootstrap(): Promise<void> {
       identityService,
       responsibilitiesService,
       emancipationService,
+      erasureService,
       accountInvitationsService,
       programAuthService,
       programRequestAuth,

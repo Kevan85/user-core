@@ -32,6 +32,8 @@ import {
   EMANCIPATION_SERVICE,
   type EmancipationService,
 } from './persons/emancipation.service';
+import { ErasureController } from './persons/erasure.controller';
+import { ERASURE_SERVICE, type ErasureService } from './persons/erasure.service';
 import { ResponsibilitiesController } from './persons/responsibilities.controller';
 import {
   RESPONSIBILITIES_SERVICE,
@@ -70,6 +72,7 @@ export interface AuthWiring {
   identityService: IdentityService;
   responsibilitiesService: ResponsibilitiesService;
   emancipationService: EmancipationService;
+  erasureService: ErasureService;
   accountInvitationsService: AccountInvitationsService;
   programAuthService: ProgramAuthService;
   programRequestAuth: ProgramRequestAuth;
@@ -99,6 +102,7 @@ export class AppModule {
         IdentityController,
         ResponsibilitiesController,
         EmancipationController,
+        ErasureController,
         AccountInvitationsController,
         ProgramAuthController,
         ProgramOperationsController,
@@ -115,6 +119,7 @@ export class AppModule {
         { provide: IDENTITY_SERVICE, useValue: auth.identityService },
         { provide: RESPONSIBILITIES_SERVICE, useValue: auth.responsibilitiesService },
         { provide: EMANCIPATION_SERVICE, useValue: auth.emancipationService },
+        { provide: ERASURE_SERVICE, useValue: auth.erasureService },
         { provide: ACCOUNT_INVITATIONS_SERVICE, useValue: auth.accountInvitationsService },
         { provide: PROGRAM_AUTH_SERVICE, useValue: auth.programAuthService },
         { provide: PROGRAM_REQUEST_AUTH, useValue: auth.programRequestAuth },

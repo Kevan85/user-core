@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  GoneException,
   Headers,
   HttpCode,
   Inject,
@@ -46,6 +47,10 @@ export class IdentityController {
         return result.identity;
       case 'NOT_PROVIDED':
         throw new NotFoundException("aucune identité civile fournie pour cette personne");
+      case 'ERASED':
+        // Un fait différent de NOT_PROVIDED, dit tel quel : la donnée a
+        // existé et a été détruite — elle ne reviendra pas.
+        throw new GoneException('identité effacée — la destruction est définitive');
       default:
         throw new InternalServerErrorException(
           "identité momentanément indisponible — l'incident est tracé",
@@ -68,6 +73,8 @@ export class IdentityController {
         return result.identity;
       case 'INVALID':
         throw new BadRequestException(result.reason);
+      case 'ERASED':
+        throw new GoneException('identité effacée — la destruction est définitive');
       default:
         throw new ConflictException(
           "l'année de naissance est posée une fois pour toutes — sa correction est un acte d'administration",

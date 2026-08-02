@@ -12,6 +12,7 @@ import { assembleKeyringsFromEnv } from './crypto/keyring';
 import { CountingDispatcher } from './dispatch/simulator/counting-dispatcher';
 import { assemblePublisherConfig } from './outbox/publisher-config';
 import { OutboxPublisher } from './outbox/publisher';
+import { ErasureScheduler } from './persons/erasure-scheduler';
 import { assertFingerprintKeyAligned } from './phone/phone-config';
 
 /**
@@ -46,6 +47,9 @@ async function main(): Promise<void> {
     crypto,
     config,
   );
+  // Le chemin différé de l'effacement (étape 4) : préavis à J-48 h, exécution
+  // à l'échéance — même boucle, même processus, aucune couture neuve.
+  const erasures = new ErasureScheduler(assembly.pool);
 
   let stopping = false;
   const shutdown = async (): Promise<void> => {
@@ -64,6 +68,20 @@ async function main(): Promise<void> {
         console.log(
           `outbox: ${report.claimed} pris, ${report.published} publiés, ` +
             `${report.retried} à retenter, ${report.failed} morts`,
+        );
+      }
+      const erasureReport = await erasures.tick();
+      if (
+        erasureReport.noticed > 0 ||
+        erasureReport.executed > 0 ||
+        erasureReport.blocked > 0 ||
+        erasureReport.failed > 0
+      ) {
+        // Zéro PII : des comptes d'actes, jamais une personne.
+        console.log(
+          `effacement: ${erasureReport.noticed} préavis, ` +
+            `${erasureReport.executed} exécutés, ${erasureReport.blocked} bloqués (mur), ` +
+            `${erasureReport.failed} en PANNE`,
         );
       }
     } catch (err) {
