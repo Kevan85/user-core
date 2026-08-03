@@ -92,7 +92,7 @@ describe('4e — rotation de la clé d\'empreinte : le mur, puis le script', () 
     ).person_id;
     const fp = fingerprintOf(before.fingerprint, phone);
     const claimId = firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [
@@ -239,7 +239,7 @@ describe('4e — rotation de la clé d\'empreinte : le mur, puis le script', () 
     const staleFp = fingerprintOf(before.fingerprint, '+8801700000303');
     await expect(
       codeOf(() =>
-        app.query(
+        owner.query(
           `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
            VALUES ($1, $2, $3, $4, $5)`,
           [
@@ -255,7 +255,7 @@ describe('4e — rotation de la clé d\'empreinte : le mur, puis le script', () 
 
     const freshFp = fingerprintOf(after.fingerprint, '+8801700000303');
     await expect(
-      app.query(
+      owner.query(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5)`,
         [

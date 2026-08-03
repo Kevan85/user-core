@@ -573,13 +573,28 @@ describe("effacement — le régime en base (026)", () => {
       );
     }
 
+    /** Les quatre colonnes, dans l'ordre attendu par declare_phone_self (030). */
+    function phoneColumnsOf(phone: string): [string, string, string, string] {
+      const c = buildPhoneColumns(crypto, phone);
+      return [c.phoneHmac, c.hmacKeyId, c.phoneEncrypted, c.encKeyId];
+    }
+
     test('pendant la fenêtre (REQUESTED) : identité, ligne et profil fonctionnent — la fenêtre de Kevin n’est pas détruite', async () => {
       const { accountId, personId } = await adult();
       const request = await requestSelf(accountId, 'DELAYED');
       expect(request.verdict).toBe('REQUESTED');
 
       await writeIdentity(app, personId);
-      await insertClaim(app, personId);
+      // Depuis 030 le rôle applicatif n'écrit plus phone_claims en direct : la
+      // ligne « fonctionne » veut donc dire que LA PORTE fonctionne — le compte
+      // est ACTIF pendant toute la fenêtre (C1), elle passe.
+      const declared = firstRow(
+        await app.query<{ verdict: string }>(
+          'SELECT verdict FROM declare_phone_self($1, $2, $3, $4, $5)',
+          [accountId, ...phoneColumnsOf(nextPhone())],
+        ),
+      );
+      expect(declared.verdict).toBe('DECLARED');
       await app.query(
         `INSERT INTO account_profiles (account_id, display_name) VALUES ($1, 'Nom Affiché')`,
         [accountId],
@@ -601,12 +616,29 @@ describe("effacement — le régime en base (026)", () => {
       );
     });
 
-    test('après COMPLETED : aucune revendication de ligne neuve (P0116) — rôle bridé ET owner', async () => {
-      const { personId } = await erased();
-      await expect(codeOf(() => insertClaim(app, personId))).resolves.toBe(DB_ERROR.PERSON_ERASED);
+    test('après COMPLETED : aucune revendication de ligne neuve — P0116 sous owner, et plus aucun chemin sous le rôle bridé', async () => {
+      const { accountId, personId } = await erased();
+
+      // SOUS OWNER : P0116 lui-même, inchangé. C'est LUI le mur de
+      // ré-identification, et c'est le seul rôle qui peut encore le toucher.
       await expect(codeOf(() => insertClaim(owner, personId))).resolves.toBe(
         DB_ERROR.PERSON_ERASED,
       );
+
+      // SOUS LE RÔLE BRIDÉ, DEUX FAITS DISTINCTS, et il faut les deux :
+      //   1. le droit NU a disparu (030) — il n'y a plus d'écriture directe ;
+      await expect(insertClaim(app, personId)).rejects.toThrow(/permission denied/);
+      //   2. la PORTE qui l'a remplacé reste sous P0116. C'est le point qui
+      //      compte : une porte SECURITY DEFINER écrit sous l'owner, elle
+      //      aurait donc pu CONTOURNER le mur en le traversant par le haut.
+      //      Elle ne le contourne pas — le trigger de 026 est row-level, il
+      //      s'applique à qui écrit, pas à qui appelle. Mesuré, pas supposé.
+      await expect(
+        app.query('SELECT verdict FROM declare_phone_self($1, $2, $3, $4, $5)', [
+          accountId,
+          ...phoneColumnsOf(nextPhone()),
+        ]),
+      ).rejects.toThrow(/P0116|personne effacée/);
     });
 
     test('après COMPLETED : le profil (seule PII nominative en clair) ne naît ni ne se réécrit (P0116)', async () => {

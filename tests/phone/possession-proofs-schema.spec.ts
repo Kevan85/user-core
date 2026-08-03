@@ -75,7 +75,7 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const token = encrypt(crypto.encryption, phone);
     return firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [await personOf(accountId), fp.value, fp.hmacKeyId, token, crypto.encryption.activeKeyId],
@@ -370,7 +370,7 @@ describe('possession_proofs — la preuve de possession de ligne', () => {
     const claimId = await declare(await newAccount(), '+243820000010');
     expect(await verify(claimId, 'x')).toBe('UNKNOWN'); // aucune preuve ouverte
 
-    await app.query(
+    await owner.query(
       "UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'ADMIN' WHERE id = $1",
       [claimId],
     );

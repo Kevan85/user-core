@@ -53,6 +53,9 @@ export class PhoneController {
     if (result.outcome === 'INVALID_PHONE') {
       throw new BadRequestException('numéro invalide (format E.164 attendu)');
     }
+    if (result.outcome === 'ACCOUNT_UNUSABLE') {
+      throw new ForbiddenException('compte inutilisable');
+    }
     return { claimId: result.claimId };
   }
 

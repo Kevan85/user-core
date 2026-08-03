@@ -65,7 +65,21 @@ describe('phone_claims — invariants en base', () => {
     ).person_id;
   }
 
+  /**
+   * Depuis 030, le rôle applicatif n'écrit plus phone_claims : il déclare PAR
+   * LA PORTE, qui dérive la personne du compte au lieu de la recevoir. L'owner,
+   * lui, garde l'écriture directe — c'est elle qui permet à cette suite de
+   * FORGER les états que le chemin applicatif ne sait plus produire, et donc de
+   * continuer à prouver les invariants de 006 pour eux-mêmes.
+   */
   async function declare(accountId: string, phone: string, client: Pool = app): Promise<string> {
+    if (client === app) {
+      const viaGate = await app.query<{ claim_id: string }>(
+        'SELECT claim_id FROM declare_phone_self($1, $2, $3, $4, $5)',
+        [accountId, ...phoneFields(phone)],
+      );
+      return firstRow(viaGate).claim_id;
+    }
     const r = await client.query<{ id: string }>(
       `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -110,15 +124,22 @@ describe('phone_claims — invariants en base', () => {
     ).resolves.toBeDefined();
   });
 
-  test('le service ne peut PAS activer une revendication (assurance_level hors GRANT)', async () => {
+  test('le service ne peut PAS activer une revendication — le droit (030) ET le trigger (006)', async () => {
     const id = await declare(await newAccount(), '+243810000002');
+    // 1. LE DROIT : depuis 030 le rôle applicatif n'écrit plus RIEN sur cette
+    //    table — ni assurance_level (qu'il n'a jamais eu), ni status.
     await expect(
       app.query("UPDATE phone_claims SET assurance_level = 'PROVEN' WHERE id = $1", [id]),
     ).rejects.toThrow(/permission denied/);
-    // Et sans PROVEN, l'activation est refusée par le trigger (CHECK/garde) :
-    // « actif mais non prouvé » est non représentable.
     await expect(
-      codeOf(() => app.query("UPDATE phone_claims SET status = 'ACTIVE' WHERE id = $1", [id])),
+      app.query("UPDATE phone_claims SET status = 'ACTIVE' WHERE id = $1", [id]),
+    ).rejects.toThrow(/permission denied/);
+    // 2. LE TRIGGER, testé POUR LUI-MÊME sous owner. Sans ces deux lignes, le
+    //    retrait du droit MASQUERAIT l'invariant : « actif mais non prouvé »
+    //    doit rester non représentable même pour qui a tous les droits — c'est
+    //    lui le mur, le GRANT n'est que la serrure.
+    await expect(
+      codeOf(() => owner.query("UPDATE phone_claims SET status = 'ACTIVE' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FORBIDDEN_TRANSITION);
   });
 
@@ -147,17 +168,18 @@ describe('phone_claims — invariants en base', () => {
     // sera géré par la cascade « preuve fraîche gagne » en 007.)
   });
 
-  test('Q3 — une seule revendication VIVANTE par personne', async () => {
+  test('Q3 — une seule revendication VIVANTE par personne (l\'index, sous owner)', async () => {
+    // L'INDEX est le sujet : il se prouve donc sur l'écriture NUE, la seule qui
+    // ne révoque pas d'abord — et depuis 030 elle n'appartient plus qu'à
+    // l'owner. Par la porte, ce cas est INATTEIGNABLE (elle révoque la PENDING
+    // avant d'insérer) : c'est le comportement voulu, vérifié juste après.
     const accountId = await newAccount();
-    await declare(accountId, '+243810000005');
-    await expect(declare(accountId, '+243810000006')).rejects.toThrow(
+    await declare(accountId, '+243810000005', owner);
+    await expect(declare(accountId, '+243810000006', owner)).rejects.toThrow(
       /uq_phone_claims_alive_per_person/,
     );
-    // Le chemin légitime : révoquer (REPLACED) puis déclarer l'autre.
-    await app.query(
-      "UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'REPLACED' WHERE person_id = $1 AND status = 'PENDING'",
-      [await personOf(accountId)],
-    );
+    // Le chemin légitime, celui du service : la porte révoque (REPLACED) puis
+    // déclare l'autre — en une transaction, sans jamais heurter l'index.
     await expect(declare(accountId, '+243810000006')).resolves.toBeDefined();
   });
 
@@ -165,9 +187,11 @@ describe('phone_claims — invariants en base', () => {
     const accountId = await newAccount();
     const personId = await personOf(accountId);
     const [hmac, , encrypted, encKeyId] = phoneFields('+243810000007');
+    // Sous OWNER : le trigger est le sujet, et depuis 030 c'est le seul rôle
+    // qui peut encore lui présenter une empreinte périmée.
     await expect(
       codeOf(() =>
-        app.query(
+        owner.query(
           `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
            VALUES ($1, $2, 'H0_PERIMEE', $3, $4)`,
           [personId, hmac, encrypted, encKeyId],
@@ -207,7 +231,8 @@ describe('phone_claims — invariants en base', () => {
       ),
     ).resolves.toBe(DB_ERROR.IMMUTABLE);
 
-    await app.query(
+    // Fixture : depuis 030, révoquer à la main est un geste d'owner.
+    await owner.query(
       "UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'ADMIN' WHERE id = $1",
       [id],
     );
@@ -216,11 +241,18 @@ describe('phone_claims — invariants en base', () => {
     ).resolves.toBe(DB_ERROR.FROZEN_ROW);
   });
 
-  test('révocation sans motif → refus ; horodatage posé par la base', async () => {
+  test('révocation sans motif → refus (le trigger, sous owner) ; et le rôle bridé n\'y touche plus', async () => {
     const id = await declare(await newAccount(), '+243810000010');
+    // Le trigger POUR LUI-MÊME : « une révocation porte toujours son motif »
+    // vaut aussi pour qui a tous les droits — sinon 030 masquerait l'invariant.
     await expect(
-      codeOf(() => app.query("UPDATE phone_claims SET status = 'REVOKED' WHERE id = $1", [id])),
+      codeOf(() => owner.query("UPDATE phone_claims SET status = 'REVOKED' WHERE id = $1", [id])),
     ).resolves.toBe(DB_ERROR.FORBIDDEN_TRANSITION);
+    await expect(
+      app.query("UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'ADMIN' WHERE id = $1", [
+        id,
+      ]),
+    ).rejects.toThrow(/permission denied/);
   });
 
   test('DELETE : rôle bridé → permission denied ; owner → P0107', async () => {
