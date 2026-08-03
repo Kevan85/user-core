@@ -99,10 +99,16 @@ describe('émancipation — les murs en base (020)', () => {
     return { id, identifier };
   }
 
+  // Depuis 031, la PORTE est fermée au rôle applicatif — mais les MURS de 020
+  // restent gravés, et cette suite est ce qui garantit qu'ils le restent. Elle
+  // les exerce donc sous l'OWNER : sinon la fermeture transformerait 017/020 en
+  // code que plus personne n'éprouve, et le jour où le plancher d'identité sera
+  // repris, personne ne saurait plus si ces murs tiennent encore.
+  // Que la porte soit fermée est prouvé séparément, juste en dessous.
   async function open(identifier: string, phone: string): Promise<{ claim_id: string | null; verdict: string }> {
     const columns = buildPhoneColumns(crypto, phone);
     return firstRow(
-      await app.query<{ claim_id: string | null; verdict: string }>(
+      await owner.query<{ claim_id: string | null; verdict: string }>(
         'SELECT * FROM open_emancipation($1, $2, $3, $4, $5)',
         [identifier, columns.phoneHmac, columns.hmacKeyId, columns.phoneEncrypted, columns.encKeyId],
       ),
@@ -153,12 +159,36 @@ describe('émancipation — les murs en base (020)', () => {
 
   async function complete(personId: string): Promise<{ account_id: string | null; verdict: string }> {
     return firstRow(
-      await app.query<{ account_id: string | null; verdict: string }>(
+      await owner.query<{ account_id: string | null; verdict: string }>(
         'SELECT * FROM complete_emancipation($1, $2, $3)',
         [personId, nextIdentifier(), FIXTURE_ARGON2ID],
       ),
     );
   }
+
+  test('031 — LA PORTE EST FERMÉE : le rôle applicatif n\'exécute plus ni l\'ouverture ni l\'achèvement', async () => {
+    // Le mur de l'étape 2, prouvé POUR LUI-MÊME. Sans ce test, la bascule des
+    // helpers ci-dessus sous owner rendrait la suite verte sans que personne ne
+    // vérifie que la porte est bien close — le REVOKE serait devenu invisible.
+    const someone = await person(YEAR - 30);
+    const columns = buildPhoneColumns(crypto, '+243870009999');
+    await expect(
+      app.query('SELECT * FROM open_emancipation($1, $2, $3, $4, $5)', [
+        someone.identifier,
+        columns.phoneHmac,
+        columns.hmacKeyId,
+        columns.phoneEncrypted,
+        columns.encKeyId,
+      ]),
+    ).rejects.toThrow(/permission denied/);
+    await expect(
+      app.query('SELECT * FROM complete_emancipation($1, $2, $3)', [
+        someone.id,
+        nextIdentifier(),
+        FIXTURE_ARGON2ID,
+      ]),
+    ).rejects.toThrow(/permission denied/);
+  });
 
   test('ouvrir : identifiant inconnu → UNKNOWN ; personne autonome → HAS_ACCOUNT (verdicts riches, réponse uniforme au service)', async () => {
     expect((await open('1234567890', '+243870000001')).verdict).toBe('UNKNOWN');
