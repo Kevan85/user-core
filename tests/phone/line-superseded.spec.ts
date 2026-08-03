@@ -91,7 +91,7 @@ describe('C1 — reprise de ligne : les deux sens, avec et sans compte', () => {
   async function declareClaim(personId: string, phone: string): Promise<string> {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     return firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [personId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone), crypto.encryption.activeKeyId],

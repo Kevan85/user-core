@@ -65,7 +65,7 @@ describe('AccountInvitationsService', () => {
   async function proveLine(accountId: string, phone: string): Promise<void> {
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1') RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone)],
@@ -157,7 +157,7 @@ describe('AccountInvitationsService', () => {
     expect(await invitations.list(person)).toHaveLength(0);
 
     const fp = fingerprintOf(crypto.fingerprint, line);
-    await app.query(
+    await owner.query(
       `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
        VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, 'E1')`,
       [person, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, line)],

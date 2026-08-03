@@ -74,7 +74,7 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     const accountId = await createAccountFixture(app, String(7300000000 + seq));
     const fp = fingerprintOf(crypto.fingerprint, phone);
     const claimId = firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, phone), 'E1'],
@@ -188,7 +188,7 @@ describe('Le simulateur qui MENT — six mensonges contre la vraie base', () => 
     const accountId = await createAccountFixture(app, String(7390000000 + seq));
     const fp = fingerprintOf(crypto.fingerprint, PHONE);
     const claimId = firstRow(
-      await app.query<{ id: string }>(
+      await owner.query<{ id: string }>(
         `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
          VALUES ((SELECT person_id FROM accounts WHERE id = $1), $2, $3, $4, $5) RETURNING id`,
         [accountId, fp.value, fp.hmacKeyId, encrypt(crypto.encryption, PHONE), 'E1'],

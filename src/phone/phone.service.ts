@@ -17,7 +17,9 @@ import { resolveVerifiedAddress } from './verified-address';
 
 export type DeclareResult =
   | { outcome: 'DECLARED'; claimId: string }
-  | { outcome: 'INVALID_PHONE' };
+  | { outcome: 'INVALID_PHONE' }
+  /** Le jeton avait prouvé un compte que la base refuse désormais (030). */
+  | { outcome: 'ACCOUNT_UNUSABLE' };
 
 export type RequestProofResult =
   | { outcome: 'SENT'; proofId: string }
@@ -92,43 +94,29 @@ export class PhoneService {
       return { outcome: 'INVALID_PHONE' };
     }
     const columns = buildPhoneColumns(this.crypto, phone);
-    // Depuis 018, la ligne appartient à la PERSONNE : le compte agit POUR
-    // elle. BOLA : le compte vient du jeton signé, sa personne en découle.
-    const personId = await this.personOf(accountId);
 
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      // Une seule revendication VIVANTE par personne (Q3) : déclarer un autre
-      // numéro révoque la précédente — jamais de PII de tiers accumulée.
-      await client.query(
-        `UPDATE phone_claims SET status = 'REVOKED', revoke_reason = 'REPLACED'
-          WHERE person_id = $1 AND status = 'PENDING'`,
-        [personId],
-      );
-      const inserted = await client.query<{ id: string }>(
-        `INSERT INTO phone_claims (person_id, phone_hmac, hmac_key_id, phone_encrypted, enc_key_id)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [
-          personId,
-          columns.phoneHmac,
-          columns.hmacKeyId,
-          columns.phoneEncrypted,
-          columns.encKeyId,
-        ],
-      );
-      await client.query('COMMIT');
-      const claimId = inserted.rows[0]?.id;
-      if (claimId === undefined) {
-        throw new Error('déclaration : aucune ligne rendue');
-      }
-      return { outcome: 'DECLARED', claimId };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+    // Depuis 030, ce service n'a plus le DROIT d'écrire phone_claims — et il
+    // ne dérive plus la personne lui-même. La porte le fait EN BASE : la cible
+    // n'est plus un paramètre, elle est une conséquence du compte. Elle révoque
+    // la PENDING précédente (Q3) et insère dans la même transaction ; le
+    // BEGIN/COMMIT d'ici n'a donc plus d'objet.
+    // BOLA inchangé et toujours au bord de l'API : accountId vient du jeton
+    // signé — la base ne peut pas le vérifier, elle ne le prétend pas.
+    const result = await this.pool.query<{ claim_id: string | null; verdict: string }>(
+      'SELECT * FROM declare_phone_self($1, $2, $3, $4, $5)',
+      [accountId, columns.phoneHmac, columns.hmacKeyId, columns.phoneEncrypted, columns.encKeyId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) {
+      throw new Error('déclaration : aucune ligne rendue');
     }
+    if (row.verdict !== 'DECLARED' || row.claim_id === null) {
+      // UNKNOWN_ACCOUNT / ACCOUNT_NOT_ACTIVE : le jeton avait prouvé ce compte,
+      // donc le refus dit qu'il a cessé d'être utilisable entre-temps. C'est un
+      // refus qui se rend au client, jamais une panne.
+      return { outcome: 'ACCOUNT_UNUSABLE' };
+    }
+    return { outcome: 'DECLARED', claimId: row.claim_id };
   }
 
   /**
@@ -274,15 +262,4 @@ export class PhoneService {
     return result.rows[0] ?? null;
   }
 
-  private async personOf(accountId: string): Promise<string> {
-    const result = await this.pool.query<{ person_id: string }>(
-      'SELECT person_id FROM accounts WHERE id = $1',
-      [accountId],
-    );
-    const row = result.rows[0];
-    if (row === undefined) {
-      throw new Error('téléphone : compte introuvable');
-    }
-    return row.person_id;
-  }
 }
