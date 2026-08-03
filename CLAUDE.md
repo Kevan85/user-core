@@ -584,6 +584,45 @@ plus.
   de commit (§4). Les huit motifs lisent des **chemins** ; aucun ne lisait un **message** — la
   règle tenait sur la relecture, c'est-à-dire sur rien (leçon ①).
 
+### 8.4 Ce que le LOT `U-sec` a gravé (livré le 03/08/2026, migrations `030`→`031`)
+
+Un défaut de sécurité **démontré** (leçon ⑬) devait produire six étapes — plancher d'identité,
+ligne pré-enregistrée, aiguillage, recours STAFF, fermeture de compte. **Il en a produit deux.**
+Ce qui ne se redémontre plus :
+
+- 🎯 **LA MESURE QUI A FAIT TOMBER QUATRE ÉTAPES.** Avant de concevoir le plancher, on a demandé
+  *qui l'utiliserait*. Réponse mesurée : **personne.** `UPDATE accounts` ne se trouve qu'à **UN**
+  endroit du dépôt (`028:286`) — **aucun chemin applicatif ne rend un compte inactif**, donc la
+  ré-acquisition d'un compte mort n'a **aucun bénéficiaire possible** ; un effacé est muré par
+  P0116 ; rien n'est déployé. **Une porte sans usage se FERME, elle ne se sécurise pas** (§11 ⑭).
+- **`030` — le service ne DÉSIGNE plus la personne d'une revendication de ligne.** Le rôle
+  applicatif détenait `INSERT (person_id, …)` et `UPDATE (status, revoke_reason)` sur
+  `phone_claims` : le droit d'écrire une revendication **sur une personne qu'il nomme**. Retrait
+  **table ET colonne** (patron `011:67-68`), **une** porte nommée le rend, et **la personne y est
+  DÉRIVÉE du compte, jamais reçue** — la cible cesse d'être un paramètre libre pour devenir une
+  conséquence. ⚠️ Et l'en-tête dit ce que le mur **ne prouve pas** : la base n'a aucune notion
+  d'« appelant », le BOLA reste au bord de l'API et n'est pas prétendu ici.
+- 🔴 **L'AGGRAVATION QUI A FAIT LA PRIORITÉ, et qu'aucune des deux sessions n'avait vue d'abord** :
+  `UNDERAGE` et `HAS_ACCOUNT` n'arrêtent que la **PRISE DE COMPTE** — **pas le REGISTRE**. La
+  revendication forgée **survit au refus**, et qui détient encore `UPDATE` la révoque, en repose
+  une, la re-prouve : **la fraîcheur se recharge à volonté**. Ce n'est donc pas une protection,
+  c'est un **ajournement** — une prise de compte **pré-positionnée** qui mûrit seule jusqu'au
+  seuil d'âge. Et elle est **SILENCIEUSE** : `PHONE_LINE_SUPERSEDED` n'a que le dépôt **dans un
+  compte** (`009`), donc **la population sans compte n'apprend jamais que sa ligne a changé de
+  main.** *Un refus qui laisse son effet en place n'a rien refusé.*
+- **`031` — ON FERME LA PORTE, ON GARDE LES MURS.** Deux `REVOKE EXECUTE`, rien d'autre. **Aucun
+  `DROP`** (§3.10 dans son esprit : supprimer effacerait l'intention de `020`), et **le droit de
+  l'OWNER est conservé délibérément** — c'est la seule façon que P0113, l'invariant différé, `019`
+  et les gardes d'âge et de fraîcheur restent **éprouvés à chaque CI** au lieu de devenir du code
+  que plus personne ne vérifie. *Fermer une porte ne doit jamais mettre ses murs en sommeil.*
+- **La surface d'un `REVOKE` ne se prédit PAS depuis `src/`** : « 2 points d'écriture » valaient
+  **75 tests et 14 suites**. La mesure se fait en **appliquant le retrait en base**, jamais au
+  `grep`. *(Même famille que le 10ᵉ refus : raisonner sur `src/` sans regarder `tests/`.)*
+- 📌 **Trois dettes ouvertes, écrites pour ne pas être redécouvertes** : **CDC §10 n°15 et n°16
+  sont SUSPENDUES**, pas appliquées (voir leur entrée) · **le compte d'une personne décédée reste
+  `ACTIVE` indéfiniment**, et la seule sortie du système reste la destruction des données · la
+  rédaction de la n°15 porte un **veto de fait** à corriger le jour de la réouverture.
+
 ## 9. Où est quoi
 
 ```
@@ -736,3 +775,28 @@ traité.** Devant toute preuve, demander : **QUEL FAIT exactement établit-elle 
 dont le mur a besoin ?** *(Corollaire : un identifiant conçu pour être **dicté au guichet** est
 une DÉSIGNATION ; l'employer comme seule désignation d'une cible dans un acte **irréversible**
 transforme une commodité de guichet en surface d'attaque.)*
+
+**⑭ Une porte n'arrive jamais avant son mur — NI AVANT SON USAGE.** La leçon ④ ordonnait le
+*quoi* ; celle-ci ordonne le *si*. Le plancher d'identité de l'émancipation était conçu, découpé,
+chiffré : **six étapes**, une contrainte technique dure (l'unicité mondiale d'une ligne interdit
+une revendication de plus dans un foyer qui partage un téléphone), et **deux arbitrages remontés
+à Kevin**. Il a demandé *« dans quel scénario est-ce pertinent ? »* — et la mesure a répondu
+**aucun** : rien n'est déployé, et **aucun chemin applicatif ne rend un compte inactif**
+(`UPDATE accounts` = une ligne dans tout le dépôt), donc la capacité qu'on s'apprêtait à protéger
+n'avait **aucun bénéficiaire possible**. Six étapes contre **un `REVOKE`**.
+⚠️ **La question qui coûte trente secondes et qu'on oublie de poser** : *avant de sécuriser une
+porte — QUI l'utilise aujourd'hui ?* Si la réponse est « personne », le geste juste est de la
+**fermer**, en gardant ses murs et en écrivant pourquoi. Corollaire pour le socle : **graver un
+invariant est toujours rentable** (il ne coûte rien plus tard) ; **exposer une porte ne l'est que
+si un usage la réclame**. Ne pas confondre les deux.
+
+**⑮ Une garde qu'aucun test ne REGARDE peut disparaître sans bruit — la 4ᵉ forme de la leçon ②.**
+② connaissait la garde qui **tourne sans bloquer**, celle jouée sur le **mauvais instantané**, et
+celle qui **ne se lance pas** (⑪). Voici la dernière : une garde **armée, observée par personne**.
+En fermant la porte d'émancipation, il fallait basculer les tests d'invariants sous l'**owner**
+pour que les murs restent éprouvés — mais **sous owner, la suite passait au vert que le `REVOKE`
+existe ou non**. Le mur devenait **invisible à la CI** : sa suppression future n'aurait rien fait
+rougir. La parade est un test qui **prouve le mur POUR LUI-MÊME** (`permission denied` sous le rôle
+bridé), et elle a été écrite **sans qu'on la demande**. **Devant toute protection, demander :
+quel test rougirait si je la retirais ce soir ?** Si la réponse est « aucun », elle n'est pas
+protégée — elle est seulement présente.

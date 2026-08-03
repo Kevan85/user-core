@@ -495,6 +495,23 @@ paramètre (config/env), on ne fige pas une hypothèse.
       percuterait l'unicité mondiale (`006:107-108`, une seule `ACTIVE` par ligne) — et « la preuve
       la plus récente gagne » **révoquerait la revendication du parent**. Le plancher doit donc se
       concevoir **sans exiger une revendication ACTIVE de plus par personne**.
+    - 🔒 **SUSPENDUE le 03/08/2026 (Kevin, même jour) — le plancher n'est PAS construit, la porte
+      est FERMÉE.** Interrogé sur la pertinence du scénario, Kevin a demandé *« dans quel cas le
+      tutorat d'un compte mineur est-il pertinent ? »*, et la mesure a répondu **aucun
+      aujourd'hui** : aucun chemin applicatif ne rend un compte inactif (`UPDATE accounts` = une
+      seule ligne dans tout le dépôt, `028:286`), donc la ré-acquisition n'a **aucun bénéficiaire
+      possible** ; un effacé est muré par P0116 ; rien n'est déployé. **Le lot `U-sec` a donc
+      retiré l'ACCÈS au lieu de construire le plancher** (`031`, deux `REVOKE EXECUTE` ; les murs
+      de `017`/`020` restent gravés et éprouvés sous l'owner). Voir CLAUDE.md §8.4 et §11 ⑭.
+    - ⚠️ **Ce que la réouverture devra corriger, et qui n'est PAS résolu** : ① le défaut de
+      `020:104-109` est **intact**, seulement inaccessible ; ② la contrainte du **foyer partagé**
+      ci-dessus ; ③ **la rédaction de cette décision porte un VETO DE FAIT** — le recours STAFF y
+      est conditionné à *« aucune ligne n'a été enregistrée »*, ce qu'un responsable hostile annule
+      en enregistrant **la sienne**. Le déclencheur juste est *« la personne ne peut pas obtenir ou
+      achever son défi, quelle qu'en soit la raison »* ; ④ un **détecteur** du foyer partagé existe
+      déjà en base (l'empreinte est-elle la ligne `ACTIVE` d'une **autre** personne ?) — mais il est
+      **BORNÉ** : il ne voit pas le parent dont le numéro n'a jamais été vérifié, c'est-à-dire l'état
+      ordinaire d'un compte (§3.5, vérification paresseuse).
 16. **LA FIN DE VIE D'UN COMPTE — DEUX ACTES DISTINCTS** (Kevin, 03/08/2026).
     - **A — Le personnel n'efface JAMAIS une personne au compte ACTIF.** Le refus
       `HAS_ACTIVE_ACCOUNT` (`026:463`) **reste** : un adulte capable ne peut être effacé que **par
@@ -527,3 +544,15 @@ paramètre (config/env), on ne fige pas une hypothèse.
       mesurée, **n'existe pas**. Aujourd'hui l'étiquette est ambiguë mais **le fait ne l'est pas** :
       voir un compte disparaître, c'est savoir que la personne a été effacée. **La fermeture donne à
       cette protection la couverture qui lui manque.**
+    - 🔒 **SUSPENDUE le 03/08/2026, par CONSÉQUENCE de la n°15.** L'ordre imposé ci-dessus tenait :
+      la fermeture ne se livre pas avant la ré-acquisition. La ré-acquisition n'étant pas construite
+      (porte fermée), **la fermeture ne l'est pas non plus.** Elle n'est pas abandonnée : elle
+      attend un usage.
+    - ⚠️ **LE FAIT QUI LA MOTIVAIT RESTE VRAI, et c'est pour cela qu'il est écrit ici plutôt
+      qu'oublié** : **le compte d'une personne décédée reste `ACTIVE` indéfiniment**, et **la seule
+      façon de quitter le système est de DÉTRUIRE ses données.** Aucune urgence mesurée — aucun
+      utilisateur réel — mais ce fait ne doit pas être redécouvert dans deux ans comme une surprise.
+    - 📌 **Et une lacune que la suspension laisse ouverte, nommée au passage** : même la
+      ré-acquisition, une fois construite, ne rendra **aucune** porte de retour à un compte qui n'a
+      **jamais vérifié son numéro** — l'état par défaut d'un compte neuf (§3.5). Pour cette
+      population, sortir restera un aller simple tant qu'un recours STAFF n'existe pas.
