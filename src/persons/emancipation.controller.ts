@@ -1,86 +1,54 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  HttpCode,
-  HttpException,
-  HttpStatus,
-  Inject,
-  Post,
-  Req,
-} from '@nestjs/common';
-import type { Request } from 'express';
-import { EMANCIPATION_SERVICE, type EmancipationService } from './emancipation.service';
-
-interface StartBody {
-  personPublicIdentifier?: unknown;
-  phone?: unknown;
-  channel?: unknown;
-}
-
-interface CompleteBody {
-  personPublicIdentifier?: unknown;
-  code?: unknown;
-  secret?: unknown;
-}
+import { Controller, HttpException, HttpStatus, Post } from '@nestjs/common';
 
 /**
- * L'émancipation — endpoints PUBLICS (le demandeur n'a pas encore de compte),
- * throttlés par IP, SANS ORACLE : l'existence d'une personne ne se sonde pas.
- * Toute ouverture rend le même accusé ; tout échec d'achèvement rend le même
- * refus. Les murs (âge, ligne prouvée, coupure) vivent en base (020).
+ * L'ÉMANCIPATION — PORTE FERMÉE (LOT U-sec, étape 2 ; migration 031).
+ *
+ * Ces deux routes existaient et fonctionnaient. Elles rendent désormais 501,
+ * et la raison vit ici plutôt que dans un journal de décisions :
+ *
+ * open_emancipation reçoit DE L'APPELANT la personne visée ET la coordonnée
+ * (020:104-109). La preuve qui suit établit « je détiens la ligne que je viens
+ * de déclarer » — jamais « je suis cette personne ». La cible est l'identifiant
+ * public, conçu pour être DICTÉ AU GUICHET (014:78) : une désignation, pas une
+ * authentification. Le plancher d'identité qui corrige cela demande un défi
+ * dont la coordonnée est LUE au registre — et il n'a, aujourd'hui, personne à
+ * servir : aucun chemin applicatif ne rend un compte inactif (mesuré : un seul
+ * « UPDATE accounts » dans le dépôt, dans l'effacement), donc la ré-acquisition
+ * n'a aucun bénéficiaire ; rien n'est déployé ; la preuve de ligne est un
+ * simulateur.
+ *
+ * LE MUR EST EN BASE, PAS ICI : 031 retire au rôle applicatif le droit
+ * d'exécuter open_emancipation et complete_emancipation. Ce 501 est la FAÇADE
+ * — il rend un refus propre au lieu d'un « permission denied » brut. Si ce
+ * fichier disparaissait, la porte resterait fermée ; c'est le sens de §3.1.
+ *
+ * On ferme la porte, on garde les murs : 017 (P0113, la coupure définitive),
+ * l'invariant d'émancipation différé et 019 (le droit appartient à la PERSONNE)
+ * sont intacts, et les tests continuent de les prouver sous l'owner. Le jour où
+ * un usage réel apparaît, le plancher se construit à ce moment-là, avec la
+ * contrainte du foyer partagé connue d'avance (CDC §10 n°15).
+ *
+ * Le service n'est pas touché : son code, ses murs et ses tests restent en
+ * place pour l'étape qui reprendra ce chantier.
  */
 @Controller('emancipation')
 export class EmancipationController {
-  constructor(
-    @Inject(EMANCIPATION_SERVICE) private readonly emancipation: EmancipationService,
-  ) {}
-
   @Post('start')
-  @HttpCode(202)
-  async start(@Body() body: StartBody, @Req() req: Request): Promise<{ accepted: true }> {
-    const personPublicIdentifier = requireString(body.personPublicIdentifier, 'personPublicIdentifier');
-    const phone = requireString(body.phone, 'phone');
-    const channel = body.channel === 'CALL' ? 'CALL' : 'SMS';
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
-
-    const result = await this.emancipation.start(personPublicIdentifier, phone, channel, clientIp);
-    if (result.outcome === 'THROTTLED') {
-      throw new HttpException('trop de tentatives, réessayer plus tard', HttpStatus.TOO_MANY_REQUESTS);
-    }
-    return { accepted: true };
+  start(): never {
+    throw closed();
   }
 
   @Post('complete')
-  @HttpCode(200)
-  async complete(
-    @Body() body: CompleteBody,
-    @Req() req: Request,
-  ): Promise<{ accountIdentifier: string }> {
-    const personPublicIdentifier = requireString(body.personPublicIdentifier, 'personPublicIdentifier');
-    const code = requireString(body.code, 'code');
-    const secret = requireString(body.secret, 'secret');
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
-
-    const result = await this.emancipation.complete(personPublicIdentifier, code, secret, clientIp);
-    switch (result.outcome) {
-      case 'EMANCIPATED':
-        return { accountIdentifier: result.accountIdentifier };
-      case 'SECRET_TOO_SHORT':
-        throw new BadRequestException(`secret trop court (minimum ${result.minLength} caractères)`);
-      case 'THROTTLED':
-        throw new HttpException('trop de tentatives, réessayer plus tard', HttpStatus.TOO_MANY_REQUESTS);
-      default:
-        // Personne inconnue, code faux, ligne non prouvée, trop jeune : LE
-        // MÊME refus — rien à sonder depuis un endpoint public.
-        throw new BadRequestException('émancipation refusée');
-    }
+  complete(): never {
+    throw closed();
   }
 }
 
-function requireString(value: unknown, name: string): string {
-  if (typeof value !== 'string' || value === '') {
-    throw new BadRequestException(`${name} : chaîne requise`);
-  }
-  return value;
+function closed(): HttpException {
+  // Réponse UNIFORME sur les deux routes, et volontairement muette : un
+  // endpoint public ne dit rien de plus fermé qu'un autre.
+  return new HttpException(
+    "l'émancipation n'est pas ouverte dans cette version",
+    HttpStatus.NOT_IMPLEMENTED,
+  );
 }

@@ -142,15 +142,17 @@ describe('030 — le service ne désigne plus sa cible', () => {
     );
     expect(opened.verdict).toBe('UNKNOWN');
 
-    // Marche 4 — la prise de compte elle-même, jouée quand même : elle ne
-    // trouve aucune ligne prouvée. Le verdict le dit, et le registre le confirme.
-    const done = firstRow(
-      await app.query<{ verdict: string }>(
-        'SELECT verdict FROM complete_emancipation($1, $2, $3)',
-        [victim, nextIdentifier(), ARGON2ID],
-      ),
-    );
-    expect(done.verdict).toBe('LINE_NOT_PROVEN');
+    // Marche 4 — la prise de compte elle-même. Depuis 031 le rôle applicatif
+    // ne peut PLUS L'EXÉCUTER DU TOUT : c'est un contrôle négatif plus fort que
+    // le verdict LINE_NOT_PROVEN qu'il rendait avant (un verdict prouve que la
+    // fonction a refusé ; ceci prouve qu'elle n'est plus atteignable).
+    await expect(
+      app.query('SELECT verdict FROM complete_emancipation($1, $2, $3)', [
+        victim,
+        nextIdentifier(),
+        ARGON2ID,
+      ]),
+    ).rejects.toThrow(/permission denied/);
     expect(await countAccounts()).toBe(before);
   });
 
