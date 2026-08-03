@@ -495,3 +495,35 @@ paramètre (config/env), on ne fige pas une hypothèse.
       percuterait l'unicité mondiale (`006:107-108`, une seule `ACTIVE` par ligne) — et « la preuve
       la plus récente gagne » **révoquerait la revendication du parent**. Le plancher doit donc se
       concevoir **sans exiger une revendication ACTIVE de plus par personne**.
+16. **LA FIN DE VIE D'UN COMPTE — DEUX ACTES DISTINCTS** (Kevin, 03/08/2026).
+    - **A — Le personnel n'efface JAMAIS une personne au compte ACTIF.** Le refus
+      `HAS_ACTIVE_ACCOUNT` (`026:463`) **reste** : un adulte capable ne peut être effacé que **par
+      lui-même**. Quatre raisons, dans l'ordre : c'est le **pouvoir le plus dangereux du système**
+      (destruction irréversible des données d'un client vivant, par un acteur interne) · **aucune
+      obligation légale ne l'impose** dans la juridiction (§9, constat de Kevin) · **la voie existe
+      déjà** — un ordre d'autorité se satisfait en contraignant **la personne**, pas le guichet ·
+      **asymétrie du regret** : rouvrir ce mur coûte une migration signée, un effacement interne
+      erroné coûte la confiance. *Si le besoin naît, la réponse est la SÉQUENCE du point B, jamais
+      l'ouverture de cette porte.*
+    - **B — Une FERMETURE DE COMPTE est ajoutée : un acte DISTINCT et NON DESTRUCTEUR.**
+    - 🔴 **Le fait mesuré qui l'impose (03/08/2026, `origin/main`)** : `git grep "UPDATE accounts"`
+      sur `db/ src/ scripts/` rend **UNE seule ligne** — `028_erase_person.sql:286`, écrite par le
+      LOT effacement. Recherche élargie (`close`, `disable`, `terminate`, `deactivat`) sur
+      `src/accounts/` et `src/auth/` : **zéro**. La transition `ACTIVE → DEACTIVATED` existe en base
+      et le rôle applicatif en a le droit (`002:107`) — **mais aucun chemin applicatif ne
+      l'emprunte, sauf l'effacement.**
+      → **Conséquence : la SEULE façon de quitter le système est de DÉTRUIRE ses données.** Une
+      famille qui cesse simplement d'utiliser le service n'a que l'option nucléaire ; et **le compte
+      d'une personne décédée reste `ACTIVE` pour toujours**, faute de tout chemin de fermeture.
+    - **Ce que la fermeture résout** : la sortie ordinaire · le compte d'un défunt · **et le point A
+      par une SÉQUENCE** — fermer le compte (acte moindre), puis la porte d'effacement existante
+      s'applique. **Deux décisions, deux traces, aucun pouvoir neuf.**
+    - ⚠️ **ORDRE IMPOSÉ, non négociable** : la fermeture **ne se livre pas avant la RÉ-ACQUISITION**
+      (§10 n°15, lot `U-sec`). Fermer sans pouvoir revenir serait **une sortie sans porte de
+      retour** — la réactivation n'étant pas une transition posée en V1 (`016:61-69`). La fermeture
+      appartient donc au lot `U-sec`, **après** ses trois murs.
+    - 📌 **Effet mesuré chez le cœur voisin, à lui signaler** : sa règle « *le motif ne trahit jamais
+      l'effacement* » repose sur l'existence d'une **désactivation** comme cause concurrente — qui,
+      mesurée, **n'existe pas**. Aujourd'hui l'étiquette est ambiguë mais **le fait ne l'est pas** :
+      voir un compte disparaître, c'est savoir que la personne a été effacée. **La fermeture donne à
+      cette protection la couverture qui lui manque.**
