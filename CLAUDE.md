@@ -720,3 +720,19 @@ délibérément. La décision était bonne ; **la phrase était fausse, à l'end
 auteur irait chercher la vérité.** D'où la règle : **tout lot qui détruit publie la liste de ce
 qu'il NE détruit PAS**, et cette liste est exhaustive ou elle ne sert à rien — elle a dû être
 complétée deux fois (les registres d'empreintes, puis les **droits d'accès restés ACTIFS**).
+
+**⑬ Une preuve peut être ARMÉE et prouver le MAUVAIS FAIT — la suite de la leçon ⑨.**
+⑨ disait : *vérifier qu'une protection EXISTE n'est pas vérifier qu'elle FONCTIONNE.* Voici le
+cran d'après : **une protection qui fonctionne parfaitement peut établir autre chose que ce qu'on
+lui prête.** `open_emancipation` exige un **code frais** — la preuve part, arrive, est vérifiée,
+tout marche. Mais la coordonnée est **fournie par l'appelant** (`020:104-109`) : le code prouve
+« *je détiens la ligne que je viens de déclarer* », **jamais** « *je suis cette personne* ».
+⚠️ **Ce qui rend ce défaut si difficile à voir** : l'auteur **avait vu la porte**. Le commentaire
+de `emancipation.service.ts` nomme la menace — « *sinon quiconque connaît l'identifiant public de
+la personne poserait SON secret sur son dos dès que le compte meurt* » — puis **colmate la
+variante d'à côté** (l'absence de code), en laissant ouverte celle qu'il venait de décrire.
+**Un commentaire qui nomme un risque donne au lecteur suivant le sentiment que le risque est
+traité.** Devant toute preuve, demander : **QUEL FAIT exactement établit-elle — et est-ce celui
+dont le mur a besoin ?** *(Corollaire : un identifiant conçu pour être **dicté au guichet** est
+une DÉSIGNATION ; l'employer comme seule désignation d'une cible dans un acte **irréversible**
+transforme une commodité de guichet en surface d'attaque.)*

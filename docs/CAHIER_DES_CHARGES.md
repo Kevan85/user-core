@@ -463,3 +463,35 @@ paramètre (config/env), on ne fige pas une hypothèse.
       **test de présence** d'un numéro est donc **BORNÉ, pas FERMÉ** — il exige de détenir *à la
       fois* le trousseau d'empreinte et un numéro précis, et ne rend qu'un oui/non. La contrepartie
       est écrite depuis le LOT prod : **le trousseau ne vit jamais avec les sauvegardes.**
+15. **LE PLANCHER D'IDENTITÉ DE L'ÉMANCIPATION ET DE LA RÉ-ACQUISITION** (Kevin, 03/08/2026) —
+    décision prise en réponse à un **défaut de sécurité démontré**, non à une préférence.
+    - **Le défaut, mesuré et confirmé par les deux sessions** : `open_emancipation` reçoit **de
+      l'appelant** la personne visée **et** la coordonnée de ligne (`020:104-109`), et insère la
+      revendication avec cette empreinte (`020:145-147`). La preuve qui suit établit « *je détiens
+      la ligne que je viens de déclarer* » — **jamais « je suis cette personne »**. La cible est
+      l'identifiant public, **conçu pour être dicté au guichet** (`014:78`) : **une DÉSIGNATION,
+      jamais une AUTHENTIFICATION.**
+    - **La population exposée est celle que l'émancipation existe pour servir** : un ayant droit
+      n'a **jamais** de revendication de ligne (`attach_dependent` 023:411-417, clic programme
+      021:248 sq. — aucun `INSERT` dans `phone_claims`), donc l'unicité de `018:51-52` ne le
+      protège pas. **Elle s'élargit seule** à chaque cohorte franchissant le seuil d'âge.
+    - **Le préjudice n'est pas seulement une divulgation** : `complete_emancipation` clôt chaque
+      lien de responsabilité en `EMANCIPATED` (`020:231-242`) et `017:131-136` rend la coupure
+      **définitive** (P0113). **Un tiers détruit sans retour le lien de tutelle d'un mineur** — le
+      domaine même où « le système ne tranche pas à la place d'un juge » (§8.1).
+    - 🟢 **Exposition réelle au 03/08/2026 : NULLE** — `LyingProver` est le seul implémenteur
+      (`src/main.ts:86,117`), aucun fournisseur réel n'est câblé, la bascule Scolaria n'a pas eu
+      lieu. **Dette de sécurité à solder AVANT la mise en service**, pas incident.
+    - **LA DÉCISION** : la coordonnée du défi est **LUE au registre, jamais reçue de l'appelant**.
+      Pour l'ayant droit — qui n'a **rien** à lire — **le responsable enregistre à l'avance la
+      ligne du jeune** ; le jour venu, le jeune prouve **cette ligne-là** et s'émancipe **seul**.
+      **Recours : acte STAFF** pour le jeune dont aucune ligne n'a été enregistrée.
+    - ⚠️ **Ce que cette décision NE fait PAS, et qui la borne** : enregistrer une coordonnée n'est
+      **pas** un droit de veto. **Aucun responsable ne peut refuser une émancipation** — c'est le
+      droit du jeune (§8.1, « coupure NETTE »), et le recours STAFF existe précisément pour qu'un
+      parent inactif ou hostile ne puisse pas la bloquer.
+    - 📌 **Contrainte technique à traiter au lot, nommée ici pour ne pas être découverte** : dans un
+      foyer qui **partage un téléphone**, activer la revendication du jeune sur la ligne du parent
+      percuterait l'unicité mondiale (`006:107-108`, une seule `ACTIVE` par ligne) — et « la preuve
+      la plus récente gagne » **révoquerait la revendication du parent**. Le plancher doit donc se
+      concevoir **sans exiger une revendication ACTIVE de plus par personne**.
