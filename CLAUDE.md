@@ -296,8 +296,8 @@ git grep -rniE "price|billing_cycle|next_renewal|subscription|invoice|\bamount\b
 ### 3.10 Zéro suppression physique
 Compte, preuve, session, entrée de catalogue : on corrige par statut, révocation, nouvelle
 ligne **auditables**. Jamais de `DELETE`. (La désactivation d'un compte est un statut ; le
-droit à l'effacement, s'il devient une exigence légale RDC, se traite par une procédure
-dédiée décidée avec Kevin — jamais par un `DELETE` de réflexe.)
+droit à l'effacement **est une exigence légale RDC** — §3.14 — et se traite par une procédure
+dédiée, jamais par un `DELETE` de réflexe.)
 
 ### 3.11 Les inconnues de terrain ne s'INVENTENT pas
 Prix du flash call en RDC, disponibilité de la Silent Network Authentication, résidence des
@@ -315,14 +315,35 @@ d'enrichir l'outbox.
 On réserve, on commit, on appelle (fournisseur de vérification, dispatcher), on écrit le
 verdict dans une transaction neuve.
 
-### 3.14 Concevoir comme si un cadre strict de protection des données existait déjà
+### 3.14 Le cadre strict de protection des données EXISTE — on s'y aligne
+🔴 **AMENDÉ LE 04/08/2026. La décision ne change pas ; son MOTIF a vieilli — et c'est la
+leçon ⑤ appliquée au socle lui-même.**
+
 **Décision fondatrice de Kevin (15/07/2026) :** *« Faisons comme si un cadre juridique strict
-existait, afin de ne pas être bloqués si la juridiction légifère. »* Il n'existe **pas** de
-cadre clair en RDC (fait de terrain, source Kevin) — on adopte donc **volontairement** un
-régime du niveau des standards internationaux. **« Pas de loi aujourd'hui » ≠ « aucun risque
-demain »** : un partenaire santé, un bailleur, un opérateur peut l'exiger avant Mediyo. Vaut
-pour **toute** donnée personnelle (numéro, nom, date de naissance, consentement), pas seulement
-les mineurs.
+existait, afin de ne pas être bloqués si la juridiction légifère. »* On adoptait alors
+**volontairement** un régime du niveau des standards internationaux, **au motif qu'aucun cadre
+clair n'existait en RDC**.
+
+**[TRANCHÉ — Kevin, 04/08/2026] Ce motif était faux, et le cadre est là.** La RDC dispose d'un
+cadre écrit **depuis 2023**, **calqué sur le modèle européen** (fait de terrain, source Kevin,
+signalé par l'équipe Organization-Core le 04/08/2026). **Verdict de Kevin : « on doit
+s'aligner ».** La règle ne se relâche donc pas — **elle cesse d'être volontaire pour devenir
+due**, et « pas de loi aujourd'hui » n'est plus un raisonnement disponible.
+
+Vaut pour **toute** donnée personnelle (numéro, nom, date de naissance, consentement), pas
+seulement les mineurs.
+
+⚠️ **Deux implications à ne pas manquer — voir CDC §10 n°17 :**
+- un **délai légal** encadre l'effacement → il **plafonne `R`**, qui cessait d'être une attente
+  sans coût (CDC §9 n°5) ;
+- ce qu'un **effacé** laisse encore faire au système (dette **`E-1`** : ses droits d'accès
+  restent `ACTIFS`) cesse d'être un pur arbitrage produit.
+
+📌 **Ce que cet amendement NE touche PAS** : `CAHIER_DES_CHARGES.md` §9, qui constate qu'aucun
+cadre clair n'existe **sur le régime des données d'un mineur, le consentement parental et l'âge
+d'émancipation**. Ce périmètre-là est **plus étroit** que le droit à l'effacement et n'est pas
+tranché par le présent amendement. **Ne pas étendre une correction au-delà de ce qu'elle
+mesure.**
 
 - **Minimisation & finalité** : chaque donnée personnelle a une finalité écrite. Rien « au cas
   où ». (Déjà tenu par la frontière : le scolaire/santé reste chez les programmes.)
@@ -591,10 +612,17 @@ ligne pré-enregistrée, aiguillage, recours STAFF, fermeture de compte. **Il en
 Ce qui ne se redémontre plus :
 
 - 🎯 **LA MESURE QUI A FAIT TOMBER QUATRE ÉTAPES.** Avant de concevoir le plancher, on a demandé
-  *qui l'utiliserait*. Réponse mesurée : **personne.** `UPDATE accounts` ne se trouve qu'à **UN**
-  endroit du dépôt (`028:286`) — **aucun chemin applicatif ne rend un compte inactif**, donc la
-  ré-acquisition d'un compte mort n'a **aucun bénéficiaire possible** ; un effacé est muré par
-  P0116 ; rien n'est déployé. **Une porte sans usage se FERME, elle ne se sécurise pas** (§11 ⑭).
+  *qui l'utiliserait*. Réponse mesurée : **personne.** Un **seul chemin applicatif** rend un compte
+  inactif — l'effacement (`028:286`, unique site de PRODUCTION de `UPDATE accounts`) — et il n'a
+  **aucun bénéficiaire possible** : l'effacé est muré par P0116 ; rien n'est déployé. **Une porte
+  sans usage se FERME, elle ne se sécurise pas** (§11 ⑭).
+  ⚠️ **Formulation corrigée le 04/08/2026, sur mesure du cœur voisin.** La rédaction d'origine
+  disait « `UPDATE accounts` ne se trouve qu'à **UN endroit du dépôt** » : **faux** — 45
+  occurrences, dont 3 dans `db/ src/`, et **le commentaire de `031` était lui-même la deuxième**.
+  Le droit nu de désactivation reste accordé au rôle applicatif (`002:107`), et
+  `tests/accounts/accounts-schema.spec.ts:140-152` **l'exerce sous le rôle bridé**. *La conclusion
+  ne dépendait pas de l'énoncé fautif — elle tenait par P0116. Le motif général : **le périmètre
+  d'un balayage doit inclure son propre texte.***
 - **`030` — le service ne DÉSIGNE plus la personne d'une revendication de ligne.** Le rôle
   applicatif détenait `INSERT (person_id, …)` et `UPDATE (status, revoke_reason)` sur
   `phone_claims` : le droit d'écrire une revendication **sur une personne qu'il nomme**. Retrait
@@ -781,9 +809,10 @@ transforme une commodité de guichet en surface d'attaque.)*
 chiffré : **six étapes**, une contrainte technique dure (l'unicité mondiale d'une ligne interdit
 une revendication de plus dans un foyer qui partage un téléphone), et **deux arbitrages remontés
 à Kevin**. Il a demandé *« dans quel scénario est-ce pertinent ? »* — et la mesure a répondu
-**aucun** : rien n'est déployé, et **aucun chemin applicatif ne rend un compte inactif**
-(`UPDATE accounts` = une ligne dans tout le dépôt), donc la capacité qu'on s'apprêtait à protéger
-n'avait **aucun bénéficiaire possible**. Six étapes contre **un `REVOKE`**.
+**aucun** : rien n'est déployé, et **un seul chemin applicatif rend un compte inactif —
+l'effacement** (`028:286`, unique site de production), qui n'ouvre rien puisque l'effacé est muré
+par P0116. La capacité qu'on s'apprêtait à protéger n'avait donc **aucun bénéficiaire possible**.
+Six étapes contre **un `REVOKE`**.
 ⚠️ **La question qui coûte trente secondes et qu'on oublie de poser** : *avant de sécuriser une
 porte — QUI l'utilise aujourd'hui ?* Si la réponse est « personne », le geste juste est de la
 **fermer**, en gardant ses murs et en écrivant pourquoi. Corollaire pour le socle : **graver un

@@ -360,7 +360,7 @@ migration signée. Sont **gravés en base** dès les premières migrations :
 | 2 | Silent Network Authentication disponible en RDC (Vodacom/Orange/Airtel) ? | Kevin + recherche |
 | 3 | BCC : résidence des données d'identité (régime distinct des données financières ?) | Kevin (BCC) |
 | 4 | Proportion de parents payeurs sans WhatsApp (dimensionne le repli SMS) | Kevin (pilote) |
-| 5 | **`R` — la rétention EFFECTIVE des sauvegardes**, c'est-à-dire le **MAXIMUM de TOUTES les couches** (snapshots d'hébergeur, versioning/corbeille d'un stockage objet — souvent actifs par défaut, sauvegarde du serveur de sauvegardes, copies manuelles), **jamais le paramètre du script**. Sans elle, « effacé » ne peut pas être daté : la crypto-destruction n'est effective qu'à **J+R** (CLAUDE.md §3.14, `docs/ops/SAUVEGARDES.md` §2/§3bis). **Statut au 30/07/2026 : NON RÉPONDABLE et assumée comme telle — Kevin change d'hébergeur, le projet ayant pris une autre dimension.** ⚠️ **Position de Kevin, 02/08/2026 : « je ne ferai pas ce choix par précipitation » — attente ASSUMÉE, sans date et SANS COÛT DE RETARD.** Le LOT effacement est livré et fusionné sans elle : `R` est un paramètre obligatoire (`BACKUP_RETENTION_DAYS`, le script refuse de courir sans), la destruction fonctionne à l'identique, et **aucune date d'effacement effectif n'est exposée** (l'API ne rend que la fin de fenêtre de rétractation, raison gravée au point d'exposition). **Ce qui attend n'est pas du code : c'est UNE PHRASE** — le droit de dater la promesse. Les quatre questions à poser à l'hébergeur **au moment de comparer les offres** sont listées en `docs/ops/EFFACEMENT.md` §3 et `SAUVEGARDES.md` §3bis. | Kevin (hébergeur) |
+| 5 | **`R` — la rétention EFFECTIVE des sauvegardes**, c'est-à-dire le **MAXIMUM de TOUTES les couches** (snapshots d'hébergeur, versioning/corbeille d'un stockage objet — souvent actifs par défaut, sauvegarde du serveur de sauvegardes, copies manuelles), **jamais le paramètre du script**. Sans elle, « effacé » ne peut pas être daté : la crypto-destruction n'est effective qu'à **J+R** (CLAUDE.md §3.14, `docs/ops/SAUVEGARDES.md` §2/§3bis). **Statut au 30/07/2026 : NON RÉPONDABLE et assumée comme telle — Kevin change d'hébergeur, le projet ayant pris une autre dimension.** ⚠️ **Position de Kevin, 02/08/2026 : « je ne ferai pas ce choix par précipitation » — attente ASSUMÉE, sans date et SANS COÛT DE RETARD.** Le LOT effacement est livré et fusionné sans elle : `R` est un paramètre obligatoire (`BACKUP_RETENTION_DAYS`, le script refuse de courir sans), la destruction fonctionne à l'identique, et **aucune date d'effacement effectif n'est exposée** (l'API ne rend que la fin de fenêtre de rétractation, raison gravée au point d'exposition). **Ce qui attend n'est pas du code : c'est UNE PHRASE** — le droit de dater la promesse. Les quatre questions à poser à l'hébergeur **au moment de comparer les offres** sont listées en `docs/ops/EFFACEMENT.md` §3 et `SAUVEGARDES.md` §3bis.<br>🔴 **AMENDÉ LE 04/08/2026 — l'attente n'est PLUS SANS COÛT, et `R` n'est plus seulement une inconnue : elle est PLAFONNÉE.** Le cadre RDC existe et impose un **délai** à l'effacement (§10 n°17). **Le calcul, posé** : sur le chemin DIFFÉRÉ, le compte à rebours légal court depuis la **demande**, or notre fenêtre de réflexion consomme déjà **7 jours** avant la moindre destruction (`erasure_policy`). Si le délai légal est de **D** jours, alors **`R` ≤ D − 7**. **`R` cesse donc d'être une question technique reportable : elle devient un CRITÈRE DE CHOIX D'HÉBERGEUR**, à poser avec les quatre questions, et non après. *(Lecture stricte assumée : la destruction en base est immédiate à l'exécution, et l'on ne préjuge pas qu'un régulateur compte les sauvegardes dans le délai. On dimensionne au pire, on ne plaide pas.)* | Kevin (hébergeur) |
 
 > **⚠️ Un CHANGEMENT D'HÉBERGEUR est le pire moment de vie de `R`, et il faut le dire avant, pas
 > après.** Il ne le déplace pas : il l'**augmente** et le **dédouble**, par deux couches que
@@ -498,9 +498,10 @@ paramètre (config/env), on ne fige pas une hypothèse.
     - 🔒 **SUSPENDUE le 03/08/2026 (Kevin, même jour) — le plancher n'est PAS construit, la porte
       est FERMÉE.** Interrogé sur la pertinence du scénario, Kevin a demandé *« dans quel cas le
       tutorat d'un compte mineur est-il pertinent ? »*, et la mesure a répondu **aucun
-      aujourd'hui** : aucun chemin applicatif ne rend un compte inactif (`UPDATE accounts` = une
-      seule ligne dans tout le dépôt, `028:286`), donc la ré-acquisition n'a **aucun bénéficiaire
-      possible** ; un effacé est muré par P0116 ; rien n'est déployé. **Le lot `U-sec` a donc
+      aujourd'hui** : un **seul chemin applicatif** rend un compte inactif — l'effacement
+      (`028:286`, unique site de PRODUCTION de `UPDATE accounts`) — et il n'ouvre rien, l'effacé
+      étant muré par P0116, donc la ré-acquisition n'a **aucun bénéficiaire
+      possible** ; rien n'est déployé. **Le lot `U-sec` a donc
       retiré l'ACCÈS au lieu de construire le plancher** (`031`, deux `REVOKE EXECUTE` ; les murs
       de `017`/`020` restent gravés et éprouvés sous l'owner). Voir CLAUDE.md §8.4 et §11 ⑭.
     - ⚠️ **Ce que la réouverture devra corriger, et qui n'est PAS résolu** : ① le défaut de
@@ -523,12 +524,18 @@ paramètre (config/env), on ne fige pas une hypothèse.
       erroné coûte la confiance. *Si le besoin naît, la réponse est la SÉQUENCE du point B, jamais
       l'ouverture de cette porte.*
     - **B — Une FERMETURE DE COMPTE est ajoutée : un acte DISTINCT et NON DESTRUCTEUR.**
-    - 🔴 **Le fait mesuré qui l'impose (03/08/2026, `origin/main`)** : `git grep "UPDATE accounts"`
-      sur `db/ src/ scripts/` rend **UNE seule ligne** — `028_erase_person.sql:286`, écrite par le
-      LOT effacement. Recherche élargie (`close`, `disable`, `terminate`, `deactivat`) sur
-      `src/accounts/` et `src/auth/` : **zéro**. La transition `ACTIVE → DEACTIVATED` existe en base
-      et le rôle applicatif en a le droit (`002:107`) — **mais aucun chemin applicatif ne
-      l'emprunte, sauf l'effacement.**
+    - 🔴 **Le fait mesuré qui l'impose (03/08/2026, corrigé le 04/08/2026)** : le **seul site de
+      PRODUCTION** de `UPDATE accounts` est `028_erase_person.sql:286`, écrit par le LOT effacement.
+      Recherche élargie (`close`, `disable`, `terminate`, `deactivat`) sur `src/accounts/` et
+      `src/auth/` : **zéro**. **Un seul chemin applicatif rend donc un compte inactif :
+      l'effacement.** ⚠️ *Rédaction corrigée : « `git grep` rend UNE seule ligne » était faux (45
+      occurrences, 3 dans `db/ src/`) — mesure du cœur voisin, re-jouée et confirmée.*
+    - 📌 **Et le COÛT de cette fermeture avait été surestimé** (mesuré le 04/08/2026) : la
+      transition `ACTIVE → DEACTIVATED` existe en base, le trigger pose lui-même `deactivated_at`,
+      le rôle applicatif détient déjà le droit (`002:107`), et
+      `tests/accounts/accounts-schema.spec.ts:140-152` **l'exerce sous le rôle bridé et passe**. La
+      fermeture est donc **une fonction de service, pas un lot** — sa suspension reste un arbitrage
+      produit, jamais un coût.
       → **Conséquence : la SEULE façon de quitter le système est de DÉTRUIRE ses données.** Une
       famille qui cesse simplement d'utiliser le service n'a que l'option nucléaire ; et **le compte
       d'une personne décédée reste `ACTIVE` pour toujours**, faute de tout chemin de fermeture.
@@ -556,3 +563,37 @@ paramètre (config/env), on ne fige pas une hypothèse.
       ré-acquisition, une fois construite, ne rendra **aucune** porte de retour à un compte qui n'a
       **jamais vérifié son numéro** — l'état par défaut d'un compte neuf (§3.5). Pour cette
       population, sortir restera un aller simple tant qu'un recours STAFF n'existe pas.
+17. **LE CADRE JURIDIQUE RDC EXISTE — ON S'ALIGNE** (Kevin, 04/08/2026).
+    - **[TRANCHÉ — Kevin, 04/08/2026]** La RDC dispose d'un **cadre écrit de protection des données
+      depuis 2023**, **calqué sur le modèle européen**, comportant notamment un **droit à
+      l'effacement assorti d'un DÉLAI**. Verdict de Kevin, mot pour mot : **« C'est un modèle qui
+      est calqué sur l'Europe ; donc, on doit s'aligner. »**
+    - **Origine du signalement** : l'équipe **Organization-Core**, le 04/08/2026, en contre-don de
+      notre relecture de leur contrat. **Elle a déclaré elle-même ne pas avoir lu la source
+      officielle** (version PDF publique, pas le Journal officiel) ; **c'est Kevin qui a établi le
+      fait**, conformément à §3.11 — *une équipe technique n'établit jamais un fait réglementaire
+      RDC, ni la nôtre, ni la leur.*
+    - 🔴 **CE QUE CETTE DÉCISION NE CHANGE PAS — et c'est l'essentiel** : la conduite du projet est
+      **confirmée**, pas corrigée. Le régime que Kevin avait choisi **volontairement** le
+      15/07/2026 est celui qu'il fallait ; **c'est son MOTIF qui était faux** (« il n'existe pas de
+      cadre »). *Une justification périmée survit à la règle qu'elle justifiait* (CLAUDE.md §11 ⑤) —
+      ici, elle a survécu **trois ans** à la loi qu'elle ignorait. **La conception ne se relâche
+      pas : elle cesse d'être volontaire pour devenir DUE.**
+    - ⚠️ **DEUX CONSÉQUENCES MESURABLES, et elles ne sont pas de même nature :**
+      1. **`R` est PLAFONNÉE, et l'attente n'est plus gratuite** (§9 n°5, amendé). Le calcul est
+         posé là-bas : sur le chemin différé, **`R` ≤ D − 7**. `R` devient un **critère de choix
+         d'hébergeur**, à poser AVANT la signature, jamais après.
+      2. **La dette `E-1` change de nature.** Les droits d'accès d'une personne effacée **restent
+         `ACTIFS`** : un programme qui demande « a-t-elle accès ? » reçoit **OUI**. Tant qu'aucun
+         cadre n'existait, c'était un **arbitrage produit** à trois issues (couper · laisser ·
+         émettre un fait sortant sans motif). Sous un régime aligné sur le modèle européen, la
+         question devient : *répondre à cette interrogation est-il encore un traitement de ses
+         données ?* → **`E-1` penche désormais vers COUPER**, et cesse d'être une préférence.
+         **[À TRANCHER — Kevin]** : une seule décision, qui referme **`E-1` chez nous** ET la
+         question ouverte du cœur voisin sur le devenir de l'identifiant d'un effacé. *Le point de
+         greffe est déjà écrit dans l'en-tête d'`erase_person()` (`028`) ; le geste est une
+         révocation de plus dans une transaction qui existe.*
+    - 📌 **PÉRIMÈTRE, à ne pas déborder** : ce qui est établi porte sur le **droit à l'effacement**.
+      **§9 n'est pas amendé** — il constate qu'aucun cadre **clair** n'existe *« sur le régime des
+      données d'un mineur, le consentement parental et l'âge d'émancipation »*, périmètre plus
+      étroit, non tranché ici. **Une correction ne s'étend jamais au-delà de ce qu'elle mesure.**
