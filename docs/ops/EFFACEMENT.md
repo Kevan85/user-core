@@ -85,14 +85,22 @@ Cf. [INCIDENT.md §4](INCIDENT.md) — la procédure et sa vérité inconfortabl
 **TRANCHÉE le 04/08/2026 : COUPER.** Livrée en deux étapes — `032` (le mur : un effacé ne
 reçoit plus de droit) puis `033` (la coupure : les droits `ACTIFS` tombent en `ERASED`).
 
-⚠️ **Mais la dette n'est soldée qu'à MOITIÉ, et il faut le dire tel quel** : le volet
-« le droit reste `ACTIVE` » est fermé ; le volet « **qu'apprend le programme ?** » ne l'est
-pas. **Aucun événement sortant n'est émis** — mesuré : ni les portes de révocation, ni
-aucun des quatre triggers de `program_grants` n'écrit dans `outbox` ou
-`account_notifications`, et c'est voulu (une ligne d'outbox porterait le `person_id` d'un
-effacé). Un programme n'apprend donc rien : **il doit interroger**, et il lira `REVOKED`
-sans motif (§4).
+⚠️ **Mais la dette n'est soldée qu'à MOITIÉ, et il faut le dire tel quel.**
 
-Condition de réouverture inchangée : le contrat de publication d'Organization-Core exigeant
-un fait de disponibilité — le point de greffe reste écrit dans l'en-tête d'`erase_person()`
-(028) : la désactivation du compte, même transaction, là et nulle part ailleurs.
+**Volet ÉTAT : FERMÉ** (`033`). Le droit d'une personne effacée n'est plus `ACTIVE`.
+
+**Volet NOTIFICATION : ouvert, et ce n'est PAS un oubli.** Aucun fait sortant n'est émis —
+mesuré : ni les portes de révocation, ni aucun des quatre triggers de `program_grants`
+n'écrit dans `outbox` ou `account_notifications`, et c'est voulu (une ligne d'outbox
+porterait le `person_id` d'un effacé). **Le seul mécanisme candidat est la surface d'accès
+du contrat de comptes d'Organization-Core, dont notre avis du 03/08/2026 a montré qu'un
+fait de changement y TRAHIRAIT l'effacement** au lieu de le taire : un tel fait n'aurait
+aujourd'hui **qu'une seule cause possible**. C'est vérifiable ici, et c'est mesuré —
+`UPDATE accounts` ne se trouve qu'à **un** endroit du dépôt (`028_erase_person.sql`), la
+fermeture de compte étant suspendue (CDC §10 n°16) : rien d'autre que l'effacement ne rend
+un compte indisponible.
+
+→ **Ce volet ne se referme donc pas chez nous seuls : il vit dans le contrat.** En
+attendant, **un programme qui veut savoir interroge** — et il lira `REVOKED` sans motif
+(§4). Le point de greffe technique reste écrit dans l'en-tête d'`erase_person()` (`028`) :
+la désactivation du compte, même transaction, là et nulle part ailleurs.
