@@ -60,8 +60,11 @@ Conséquences tenues par le code, à ne pas défaire :
 | **`phone_hmac` dans TROIS registres append-only** | `possession_proof_refusals` (007), `program_invitations` (012), `program_invitation_refusals` (012) | Percer un `forbid_update` de registre coûterait plus qu'il ne rend (028, F1). **Quiconque détient un dump + le trousseau HMAC peut encore tester la présence d'un numéro via ces lignes-là** |
 | `provider_ref` | `possession_proofs`, `proof_dispatches` | Référence chez le **fournisseur SMS** : sa rétention est une couche **externe**, hors de notre script |
 | Le plafond par ligne se **détache** | `possession_proofs` via l'empreinte neutralisée | C7 : les preuves passées d'une ligne effacée ne comptent plus dans le plafond. Conséquence bornée (il faut s'effacer — irréversible — pour l'obtenir), et plutôt souhaitable : le nouveau porteur de la SIM n'hérite pas de l'historique d'un autre |
-| **Les droits d'accès restent `ACTIVE`** | `program_grants` | ⚠️ **Conséquence VISIBLE** : un programme qui demande « cette personne a-t-elle accès ? » reçoit **OUI** pour une personne effacée. Délibéré à double titre : depuis 019 le droit appartient à la PERSONNE et survit au compte, et **l'arbitrage Kevin est OUVERT** (dette E-1, §7) — le schéma n'en préjuge pas |
+| L'**historique** des droits survit | `program_grants` | ⚠️ Depuis `033` les droits `ACTIFS` sont **coupés** (`revoke_reason = 'ERASED'`) — la dette E-1 est soldée. Mais les lignes **restent** : « ce programme a eu un droit sur cette personne, du tel au tel » demeure lisible. Registre append-only, `REVOKED` figé (P0103) — et les motifs d'époque (`SELF`, `PROGRAM`) ne sont **pas** réécrits : ils disaient vrai et continuent de le dire |
+| Un programme voit `REVOKED`, **sans le motif** | façade `/v1/grants/status` | La façade n'expose que `status`, `grantedAt`, `revokedAt`. **L'ambiguïté repose sur DEUX valeurs atteignables — `SELF` et `ERASED`** : le jour où l'une cesse de l'être, `REVOKED` devient un **oracle d'effacement**. Un test tient cette condition en vie (`tests/persons/erasure-grant-wall.spec.ts`) |
+| Les liens où l'effacé est **AYANT DROIT** | `person_responsibilities` | ⚠️ **Asymétrie mesurée, à ne pas confondre avec un oubli** : `erase_person` ne ferme que les liens où la personne est **RESPONSABLE** (`responsible_person_id`, geste 1). Ceux où elle est **ayant droit** restent `ACTIVE` — le devenir des liens de responsabilité **n'a pas été tranché**, et une décision ne s'étend jamais au-delà de ce qu'elle tranche |
 | Le graphe familial survit | `person_responsibilities` | Des UUID sans PII — mais « qui était responsable de qui » reste lisible, avec `end_reason = 'ERASED'` sur les liens clos par l'effacement |
+| Les **invitations de programme en cours** ne sont pas annulées | `program_invitations` | Mesuré : `erase_person` **n'écrit pas** dans cette table. Une invitation `PENDING` adressée à l'empreinte de la ligne reste ouverte jusqu'à son expiration — et cette empreinte est déjà nommée plus haut comme résidu de registre |
 
 ## 5. La garantie qui ne vit PAS en base (H1)
 
@@ -78,9 +81,18 @@ Cf. [INCIDENT.md §4](INCIDENT.md) — la procédure et sa vérité inconfortabl
 
 ## 7. Dette NOMMÉE, pas traitée
 
-**E-1 — ce qu'un programme apprend quand une personne connue est effacée.** Aujourd'hui :
-rien (aucun événement sortant), et son droit d'accès reste `ACTIVE` (§4). **Arbitrage
-Kevin ouvert.** Conditions de réouverture : l'arbitrage rendu, **ou** le contrat de
-publication d'Organization-Core exigeant un fait de disponibilité — le point de greffe
-est déjà écrit dans l'en-tête d'`erase_person()` (028) : la désactivation du compte,
-même transaction, là et nulle part ailleurs.
+**E-1 — ce qu'un programme apprend quand une personne connue est effacée.**
+**TRANCHÉE le 04/08/2026 : COUPER.** Livrée en deux étapes — `032` (le mur : un effacé ne
+reçoit plus de droit) puis `033` (la coupure : les droits `ACTIFS` tombent en `ERASED`).
+
+⚠️ **Mais la dette n'est soldée qu'à MOITIÉ, et il faut le dire tel quel** : le volet
+« le droit reste `ACTIVE` » est fermé ; le volet « **qu'apprend le programme ?** » ne l'est
+pas. **Aucun événement sortant n'est émis** — mesuré : ni les portes de révocation, ni
+aucun des quatre triggers de `program_grants` n'écrit dans `outbox` ou
+`account_notifications`, et c'est voulu (une ligne d'outbox porterait le `person_id` d'un
+effacé). Un programme n'apprend donc rien : **il doit interroger**, et il lira `REVOKED`
+sans motif (§4).
+
+Condition de réouverture inchangée : le contrat de publication d'Organization-Core exigeant
+un fait de disponibilité — le point de greffe reste écrit dans l'en-tête d'`erase_person()`
+(028) : la désactivation du compte, même transaction, là et nulle part ailleurs.
