@@ -54,6 +54,7 @@ describe('Runner de migrations (contre le Postgres réel)', () => {
       '030_phone_claim_write_wall.sql',
       '031_emancipation_gate_closed.sql',
       '032_erased_person_grant_wall.sql',
+      '033_erase_person_cuts_grants.sql',
     ]);
   });
 

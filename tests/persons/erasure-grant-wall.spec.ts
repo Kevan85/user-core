@@ -24,6 +24,7 @@ describe('032 — une personne effacée ne reçoit plus de droit d\'accès', () 
   let seq = 0;
   let grantedProgram: string;
   let selfServiceProgram: string;
+  let pastProgram: string;
 
   beforeAll(async () => {
     app = new Pool({ connectionString: appUrl() });
@@ -39,6 +40,14 @@ describe('032 — une personne effacée ne reçoit plus de droit d\'accès', () 
       await owner.query<{ id: string }>(
         `INSERT INTO programs (code, label, access_mode)
          VALUES ('wall-self', 'Programme libre', 'SELF_SERVICE') RETURNING id`,
+      ),
+    ).id;
+    // Un SECOND programme libre : il sert à fabriquer un HISTORIQUE de droit
+    // révoqué, sans quoi le test de la coupure passerait avec le défaut.
+    pastProgram = firstRow(
+      await owner.query<{ id: string }>(
+        `INSERT INTO programs (code, label, access_mode)
+         VALUES ('wall-past', 'Programme quitte', 'SELF_SERVICE') RETURNING id`,
       ),
     ).id;
   });
@@ -235,21 +244,55 @@ describe('032 — une personne effacée ne reçoit plus de droit d\'accès', () 
     ).resolves.toBe(DB_ERROR.PERSON_ERASED);
   });
 
-  test('LE LOT EST INERTE : l\'effacement ne coupe encore RIEN (la coupure est l\'étape 2)', async () => {
+  test('LA COUPURE (033) : le scénario COMPLET — un droit actif tombe, un droit HISTORIQUE est épargné, et le clic suivant ne rouvre rien', async () => {
     const { accountId, personId } = await newAccount();
+
+    // 🔴 LA FIXTURE EST LE TEST. Elle porte DEUX droits : un révoqué il y a
+    //    « longtemps » par la famille, et un actif. Sans la ligne historique,
+    //    un UPDATE non filtré passerait ici — alors qu'il lèverait P0103 en
+    //    exploitation sur toute personne ayant un passé (023:147-149).
+    await app.query('SELECT grant_program_self($1, $2)', [accountId, pastProgram]);
+    await app.query('SELECT revoke_program_grant_self($1, $2)', [accountId, pastProgram]);
     await app.query('SELECT grant_program_self($1, $2)', [accountId, selfServiceProgram]);
+
+    const before = await owner.query<{ status: string; revoke_reason: string | null }>(
+      'SELECT status, revoke_reason FROM program_grants WHERE person_id = $1',
+      [personId],
+    );
+    expect(before.rows).toHaveLength(2);
+    expect(before.rows.filter((r) => r.status === 'ACTIVE')).toHaveLength(1);
+
+    // L'effacement, par ses propres portes.
     await erase(accountId);
 
-    // Ce test DOIT tomber quand l'étape 2 arrivera : c'est sa raison d'être.
-    // Il fixe l'état de départ pour que la coupure soit prouvée par un
-    // changement, et non par une assertion écrite après coup.
-    const still = firstRow(
-      await owner.query<{ status: string }>(
-        'SELECT status FROM program_grants WHERE person_id = $1 ORDER BY seq DESC LIMIT 1',
+    // Le NOMBRE de lignes ET leur état — un count à zéro passerait aussi sur
+    // une table vide, et ne distinguerait pas « la coupure a agi » de « rien
+    // n'a jamais été posé ».
+    const after = await owner.query<{ status: string; revoke_reason: string | null }>(
+      'SELECT status, revoke_reason FROM program_grants WHERE person_id = $1',
+      [personId],
+    );
+    expect(after.rows).toHaveLength(2);
+    expect(after.rows.filter((r) => r.status === 'ACTIVE')).toHaveLength(0);
+    expect(after.rows.filter((r) => r.revoke_reason === 'ERASED')).toHaveLength(1);
+    // Le droit historique est INTACT — son motif dit toujours la vérité de
+    // l'époque : c'est la famille qui avait fermé, pas l'effacement.
+    expect(after.rows.filter((r) => r.revoke_reason === 'SELF')).toHaveLength(1);
+
+    // Et le clic suivant d'un programme ne rouvre rien : la coupure tient
+    // parce que le mur de 032 est derrière elle.
+    await expect(
+      codeOf(() =>
+        app.query('SELECT grant_program_as_program($1, $2)', [personId, grantedProgram]),
+      ),
+    ).resolves.toBe(DB_ERROR.PERSON_ERASED);
+    const finalCount = firstRow(
+      await owner.query<{ n: string }>(
+        "SELECT count(*) AS n FROM program_grants WHERE person_id = $1 AND status = 'ACTIVE'",
         [personId],
       ),
-    );
-    expect(still.status).toBe('ACTIVE');
+    ).n;
+    expect(Number(finalCount)).toBe(0);
   });
 
   test('L\'AMBIGUÏTÉ TIENT SUR DEUX PIEDS : SELF et ERASED restent tous deux atteignables', async () => {
