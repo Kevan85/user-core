@@ -593,9 +593,13 @@ plus.
   `secret_hash`, `provider_ref` **chez le fournisseur** (couche externe), le graphe familial, et
   **`phone_hmac` dans trois registres append-only** → **le test de présence d'un numéro est BORNÉ,
   PAS FERMÉ**. Un tableau de vérité incomplet est un mensonge poli.
-- 📌 **Dette `E-1`, ouverte** : les **droits d'accès restent `ACTIFS`** après effacement — un
-  programme qui demande « cette personne a-t-elle accès ? » reçoit **OUI**. Arbitrage Kevin ; point
-  de greffe déjà écrit dans l'en-tête d'`erase_person()`.
+- 📌 **Dette `E-1` — VOLET ÉTAT CLOS le 04/08/2026** (`032` le mur, `033` la coupure ; CDC §10
+  n°17). À la livraison de ce lot-ci, les droits d'accès **restaient `ACTIFS`** après effacement :
+  un programme qui demandait « cette personne a-t-elle accès ? » recevait **OUI** — une réponse
+  **fausse**. **Le volet NOTIFICATION reste ouvert et il ne se referme pas ici** : aucun fait
+  sortant n'est émis, et le seul mécanisme candidat (la surface d'accès du contrat de comptes) le
+  **trahirait** au lieu de le taire — un tel fait n'aurait qu'**une cause possible**. *Il vit dans
+  le contrat, pas chez nous seuls.*
 - ⚠️ **H1 — la SEULE garantie de ce lot qui ne vit pas en base** : l'énoncé d'irréversibilité du
   mode `IMMEDIATE` est porté par l'**interface**. La base ne peut pas vérifier qu'un humain a lu
   une phrase, et un paramètre `p_acknowledged` **ne prouverait rien** (§8.2). Elle est **nommée à
@@ -829,3 +833,24 @@ rougir. La parade est un test qui **prouve le mur POUR LUI-MÊME** (`permission 
 bridé), et elle a été écrite **sans qu'on la demande**. **Devant toute protection, demander :
 quel test rougirait si je la retirais ce soir ?** Si la réponse est « aucun », elle n'est pas
 protégée — elle est seulement présente.
+
+**⑯ Dans `db/schema/`, un COMMENTAIRE est aussi IMMUABLE que le SQL — et la leçon ⑤ n'y a pas de
+remède.** ⑤ ordonne : *quand une décision change, le commentaire qui la porte change dans le même
+commit.* **En migration, c'est impossible.** Le checksum est enregistré et le runner refuse net
+toute migration modifiée après application (`scripts/migrate.ts:21-24`) — pire, la correction
+**passerait en CI** (base neuve, checksum recalculé) et **casserait en production** : un défaut qui
+ne se manifeste **que là où il fait mal**. Le seul remède est un **en-tête AMENDANT dans une
+migration ultérieure**, qui cite la ligne fautive, déclare ce qui a changé, **et maintient
+explicitement ce qui reste vrai**.
+**Payé trois fois en deux jours** : `026:33-35` (arbitrage déclaré ouvert alors qu'il était clos —
+amendé dans l'en-tête de `032`, par l'Exécuteur, **contre une consigne de l'Auditeur qui demandait
+la correction en place**) · `031:15-17` (**faux pour toujours sur `main`**, jamais amendé) · et la
+même consigne impossible **ré-émise par l'Auditeur un tour APRÈS que l'Exécuteur lui eut démontré
+le mur**.
+⚠️ **Corollaire d'écriture, à appliquer à chaque migration** : **écris chaque commentaire comme
+s'il ne pouvait jamais être corrigé — parce qu'il ne pourra pas l'être.** Préférer *« mesuré au
+[date] »* à un absolu nu : **un absolu daté vieillit honnêtement ; un absolu nu devient un
+mensonge.** Et se souvenir qu'**aucune garde ne lit les commentaires** — c'est le seul endroit du
+dépôt où une affirmation fausse se propage sans que rien ne rougisse. *(Elle s'est effectivement
+reproduite dans un troisième fichier en moins de 24 heures, écrite par celui-là même qui venait de
+recevoir la correction.)*

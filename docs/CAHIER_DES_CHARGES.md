@@ -448,8 +448,12 @@ paramètre (config/env), on ne fige pas une hypothèse.
       y serait ni annonçable (la personne n'a pas de compte où déposer le préavis) ni rétractable
       (se rétracter exige de se connecter) — *un délai qui ne peut être ni annoncé ni rétracté
       n'est pas une fenêtre de réflexion, c'est une attente.*
-    - 📌 **`E-1`, question produit OUVERTE portée par Kevin** — *que doit apprendre un programme
-      quand une personne qu'il connaît est effacée ?* **État actuel, mesuré : il n'apprend rien.**
+    - ✅ **`E-1` — TRANCHÉE le 04/08/2026 (Kevin) : COUPER. Volet ÉTAT LIVRÉ** (`032` le mur,
+      `033` la coupure — voir §10 n°17). **Volet NOTIFICATION toujours ouvert**, et sa raison est
+      écrite : aucun fait sortant n'est émis, le seul mécanisme candidat le trahirait. Ce qui suit
+      décrit l'état **antérieur à cette décision**, conservé parce qu'il en est le motif.
+    - 📌 **`E-1`, question produit portée par Kevin** — *que doit apprendre un programme
+      quand une personne qu'il connaît est effacée ?* **État avant `033`, mesuré : il n'apprend rien.**
       Les droits d'accès appartiennent à la PERSONNE depuis `019` et **restent `ACTIFS`** après
       l'effacement : un programme qui demande « cette personne a-t-elle accès ? » reçoit **OUI**.
       Ce n'est pas un oubli — le schéma **refuse de préjuger** de l'arbitrage. Trois issues
@@ -588,9 +592,18 @@ paramètre (config/env), on ne fige pas une hypothèse.
          cadre n'existait, c'était un **arbitrage produit** à trois issues (couper · laisser ·
          émettre un fait sortant sans motif). Sous un régime aligné sur le modèle européen, la
          question devient : *répondre à cette interrogation est-il encore un traitement de ses
-         données ?* → **`E-1` penche désormais vers COUPER**, et cesse d'être une préférence.
-         **[À TRANCHER — Kevin]** : une seule décision, qui referme **`E-1` chez nous** ET la
-         question ouverte du cœur voisin sur le devenir de l'identifiant d'un effacé. *Le point de
+         données ?* → ✅ **TRANCHÉ — Kevin, 04/08/2026 : COUPER.** Réponse verbatim à la
+         recommandation *« à l'effacement, les droits d'accès sont révoqués dans le même geste »* :
+         **« Je suis ta réco ! »**.
+         **LIVRÉ le 04/08/2026, en deux étapes, le mur avant la porte** : `032` — un trigger
+         `BEFORE INSERT` sur `program_grants` refuse tout droit neuf à une personne effacée (**cinq
+         fonctions vivantes en posent un** : cinq gardes applicatives auraient été cinq occasions
+         d'en oublier une, §3.1) ; puis `033` — `erase_person()` révoque les droits `ACTIFS` en
+         `ERASED`, dans sa transaction. Le lot est resté **inerte** entre les deux, exprès.
+         ⚠️ **Le volet NOTIFICATION n'est PAS clos** : aucun fait sortant n'est émis, et le seul
+         mécanisme candidat — la surface d'accès du contrat de comptes — le **trahirait** au lieu
+         de le taire, un tel fait n'ayant qu'**une cause possible**. **Il vit dans le contrat, pas
+         chez nous seuls.** *Le point de
          greffe est déjà écrit dans l'en-tête d'`erase_person()` (`028`) ; le geste est une
          révocation de plus dans une transaction qui existe.*
     - 📌 **PÉRIMÈTRE, à ne pas déborder** : ce qui est établi porte sur le **droit à l'effacement**.
