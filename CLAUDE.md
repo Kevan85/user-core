@@ -127,8 +127,16 @@ un code à chaque connexion = 480 $/an pour une école qui en paie 500 = 96 % de
 La règle tient donc à la STRUCTURE, pas au tarif** — c'est ce qui la rend non négociable.
 ⚠️ Le fournisseur de SMS, lui, **recommande** l'OTP à chaque connexion : c'est son intérêt
 commercial. **Un fournisseur n'est jamais une source de doctrine.**
-De même : **vérification PARESSEUSE** — le numéro se vérifie au **premier paiement**, pas à
-l'inscription.
+🔴 **AMENDÉ LE 04/08/2026 — [TRANCHÉ — Kevin] : le numéro se vérifie à l'AMORÇAGE, c'est-à-dire à
+la PREMIÈRE INSCRIPTION.** *(La rédaction antérieure disait « au premier paiement, pas à
+l'inscription ».)* **La règle structurante ci-dessus ne bouge pas d'un pouce** — jamais d'OTP à la
+connexion de routine ; c'est **un** code, **une** fois dans la vie du compte.
+**Le calcul qui a tranché, et il n'est pas monétaire** : sans vérification à l'inscription, **je
+m'inscris avec VOTRE numéro et je reçois l'invitation de votre enfant** — l'appariement des
+invitations se fait sur l'**empreinte du numéro** (`012:54,75,80`). Le flux décrit par Kevin
+(numéro → code → nom → inscrit) **exige** donc cette vérification. Coût : **≈ 0,04 $ une fois par
+compte** (10 000 parents ≈ 400 $, non récurrent) — à comparer aux 480 $/an **par école** qu'aurait
+coûté l'OTP de routine, qui reste interdit.
 
 ### 3.6 Un seul patron de session — avec état, révocable
 Jeton d'accès court + refresh **avec état** (haché en base, rotation, détection de rejeu,
@@ -238,6 +246,19 @@ tolérance sur la prose **achetait** cette prise-là.
 
 Les rôles sont transverses (`ACCOUNT_HOLDER`, `PLATFORM_STAFF`, `PLATFORM_ADMIN`) : le jour où
 User-Core sait ce qu'est un enseignant, il est mort.
+
+⚠️ **TROISIÈME FORME DE LA RÈGLE — L'ÂGE** *(Kevin, 04/08/2026 ; CDC §10 n°15)*. Après « le jour
+où il sait ce qu'est un enseignant, il est mort » et « le jour où il sait ce qu'est un post-nom,
+il est congolais », voici la troisième : **le jour où User-Core décide qu'un utilisateur est trop
+jeune pour AGIR, il devient l'arbitre d'une politique qui appartient aux programmes.** Les mots de
+Kevin : *« un jeune, peu importe son âge, peut utiliser notre plateforme […] les règles, si elles
+doivent être mises en place, ce sont **les programmes** qui les feront, et non le cœur. La règle
+de "chatter entre un prof et un élève", c'est à Scolaria de la mettre en place, et non toi. »*
+🎯 **La frontière exacte, et elle est fine** : le cœur borne **QUI PEUT ÊTRE L'AYANT DROIT DE QUI**
+— la *structure du foyer*, gravée au mur de minorité du rattachement (`017:139`). Il ne borne
+**JAMAIS CE QU'UN JEUNE A LE DROIT DE FAIRE** — la *politique du programme*. `birth_year` reste
+donc légitime (finalité écrite, `014:23`), **et c'est mesuré : il n'est pas orphelin.** Un seuil
+d'âge qui conditionnerait un DROIT D'AGIR, lui, n'entre pas.
 
 **Motif G — le cœur est agnostique du PAYS comme du MÉTIER** (règle jumelle, posée le
 16/07/2026), périmètre `db/ src/`, **SENSIBLE à la casse** :
@@ -365,8 +386,20 @@ mesure.**
   sauvegardes, copie manuelle faite un jour pour déboguer. Une seule couche qui dépasse et la
   promesse est fausse. **`R` appartient à Kevin** (§3.11) : on paramètre, et **on lui
   communique la valeur EFFECTIVE, jamais le paramètre.** Détail : `docs/ops/SAUVEGARDES.md`.
-- **Protection renforcée du mineur** : consentement parental tracé, et **coupure nette à
-  l'émancipation** (aucun ancien responsable ne garde d'accès sur un majeur — cf. CDC §2.1).
+- **Protection renforcée du mineur** : **consentement parental TRACÉ** — 🔴 **[TRANCHÉ — Kevin,
+  04/08/2026] : « on garde une trace »**, y compris quand un programme ouvre l'accès lui-même
+  (mode `GRANTED`) sur un mineur. **Échéance : la bascule Scolaria**, et non Mediyo — c'est
+  Scolaria qui porte le flux `GRANTED` sur mineur (`open_dependent_access`). ⚠️ **Une trace de
+  consentement ne se rattrape JAMAIS** : non écrite au moment de l'acte, elle est perdue pour
+  toujours. *Le cas qui la justifie n'est pas réglementaire, il est opérationnel : le conflit de
+  garde — « qui a autorisé que les données de mon enfant soient là ? ».*
+- ⚠️ **La « coupure nette à l'émancipation » N'EST PLUS TENUE AUTOMATIQUEMENT** *(amendé le
+  04/08/2026, CDC §10 n°15)*. La porte d'émancipation est fermée par périmètre ; un lien de
+  responsabilité ne se ferme donc plus que par un **acte STAFF** (`end_responsibility`,
+  `017:376`). Un jeune qui s'inscrit lui-même crée une **fiche NEUVE** : l'ancienne garde son
+  responsable indéfiniment. **Ce résidu est un problème de RÉCONCILIATION, à traiter à la bascule
+  — pas un problème d'émancipation.** *(Écrit plutôt que tu : un tableau de vérité incomplet est
+  un mensonge poli, §11 ⑫.)*
 - **Résidence des données** : rester capable de localiser la donnée (Postgres unique, pas de
   dispersion) — la réponse BCC (CDC §9) reste ouverte, la conception ne se ferme pas.
 

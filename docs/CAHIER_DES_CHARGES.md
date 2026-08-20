@@ -499,8 +499,34 @@ paramètre (config/env), on ne fige pas une hypothèse.
       percuterait l'unicité mondiale (`006:107-108`, une seule `ACTIVE` par ligne) — et « la preuve
       la plus récente gagne » **révoquerait la revendication du parent**. Le plancher doit donc se
       concevoir **sans exiger une revendication ACTIVE de plus par personne**.
-    - 🔒 **SUSPENDUE le 03/08/2026 (Kevin, même jour) — le plancher n'est PAS construit, la porte
-      est FERMÉE.** Interrogé sur la pertinence du scénario, Kevin a demandé *« dans quel cas le
+    - 🔒 **FERMÉE PAR PÉRIMÈTRE le 04/08/2026 (Kevin) — ce n'est PLUS une suspension en attente
+      d'usage, c'est une FRONTIÈRE.** Ses mots : *« Un jeune, peu importe son âge, peut utiliser
+      notre plateforme ; si une app Scolaria élève est développée, les élèves l'utiliseront, peu
+      importe leur âge. Afin d'éviter les abus, les règles, si elles doivent être mises en place,
+      ce sont **les programmes** qui les feront, et non le cœur. La règle de "chatter entre un prof
+      et un élève", c'est à Scolaria de la mettre en place, et non toi. »* Et son constat de
+      priorité : *« On prend du retard dans le développement sur des sujets qui n'existent pas sur
+      le marché — sinon, ce sont des cas isolés. »*
+      **LE SCÉNARIO QUI LA REND INUTILE, décrit par Kevin et VÉRIFIÉ dans le code** : quelqu'un
+      télécharge la superApp, saisit son numéro, reçoit un code à la **première** inscription,
+      renseigne nom et prénom → il est inscrit et utilise les programmes en libre-service. Pour un
+      programme sur invitation (Scolaria), **si son numéro correspond à une invitation en attente,
+      il la reçoit et l'accepte** — l'invitation est adressée à une **empreinte de numéro**
+      (`012:54,75,80`). **Aucune émancipation n'est requise.**
+      → **Règle générale gravée en CLAUDE.md §3.7** (troisième forme de la règle de généricité) :
+      *le cœur borne QUI PEUT ÊTRE L'AYANT DROIT DE QUI — la structure du foyer ; il ne borne
+      JAMAIS CE QU'UN JEUNE A LE DROIT DE FAIRE — la politique du programme.*
+      ⚠️ **CE QUE CETTE FERMETURE COÛTE, écrit plutôt que tu** : la « **coupure nette** » de §8.1
+      et de CLAUDE.md §3.14 **n'est plus tenue automatiquement** — un lien de responsabilité ne se
+      ferme que par un **acte STAFF** (`017:376`). Un jeune qui s'inscrit crée une **fiche NEUVE** ;
+      l'ancienne garde son responsable indéfiniment. **C'est un problème de RÉCONCILIATION, à
+      traiter à la bascule Scolaria — pas un problème d'émancipation.**
+      ✅ **Et ce qui NE change PAS, borné exprès** : PERSONNE ≠ COMPTE · le mur de minorité au
+      rattachement (`017:139`) · P0113 et l'invariant différé, gravés et éprouvés sous l'owner ·
+      `birth_year`, dont la finalité écrite subsiste — **mesuré le 04/08/2026 : il n'est pas
+      orphelin.**
+    - *(Contexte de la suspension initiale, 03/08/2026 — conservé comme motif.)* **Le plancher
+      n'est PAS construit, la porte est FERMÉE.** Interrogé sur la pertinence du scénario, Kevin a demandé *« dans quel cas le
       tutorat d'un compte mineur est-il pertinent ? »*, et la mesure a répondu **aucun
       aujourd'hui** : un **seul chemin applicatif** rend un compte inactif — l'effacement
       (`028:286`, unique site de PRODUCTION de `UPDATE accounts`) — et il n'ouvre rien, l'effacé
@@ -555,10 +581,25 @@ paramètre (config/env), on ne fige pas une hypothèse.
       mesurée, **n'existe pas**. Aujourd'hui l'étiquette est ambiguë mais **le fait ne l'est pas** :
       voir un compte disparaître, c'est savoir que la personne a été effacée. **La fermeture donne à
       cette protection la couverture qui lui manque.**
-    - 🔒 **SUSPENDUE le 03/08/2026, par CONSÉQUENCE de la n°15.** L'ordre imposé ci-dessus tenait :
-      la fermeture ne se livre pas avant la ré-acquisition. La ré-acquisition n'étant pas construite
-      (porte fermée), **la fermeture ne l'est pas non plus.** Elle n'est pas abandonnée : elle
-      attend un usage.
+    - ✅ **TRANCHÉE le 04/08/2026 (Kevin) : DÉSACTIVER + RÉACTIVER, comme le marché.** Principe
+      décidé maintenant, **livraison à la bascule Scolaria** — une porte n'arrive jamais avant son
+      usage (§11 ⑭), et il n'y a aujourd'hui aucun utilisateur pour la franchir.
+      🔴 **CE QUI DÉBLOQUAIT LA DÉCISION ÉTAIT UNE CONFUSION — de l'Auditeur, et il la déclare.**
+      L'ordre imposé disait « la fermeture ne se livre pas avant la RÉ-ACQUISITION ». **Deux choses
+      très différentes avaient été confondues** : la **ré-acquisition** = reprendre la fiche
+      d'identité d'un AUTRE (l'enfant qui reprend sa fiche de dépendant) — dangereuse, chère, et
+      fermée par la n°15 ; la **RÉACTIVATION** = *je ferme mon compte, je reviens avec MON secret et
+      MA ligne* — ordinaire, sûre, et **c'est ce que fait tout le marché**. *La seconde n'a jamais
+      eu besoin de la première.*
+      **[MESURÉ, pratique de marché]** deux portes distinctes sont la norme : **désactiver**
+      (réversible, données conservées) et **supprimer** (destructif, délai de grâce). Meta/Instagram
+      portent exactement cette paire ; Google n'a pas de désactivation mais une **politique
+      d'inactivité** + un gestionnaire de compte inactif ; Apple un **contact légataire** ;
+      Facebook un **compte de souvenir** pour les défunts. **La désactivation du marché est
+      RÉVERSIBLE** — la nôtre devra donc rouvrir `016:61-69` (P0102), qui interdit aujourd'hui
+      `DEACTIVATED → ACTIVE`. C'est une migration signée, pas un lot.
+      ⚠️ **La phrase due au client** : *fermer votre compte ne conserve pas votre identité si vous
+      ne le rouvrez pas vous-même — revenir autrement signifie repartir de zéro.*
     - ⚠️ **LE FAIT QUI LA MOTIVAIT RESTE VRAI, et c'est pour cela qu'il est écrit ici plutôt
       qu'oublié** : **le compte d'une personne décédée reste `ACTIVE` indéfiniment**, et **la seule
       façon de quitter le système est de DÉTRUIRE ses données.** Aucune urgence mesurée — aucun
@@ -610,3 +651,32 @@ paramètre (config/env), on ne fige pas une hypothèse.
       **§9 n'est pas amendé** — il constate qu'aucun cadre **clair** n'existe *« sur le régime des
       données d'un mineur, le consentement parental et l'âge d'émancipation »*, périmètre plus
       étroit, non tranché ici. **Une correction ne s'étend jamais au-delà de ce qu'elle mesure.**
+18. **LA TRACE DE CONSENTEMENT DU RESPONSABLE, SUR UN MINEUR, EN MODE `GRANTED`** (Kevin,
+    04/08/2026).
+    - **[TRANCHÉ — Kevin, 04/08/2026] : « on trace ! »** — *« Même si je sais que dans le marché
+      cible on ne sera pas embêté par ça, mais par souci de faire les choses bien. »*
+    - **La question qu'elle ferme**, ouverte depuis le 21/07/2026 au `CONTRAT_D_INTEGRATION.md`
+      §4 : quand un programme ouvre lui-même un accès (mode `GRANTED`) **sur un mineur**, la
+      confiance accordée au programme suffit-elle, ou faut-il une trace horodatée du consentement
+      du responsable ? **Réponse : il faut la trace.**
+    - 🎯 **LE CAS QUI LA JUSTIFIE N'EST PAS RÉGLEMENTAIRE, IL EST OPÉRATIONNEL** — et c'est
+      l'arbitrage de Kevin lui-même, qui a demandé un cas réel avant de confirmer. **Le conflit de
+      garde** : un père inscrit son enfant via Scolaria ; la mère, qui a la garde, découvre les
+      données de son enfant dans une plateforme qu'elle n'a jamais autorisée et appelle. **Sans
+      trace, la seule réponse possible est « c'est l'école qui l'a fait ».** Variantes tout aussi
+      banales : l'erreur de saisie d'une liste de classe · un dossier Mediyo sur un mineur.
+      📌 **Verdict assumé sur le poids du droit** : *le régulateur est surévalué, le besoin
+      opérationnel ne l'est pas.* La trace sert à répondre à une mère, pas à un inspecteur.
+    - 🔴 **ÉCHÉANCE : LA BASCULE SCOLARIA — et non « avant Mediyo »** *(rectification de l'Auditeur,
+      04/08/2026 : la rédaction antérieure du contrat visait Mediyo)*. **Le flux `GRANTED` sur
+      mineur EST le flux central de Scolaria** — l'école clique, la personne de l'enfant et son
+      droit naissent d'un coup (`open_dependent_access`). Après la bascule, chaque enfant inscrit
+      sans trace est **une trace perdue définitivement**.
+    - ⚠️ **L'asymétrie qui tranche seule** : **une trace de consentement ne se rattrape JAMAIS.**
+      Contrairement à une porte, si elle n'est pas écrite **au moment de l'acte**, elle est perdue
+      pour toujours — on ne reconstitue pas un consentement de l'an dernier. *C'est pourquoi elle
+      échappe à la leçon ⑭ (« une porte n'arrive jamais avant son usage ») : ce n'est pas une
+      porte, c'est un REGISTRE.*
+    - **Ce qu'elle NE fait PAS** : elle **n'est pas un verrou**. La trace **enregistre**, elle ne
+      conditionne pas le clic du programme — le parcours Scolaria n'en est pas ralenti d'un pas.
+      Elle ne dit rien du métier du programme (§3.7), et sa finalité est écrite (§3.14).

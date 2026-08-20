@@ -147,7 +147,15 @@ Et sa réciproque, pour toute demande d'un programme :
   une classe, une ordonnance ou un loyer — et c'est précisément ce qui lui permet de tous les
   servir.
 - **Le consentement au traitement de SES données.** User-Core enregistre un **droit d'accès**,
-  pas un traitement. 📌 *Question produit ouverte (Kevin)* : dans le régime strict de protection
-  des données (CDC §3.14), une ouverture d'accès `GRANTED` directe sur un mineur doit-elle
-  laisser une **trace de consentement** du responsable chez User-Core, ou la confiance accordée
-  au programme (mode `GRANTED`) suffit-elle ? À trancher avant Mediyo.
+  pas un traitement. ✅ **TRANCHÉ — Kevin, 04/08/2026 : « on trace ! »** *(question ouverte depuis
+  le 21/07/2026 — voir CDC §10 n°18)*. Une ouverture d'accès `GRANTED` **sur un mineur** laissera
+  une **trace horodatée du consentement du responsable** chez User-Core : la confiance accordée au
+  programme ne suffit pas.
+  🔴 **Échéance : la BASCULE SCOLARIA, et non « avant Mediyo »** — rectification du 04/08/2026 :
+  **le flux `GRANTED` sur mineur EST le flux central de Scolaria** (l'école clique, la personne de
+  l'enfant et son droit naissent d'un coup). Après la bascule, chaque enfant inscrit sans trace est
+  une trace **perdue définitivement** : un consentement ne se reconstitue pas après coup.
+  ⚠️ **Ce que cela ne change PAS pour un programme** : la trace **enregistre**, elle **ne verrouille
+  rien**. Aucun appel n'est ralenti, aucun refus nouveau n'apparaît, et User-Core continue de ne
+  rien savoir de votre métier. *Le cas qui la justifie est opérationnel, pas réglementaire : le
+  conflit de garde — « qui a autorisé que les données de mon enfant soient là ? ».*
