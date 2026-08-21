@@ -12,10 +12,14 @@ import { Controller, HttpException, HttpStatus, Post } from '@nestjs/common';
  * public, conçu pour être DICTÉ AU GUICHET (014:78) : une désignation, pas une
  * authentification. Le plancher d'identité qui corrige cela demande un défi
  * dont la coordonnée est LUE au registre — et il n'a, aujourd'hui, personne à
- * servir : aucun chemin applicatif ne rend un compte inactif (mesuré : un seul
- * « UPDATE accounts » dans le dépôt, dans l'effacement), donc la ré-acquisition
- * n'a aucun bénéficiaire ; rien n'est déployé ; la preuve de ligne est un
- * simulateur.
+ * servir : aucun chemin applicatif ne rend un compte inactif — mesuré au
+ * 21/08/2026, « UPDATE accounts » s'écrit à DEUX endroits de db/ (028:286,
+ * dont le corps est remplacé par celui de 033, et 033:148, le seul vivant),
+ * et les deux sont dans l'effacement. Donc la ré-acquisition n'a aucun
+ * bénéficiaire ; rien n'est déployé ; la preuve de ligne est un simulateur.
+ * (Rédaction antérieure : « un seul UPDATE accounts dans le dépôt » — faux,
+ * il y en a 47 en tout. La conclusion, elle, ne tenait pas sur ce comptage
+ * mais sur P0116, qui mure l'effacé.)
  *
  * LE MUR EST EN BASE, PAS ICI : 031 retire au rôle applicatif le droit
  * d'exécuter open_emancipation et complete_emancipation. Ce 501 est la FAÇADE
