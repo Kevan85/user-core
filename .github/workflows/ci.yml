@@ -210,6 +210,46 @@ jobs:
           fi
           echo "OK : un seul point d'assemblage des trousseaux (motif H)"
 
+  garde-doublure-muree:
+    name: "Garde motif I : toute doublure assemblee passe par le mur"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tout importeur d'un simulateur appelle declareSimulatedSeam
+        # Les huit motifs precedents exigent ZERO ligne ; celui-ci exige une
+        # PRESENCE, et c'est le premier de cette forme. Deux des trois coutures
+        # de CLAUDE.md 3.7/3.9 n'ont qu'un implementeur, un simulateur : il
+        # accuse reception et n'envoie rien pendant que le registre enregistre
+        # un succes. Le mur a ete pose sur les deux points d'entree du
+        # 21/08/2026 ; rien n'empechait un TROISIEME de naitre sans lui —
+        # exactement comme la parade P4 est morte d'un second point de
+        # dechiffrement ne trois lots plus tard, sans qu'aucun test ne rougisse.
+        # Perimetre src/ SEULEMENT : les tests utilisent les simulateurs, c'est
+        # leur metier. Le motif verifie D'ABORD que le mur existe encore a son
+        # emplacement : renomme, deplace ou supprime, il ROUGIT et force sa
+        # propre mise a jour au lieu de chercher un nom mort en silence.
+        run: |
+          GUARD_FN="declareSimulatedSeam"
+          GUARD_HOME="src/bootstrap/simulation.ts"
+          SIMULATOR_IMPORT="(from|require\(|import\()[[:space:]]*'[^']*simulator/"
+          if ! git grep -qF "export function ${GUARD_FN}(" -- "$GUARD_HOME"; then
+            echo "ÉCHEC : $GUARD_HOME ne définit plus « export function $GUARD_FN » —"
+            echo "        le mur a été renommé, déplacé ou supprimé : mettre ce motif à jour (motif I)"
+            exit 1
+          fi
+          status=0
+          for file in $(git grep -lE "$SIMULATOR_IMPORT" -- src/ || true); do
+            if ! git grep -q "$GUARD_FN" -- "$file"; then
+              echo "  $file : assemble une doublure sans appeler $GUARD_FN"
+              status=1
+            fi
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "ÉCHEC : une doublure est assemblée sans passer par le mur (motif I)"
+            exit 1
+          fi
+          echo "OK : toute doublure assemblée passe par le mur (motif I)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
