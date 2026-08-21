@@ -48,6 +48,23 @@ partagée** : le boot refuse toute paire de clés identiques, entre trousseaux c
 d'un même trousseau (dette ②, étape 1), et aucun trousseau ne s'assemble hors du point
 unique `src/crypto/keyring.ts` (garde CI, motif H).
 
+### 2bis. Ce qui N'EST PAS un secret, et qu'il ne faut pas traiter comme tel
+
+`USER_CORE_SIMULATED_SEAMS` (voir [DEPLOIEMENT.md §2bis](DEPLOIEMENT.md)) porte le préfixe
+`USER_CORE_` des trousseaux **sans être un secret** : elle ne contient aucune valeur
+sensible, sa divulgation n'ouvre rien, et elle n'a **ni rotation ni cycle de vie**. Elle
+n'entre donc **pas** dans l'inventaire ci-dessus, qui reste à **10**. Écrit ici pour que
+personne ne la range dans le coffre par ressemblance de nom.
+
+**Deux gardes vérifiées, et jouées le 21/08/2026 — pas seulement raisonnées :**
+- **mur C8** — son nom ne porte aucune signature de secret (`PASSWORD|SECRET|KEY|TOKEN|DSN`),
+  et sa ligne est **commentée** dans `.env.example` : le mur laisse passer un déploiement
+  qui la pose en production. **Contre-épreuve jouée dans le même passage** : le même mur
+  refuse toujours `USER_CORE_APP_PASSWORD` portant la valeur publiée — il laisse passer
+  parce qu'il n'y a rien à mordre, pas parce qu'il est cassé.
+- **motif H** — le nom ne se termine ni par `_KEYS` ni par `_ACTIVE_KEY_ID` : la garde du
+  point d'assemblage unique des trousseaux ne le vise pas, et n'a pas à être amendée.
+
 ## 3. Les murs de boot (état livré à l'étape 3)
 
 Le service **refuse de démarrer** si :
@@ -62,7 +79,14 @@ Le service **refuse de démarrer** si :
    et refus fail-closed si `.env.example` est illisible en production ;
 6. murs armés, **le transport Sentry ne s'est pas armé après `init()`** (G1, étape 6) :
    la vérité se demande au SDK, jamais à la présence du DSN — un DSN illisible ferait
-   partir le service aveugle en croyant être surveillé.
+   partir le service aveugle en croyant être surveillé ;
+7. murs armés, **une couture simulée n'est pas DÉCLARÉE** (motif I, 21/08/2026) : deux des
+   trois coutures n'ont qu'un implémenteur, un simulateur qui accuse réception et n'envoie
+   rien pendant que le registre enregistre un succès. Le mode simulé se déclare couture par
+   couture dans `USER_CORE_SIMULATED_SEAMS`, ou le service refuse de démarrer **en disant
+   laquelle**. Une entrée inconnue est un refus, jamais un silence.
+   *(Le mur vaut pour l'API ET le worker ; une garde CI refuse qu'un troisième point
+   d'assemblage naisse sans lui.)*
 
 **⚠️ Ce que l'observabilité NE couvre PAS** (écrit ici pour que « Sentry est branché » ne
 soit jamais lu comme « couverture totale ») : `defaultIntegrations: false` retire aussi
