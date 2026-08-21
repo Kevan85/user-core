@@ -211,7 +211,7 @@ jobs:
           echo "OK : un seul point d'assemblage des trousseaux (motif H)"
 
   garde-doublure-muree:
-    name: "Garde motif I : toute doublure assemblee passe par le mur"
+    name: "Garde motif I : toute doublure assemblée passe par le mur"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
