@@ -2,6 +2,7 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import { declareSimulatedSeam } from './bootstrap/simulation';
 import {
   assembleObservabilityFromEnv,
   captureError,
@@ -39,8 +40,14 @@ async function main(): Promise<void> {
   await assertBridledRole(assembly.pool);
   await assertFingerprintKeyAligned(assembly.pool, crypto);
 
-  // Le dispatcher de simulation tant qu'aucun fournisseur réel n'est branché
-  // (son prix et sa disponibilité en RDC sont des inconnues de terrain).
+  // LE MUR DES DOUBLURES. Cette ligne portait un commentaire qui NOMMAIT le
+  // risque — « le dispatcher de simulation tant qu'aucun fournisseur réel
+  // n'est branché » — sans qu'aucun mur ne le tienne : leçon ⑬, un risque
+  // nommé donne au lecteur suivant le sentiment qu'il est traité. Sous murs
+  // de production, la couture DISPATCH se DÉCLARE ou le worker refuse de
+  // démarrer. Le fournisseur réel reste une inconnue de terrain (son prix et
+  // sa disponibilité en RDC), et c'est justement pourquoi le mur est ici.
+  declareSimulatedSeam('DISPATCH');
   const publisher = new OutboxPublisher(
     assembly.pool,
     new CountingDispatcher(),

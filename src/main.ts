@@ -13,6 +13,7 @@ import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import { declareSimulatedSeam } from './bootstrap/simulation';
 import { ObservabilityExceptionFilter } from './observability/observability.filter';
 import { assembleObservabilityFromEnv, initObservability } from './observability/sentry';
 import { CatalogService } from './catalog/catalog.service';
@@ -79,6 +80,12 @@ async function bootstrap(): Promise<void> {
   // fournisseur réel (flash call, SMS, SNA) se branchera ici — son prix et sa
   // disponibilité en RDC sont des inconnues de terrain (CDC §9), pas des
   // valeurs à supposer.
+  // LE MUR DES DOUBLURES : sous murs de production, la couture PROVING doit
+  // être DÉCLARÉE dans l'environnement, sinon le boot est refusé. Un seul
+  // appel couvre le processus entier — les deux instanciations ci-dessous
+  // partagent la même couture (CLAUDE.md §3.9), et le simulateur reste le
+  // seul implémenteur de LineOwnershipProver (mesuré au 21/08/2026).
+  declareSimulatedSeam('PROVING');
   const phoneService = new PhoneService(
     assembly.pool,
     cryptoConfig,
