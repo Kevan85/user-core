@@ -231,7 +231,7 @@ jobs:
         run: |
           GUARD_FN="declareSimulatedSeam"
           GUARD_HOME="src/bootstrap/simulation.ts"
-          SIMULATOR_IMPORT="(from|require\(|import\()[[:space:]]*'[^']*simulator/"
+          SIMULATOR_IMPORT="(from|require\(|import\()[[:space:]]*['\"][^'\"]*simulator/"
           if ! git grep -qF "export function ${GUARD_FN}(" -- "$GUARD_HOME"; then
             echo "ÉCHEC : $GUARD_HOME ne définit plus « export function $GUARD_FN » —"
             echo "        le mur a été renommé, déplacé ou supprimé : mettre ce motif à jour (motif I)"

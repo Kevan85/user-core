@@ -78,8 +78,10 @@ run_guard "Motif H (un seul point d'assemblage des trousseaux)" -rnE \
 GUARD_FN="declareSimulatedSeam"
 GUARD_HOME="src/bootstrap/simulation.ts"
 # Attrape './simulator/x', '../simulator/x', '../../dispatch/simulator/x',
-# en import statique, dynamique ou require.
-SIMULATOR_IMPORT="(from|require\(|import\()[[:space:]]*'[^']*simulator/"
+# en import statique, dynamique ou require — apostrophes simples ET guillemets
+# doubles : rien dans le dépôt n'impose un style de guillemet (ni .prettierrc ni
+# règle quotes), donc un motif à apostrophe seule laisserait passer "./simulator/x".
+SIMULATOR_IMPORT="(from|require\(|import\()[[:space:]]*['\"][^'\"]*simulator/"
 
 if git grep --cached -qF "export function ${GUARD_FN}(" -- "$GUARD_HOME"; then
   importers=$(git grep --cached -lE "$SIMULATOR_IMPORT" -- src/ || true)
