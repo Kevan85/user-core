@@ -174,9 +174,19 @@ git grep -rn "decrypt(" -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts
 ```
 git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ scripts/ ':!src/crypto/keyring.ts'
 ```
-Ces motifs doivent retourner **zéro ligne** (hors exemples `metadata`), sinon la CI échoue.
-**Ils sont HUIT** — A, B, D, E, F, G, H et l'anti-abonnement de §3.8 — joués par
-`tools/check-guards.sh`, et **tous les huit sont des checks REQUIS** de `main` (§4).
+**Motif I — TOUTE DOUBLURE ASSEMBLÉE PASSE PAR LE MUR (lot déploiement, 10/09/2026), périmètre
+`src/` SEULEMENT :** tout fichier de `src/` qui importe depuis un chemin `simulator/` (apostrophes
+simples **ou** guillemets doubles ; import statique, dynamique ou `require`) doit appeler
+`declareSimulatedSeam` (`src/bootstrap/simulation.ts`). C'est le **premier motif de PRÉSENCE** —
+les huit autres exigent zéro ligne. Il vérifie **d'abord** que la fonction de mur existe encore à
+son emplacement : renommée, déplacée ou supprimée, **le motif rougit et force sa propre mise à
+jour** — il ne passe jamais en silence en cherchant un nom mort. `tests/` est hors périmètre : les
+simulateurs sont leur métier.
+
+Les huit premiers motifs doivent retourner **zéro ligne** (hors exemples `metadata`), le motif I
+exige une **présence** ; sinon la CI échoue. **Ils sont NEUF** — A, B, D, E, F, G, H, I et
+l'anti-abonnement de §3.8 — joués par `tools/check-guards.sh`, et **tous les neuf sont des checks
+REQUIS** de `main` (§4).
 
 ⚠️ **Pourquoi le motif F existe** — c'est la leçon la plus dure du dépôt. `phone_hmac` (qui
 verrouille la ligne) et `phone_encrypted` (qu'on appellera) peuvent **mentir l'un sur l'autre** :
@@ -200,6 +210,19 @@ d'exploitation — une rotation, un backfill — que le second point serait né,
 depuis l'environnement**, pas la **dérivation**. Une clé dérivée d'une clé déjà assemblée
 (HKDF + sel par personne, `src/crypto/person-identity.ts`, §8.1) ne lit aucune variable
 d'environnement : elle ne le déclenche pas, et c'est correct.
+
+⚠️ **Pourquoi le motif I existe — le motif F, une troisième fois, sur les DOUBLURES.** Deux des
+trois coutures de §3.9 n'ont qu'un implémenteur, et c'est un simulateur (`LyingProver`,
+`CountingDispatcher`). Mesuré le 21/08/2026 : **aucun mur ne les gardait** — en production, le
+simulateur de preuve rendait une référence inventée et le registre enregistrait un succès avec sa
+ligne de coût ; le dispatcher simulé empilait en mémoire et le publisher marquait l'événement
+publié. **Toute notification sortante — préavis d'effacement compris — serait partie « envoyée »
+sans partir**, et rien n'aurait rougi. La consigne de l'Auditeur ne visait que le prover ; c'est
+l'**inventaire mécanique** de l'Exécuteur (tout `new X(` des deux points d'entrée, résolu fichier
+par fichier) qui a trouvé le second, **le plus grave**. Le mur (§8.5) ferme le défaut ; le motif I
+empêche qu'un **troisième point d'assemblage** naisse sans lui — exactement le trou par lequel P4
+est morte (leçon ①). Et il couvre ce qu'**aucun test ne couvre** : les tests prouvent la fonction,
+pas le **câblage** — retirer l'appel de `main.ts` ne fait rougir que le motif.
 
 ⚠️ **Pourquoi le motif D est sensible à la casse** (arbitrage tranché le 14/07/2026, contre la
 forme d'abord demandée par l'Auditeur — l'Exécuteur a refusé **avec preuve**, et il avait
@@ -660,6 +683,10 @@ Ce qui ne se redémontre plus :
   `tests/accounts/accounts-schema.spec.ts:140-152` **l'exerce sous le rôle bridé**. *La conclusion
   ne dépendait pas de l'énoncé fautif — elle tenait par P0116. Le motif général : **le périmètre
   d'un balayage doit inclure son propre texte.***
+  📌 **Et depuis `033` (04/08/2026), le site VIVANT de la désactivation est `033:148`** — le corps
+  de `028:286` est remplacé. Le lot du 10/09/2026 a dû corriger deux commentaires qui citaient
+  encore `028` comme unique site, **et le chiffre écrit dans la correction s'excluait lui-même**
+  (le défaut ci-dessus, reproduit dans la phrase qui le réparait, attrapé au double-check).
 - **`030` — le service ne DÉSIGNE plus la personne d'une revendication de ligne.** Le rôle
   applicatif détenait `INSERT (person_id, …)` et `UPDATE (status, revoke_reason)` sur
   `phone_claims` : le droit d'écrire une revendication **sur une personne qu'il nomme**. Retrait
@@ -687,6 +714,31 @@ Ce qui ne se redémontre plus :
   sont SUSPENDUES**, pas appliquées (voir leur entrée) · **le compte d'une personne décédée reste
   `ACTIVE` indéfiniment**, et la seule sortie du système reste la destruction des données · la
   rédaction de la n°15 porte un **veto de fait** à corriger le jour de la réouverture.
+
+### 8.5 Ce que le lot DÉPLOIEMENT a gravé — étape 1, le mur des doublures (PR #38, 10/09/2026)
+
+Le système restait « déployable, pas déployé » (§8.2) avec **deux simulateurs câblés sans
+condition**. Ce qui ne se redémontre plus :
+
+- **Le mode simulé se DÉCLARE ou le boot est refusé** (`src/bootstrap/simulation.ts`, dérivé du
+  prédicat unique `productionWallsArmed` — aucune 2ᵉ définition de « production »). Sous murs
+  armés, chaque couture simulée doit être nommée : `USER_CORE_SIMULATED_SEAMS=PROVING,DISPATCH`.
+  Absente, vide, entrée inconnue, couture non déclarée ⇒ `ConfigViolations` qui nomme la couture
+  et la cause (leçon ⑩). Quand elle est déclarée, **c'est le mur qui journalise l'aveu**, jamais
+  l'appelant — un appelant qui doit penser à tracer finit par ne pas le faire.
+- **Une LISTE, pas un booléen** : les deux coutures ont des calendriers de remplacement
+  **indépendants** ; un booléen ré-ouvrirait les deux d'un seul geste — un oubli rendrait le
+  système plus permissif, donc la garde serait à l'envers.
+- **Retirer une couture de la variable EST l'acte de passage en production** (`DEPLOIEMENT.md`) :
+  la pré-production tourne avec la variable posée exprès ; le jour de la bascule, la retirer
+  refuse le boot tant qu'aucun fournisseur réel n'est branché.
+- **10ᵉ garde mécanique : le motif I** (§3.7), check REQUIS n°11. Testé dans les deux sens avant
+  gravure, y compris un importeur entre guillemets doubles — **rien n'impose l'apostrophe simple
+  dans ce dépôt** (ni Prettier, ni règle `quotes`), le motif ne pouvait donc pas s'y fier.
+- **Ce que le lot NE fait PAS** (leçon ⑫) : aucun fournisseur réel n'est branché — la simulation
+  est **déclarée**, pas résolue · le mur ne détecte pas un fournisseur réel mal configuré · rien
+  ici ne vit en base, et c'est structurel : Postgres n'a aucune notion du processus qui s'y
+  connecte ni du fournisseur qu'il appelle.
 
 ## 9. Où est quoi
 
@@ -836,8 +888,9 @@ de `emancipation.service.ts` nomme la menace — « *sinon quiconque connaît l'
 la personne poserait SON secret sur son dos dès que le compte meurt* » — puis **colmate la
 variante d'à côté** (l'absence de code), en laissant ouverte celle qu'il venait de décrire.
 **Un commentaire qui nomme un risque donne au lecteur suivant le sentiment que le risque est
-traité.** Devant toute preuve, demander : **QUEL FAIT exactement établit-elle — et est-ce celui
-dont le mur a besoin ?** *(Corollaire : un identifiant conçu pour être **dicté au guichet** est
+traité.** *(Deuxième instance, mesurée le 21/08/2026 : `worker.ts` disait « le dispatcher de
+simulation tant qu'aucun fournisseur réel n'est branché » — sans mur, §8.5.)* Devant toute preuve,
+demander : **QUEL FAIT exactement établit-elle — et est-ce celui dont le mur a besoin ?** *(Corollaire : un identifiant conçu pour être **dicté au guichet** est
 une DÉSIGNATION ; l'employer comme seule désignation d'une cible dans un acte **irréversible**
 transforme une commodité de guichet en surface d'attaque.)*
 
