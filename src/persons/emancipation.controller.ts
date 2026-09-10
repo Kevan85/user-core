@@ -17,9 +17,10 @@ import { Controller, HttpException, HttpStatus, Post } from '@nestjs/common';
  * dont le corps est remplacé par celui de 033, et 033:148, le seul vivant),
  * et les deux sont dans l'effacement. Donc la ré-acquisition n'a aucun
  * bénéficiaire ; rien n'est déployé ; la preuve de ligne est un simulateur.
- * (Rédaction antérieure : « un seul UPDATE accounts dans le dépôt » — faux,
- * il y en a 47 en tout. La conclusion, elle, ne tenait pas sur ce comptage
- * mais sur P0116, qui mure l'effacé.)
+ * (Rédaction antérieure : « un seul UPDATE accounts dans le dépôt » — faux.
+ * Mesuré au 10/09/2026 : 48 occurrences dans le dépôt, CE commentaire compris
+ * — un balayage inclut son propre texte, CLAUDE.md §8.4. La conclusion, elle,
+ * ne tenait pas sur ce comptage mais sur P0116, qui mure l'effacé.)
  *
  * LE MUR EST EN BASE, PAS ICI : 031 retire au rôle applicatif le droit
  * d'exécuter open_emancipation et complete_emancipation. Ce 501 est la FAÇADE
