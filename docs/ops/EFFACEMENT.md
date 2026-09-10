@@ -95,10 +95,17 @@ n'écrit dans `outbox` ou `account_notifications`, et c'est voulu (une ligne d'o
 porterait le `person_id` d'un effacé). **Le seul mécanisme candidat est la surface d'accès
 du contrat de comptes d'Organization-Core, dont notre avis du 03/08/2026 a montré qu'un
 fait de changement y TRAHIRAIT l'effacement** au lieu de le taire : un tel fait n'aurait
-aujourd'hui **qu'une seule cause possible**. C'est vérifiable ici, et c'est mesuré —
-`UPDATE accounts` ne se trouve qu'à **un** endroit du dépôt (`028_erase_person.sql`), la
-fermeture de compte étant suspendue (CDC §10 n°16) : rien d'autre que l'effacement ne rend
-un compte indisponible.
+aujourd'hui **qu'une seule cause possible**. C'est vérifiable ici, et c'est **mesuré au
+21/08/2026** : `UPDATE accounts` s'écrit à **DEUX** endroits de `db/` — `028:286`, dont le
+corps est remplacé par celui de `033`, et **`033:148`, le seul VIVANT** — et les deux sont
+dans l'effacement. La fermeture de compte est **tranchée (04/08/2026) mais NON LIVRÉE**
+(livraison à la bascule — CDC §10 n°16) : rien d'autre que l'effacement ne rend un compte
+indisponible.
+*(Rédaction antérieure, fausse deux fois : elle annonçait « un seul endroit du dépôt » et
+nommait `028_erase_person.sql`, dont le corps ne s'exécute plus. Le raisonnement du volet,
+lui, ne dépendait pas de l'erreur — il tient sur le fait daté ci-dessus, et il vieillira
+honnêtement : le jour où la n°16 est livrée, un compte indisponible aura DEUX causes et
+cette phrase devra être relue.)*
 
 → **Ce volet ne se referme donc pas chez nous seuls : il vit dans le contrat.** En
 attendant, **un programme qui veut savoir interroge** — et il lira `REVOKED` sans motif

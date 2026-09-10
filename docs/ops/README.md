@@ -10,6 +10,7 @@ restauration (acte majeur, avec Kevin).
 | Besoin | Runbook |
 |---|---|
 | Déployer / redéployer, liste de contrôle, ordre migrations → boot | [DEPLOIEMENT.md](DEPLOIEMENT.md) |
+| **Passer de la pré-production à la production** — les coutures encore simulées, et le geste qui bascule | [DEPLOIEMENT.md §2bis](DEPLOIEMENT.md) |
 | Un incident : fuite, clé compromise, programme, restauration | [INCIDENT.md](INCIDENT.md) |
 | Tourner une clé (procédure par trousseau, fenêtre HMAC) | [ROTATION.md](ROTATION.md) |
 | Les secrets : inventaire des 10, injection sans SDK, murs de boot | [SECRETS.md](SECRETS.md) |
