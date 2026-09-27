@@ -174,8 +174,9 @@ git grep -rn "decrypt(" -- src/ ':!src/crypto/' ':!src/phone/verified-address.ts
 ```
 git grep -rnE "USER_CORE_[A-Z_]+(_KEYS|_ACTIVE_KEY_ID)" -- src/ scripts/ ':!src/crypto/keyring.ts'
 ```
-**Motif I — TOUTE DOUBLURE ASSEMBLÉE PASSE PAR LE MUR (lot déploiement, 10/09/2026), périmètre
-`src/` SEULEMENT :** tout fichier de `src/` qui importe depuis un chemin `simulator/` (apostrophes
+**Motif I — TOUTE DOUBLURE ASSEMBLÉE PASSE PAR LE MUR (lot déploiement ; posé le 21/08/2026,
+check REQUIS depuis le 10/09/2026), périmètre `src/` SEULEMENT :** tout fichier de `src/` qui
+importe depuis un chemin `simulator/` (apostrophes
 simples **ou** guillemets doubles ; import statique, dynamique ou `require`) doit appeler
 `declareSimulatedSeam` (`src/bootstrap/simulation.ts`). C'est le **premier motif de PRÉSENCE** —
 les huit autres exigent zéro ligne. Il vérifie **d'abord** que la fonction de mur existe encore à
@@ -391,6 +392,23 @@ mesure.**
 
 - **Minimisation & finalité** : chaque donnée personnelle a une finalité écrite. Rien « au cas
   où ». (Déjà tenu par la frontière : le scolaire/santé reste chez les programmes.)
+  📌 **DETTE DE DIVULGATION — nommée au LOT /v1 (21/07/2026), écrite ici le 27/09/2026 : la
+  minimisation tient à l'ÉCRITURE, pas encore à la DIVULGATION.** Mesuré au 27/09/2026 : trois
+  appelants de `decryptCivilIdentity` — la personne elle-même (`identity.service.ts:61`),
+  l'émancipation (`emancipation.service.ts:285`, porte fermée par `031`), et l'invitation, **seul
+  chemin qui montre l'identité civile d'une personne à un TIERS**. Sur ce chemin, les quatre
+  conditions d'accès sont en base ; mais la base rend le **blob entier** (`027:104-110` :
+  composantes du nom, nom d'affichage, **date de naissance complète**), et c'est le **service** qui
+  n'en garde que le nom d'affichage (`src/invitations/account-invitations.service.ts:118-125`).
+  **La réduction au champ est une discipline, pas un mur** : la v2 de cet endpoint rendrait la date
+  de naissance d'un mineur sans que rien ne refuse (§3.1). Le remède : le nom d'affichage dans un
+  blob chiffré **séparé**, sous la **même clé dérivée** du sel de la personne (sinon l'effacement
+  ne le couvrirait pas), et la fonction de divulgation ne rend plus que lui. ⚠️ Contrainte déjà
+  connue : `erase_person()` (corps vivant `033`) devra traiter **les deux** blobs, et ses portes
+  contrôlées n'ouvrent que la **forme exacte** de la destruction (§8.3) — elles s'étendent dans la
+  **même** migration (leçon ④). **Condition de réouverture : au plus tard AVANT qu'un DEUXIÈME
+  chemin divulgue une identité civile à un tiers** — par exemple rendre un nom à un programme,
+  ce que le contrat ne fait pas (CONTRAT §2, ligne 3 du tableau).
 - **Consentement tracé** : append-only, horodaté — surtout le consentement d'un responsable
   pour un mineur.
 - **Droit à l'effacement, SANS casser l'intégrité append-only** (§3.10) — la tension se résout
@@ -684,9 +702,10 @@ Ce qui ne se redémontre plus :
   ne dépendait pas de l'énoncé fautif — elle tenait par P0116. Le motif général : **le périmètre
   d'un balayage doit inclure son propre texte.***
   📌 **Et depuis `033` (04/08/2026), le site VIVANT de la désactivation est `033:148`** — le corps
-  de `028:286` est remplacé. Le lot du 10/09/2026 a dû corriger deux commentaires qui citaient
-  encore `028` comme unique site, **et le chiffre écrit dans la correction s'excluait lui-même**
-  (le défaut ci-dessus, reproduit dans la phrase qui le réparait, attrapé au double-check).
+  de `028:286` est remplacé. Le lot du mur des doublures (§8.5) a dû corriger, le 21/08/2026,
+  deux commentaires qui citaient encore `028` comme unique site, **et le chiffre écrit dans la
+  correction s'excluait lui-même** (le défaut ci-dessus, reproduit dans la phrase qui le réparait,
+  attrapé au double-check et corrigé le 10/09/2026).
 - **`030` — le service ne DÉSIGNE plus la personne d'une revendication de ligne.** Le rôle
   applicatif détenait `INSERT (person_id, …)` et `UPDATE (status, revoke_reason)` sur
   `phone_claims` : le droit d'écrire une revendication **sur une personne qu'il nomme**. Retrait
@@ -715,7 +734,7 @@ Ce qui ne se redémontre plus :
   `ACTIVE` indéfiniment**, et la seule sortie du système reste la destruction des données · la
   rédaction de la n°15 porte un **veto de fait** à corriger le jour de la réouverture.
 
-### 8.5 Ce que le lot DÉPLOIEMENT a gravé — étape 1, le mur des doublures (PR #38, 10/09/2026)
+### 8.5 Ce que le lot DÉPLOIEMENT a gravé — étape 1, le mur des doublures (fabriqué et mesuré le 21/08/2026, livré le 10/09/2026 — PR #38)
 
 Le système restait « déployable, pas déployé » (§8.2) avec **deux simulateurs câblés sans
 condition**. Ce qui ne se redémontre plus :
@@ -940,3 +959,7 @@ mensonge.** Et se souvenir qu'**aucune garde ne lit les commentaires** — c'est
 dépôt où une affirmation fausse se propage sans que rien ne rougisse. *(Elle s'est effectivement
 reproduite dans un troisième fichier en moins de 24 heures, écrite par celui-là même qui venait de
 recevoir la correction.)*
+📌 **Et une date dit ce qu'elle date** *(remarque de l'Exécuteur, reçue le 27/09/2026)* : « mesuré
+au », « posé le », « livré le ». Une date nue entre parenthèses en porte deux possibles : le socle
+datait le motif I de sa **gravure** (10/09), les runbooks de sa **fabrication** (21/08), et les deux
+étaient vrais. **Un lecteur qui voit deux dates pour un même objet conclut à une contradiction.**

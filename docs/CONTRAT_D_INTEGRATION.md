@@ -1,10 +1,12 @@
-# User-Core — Contrat d'intégration des programmes (V1.1)
+# User-Core — Contrat d'intégration des programmes (V1.2)
 
 > **Ce document dit ce qu'un programme a le droit de demander à User-Core, et ce qui lui est
 > refusé pour toujours.** Il est la contrepartie du cahier des charges : le CDC dit ce que
 > User-Core *possède*, celui-ci dit ce qu'il *expose*. Patron : `CONTRAT_VERTICALE.md` de
 > Payment-Core. Rédigé le 14/07/2026 · **amendé le 21/07/2026 (V1.1) — les personnes (LOT 5)
-> et les opérations métier `/v1` : le droit d'accès porte sur la PERSONNE, pas le compte.**
+> et les opérations métier `/v1` : le droit d'accès porte sur la PERSONNE, pas le compte.** ·
+> **précisé le 27/09/2026 (V1.2) — la ligne 3 promettait un nom que rien ne rendait ; le refus
+> n°8 dit ce qui est tenu en base et ce qui ne l'est pas.**
 >
 > **La règle qui gouverne tout le reste** : *Scolaria est un client externe comme un autre.*
 > Le jour où un programme obtient un privilège « juste pour cette fois », l'abstraction
@@ -36,9 +38,20 @@
 |---|---|---|---|
 | 1 | « Qui est cet utilisateur ? » | Vérification du **jeton d'accès** par la **clé publique** (EdDSA, `kid` dans l'entête). Le programme **vérifie** un badge ; il ne peut pas en **fabriquer** un. | `/v1/jwks` |
 | 2 | « MON programme est-il activé pour cette PERSONNE ? » | Un **oui / non** sur **son** programme, avec la date d'activation — **et seulement le sien** (jamais l'état d'un autre programme). | `/v1/grants/status` |
-| 3 | « Comment je la désigne chez moi ? » | Un **identifiant de personne stable** (opaque, dictable au guichet), plus un **profil de base** minimal (nom d'affichage). | (rendu à l'ouverture) |
+| 3 | « Comment je la désigne chez moi ? » | Un **identifiant de personne stable** (opaque, dictable au guichet) — **et aucun nom** : voir la note sous ce tableau. | (rendu à l'ouverture) |
 | 4 | « Ouvrir MON accès pour cette personne » | Un droit d'accès posé sur la **personne** — **si et seulement si le programme est en mode `GRANTED`** (§2.1). Sur une personne **déjà connue** (le programme détient son identifiant), ou en **faisant entrer une famille** (§2.2). | `/v1/grants`, `/v1/dependent-access` |
 | 5 | « Consulter / révoquer un accès que J'AI ouvert » | Statut et révocation — **uniquement sur les droits de son propre programme** (prédicat en base, pas une promesse). | `/v1/grants/status`, `/v1/grants/revoke` |
+
+📌 **Ligne 3, corrigée le 27/09/2026 — le contrat promettait un nom que rien ne rendait.** La
+rédaction antérieure (V1.0 du 14/07/2026, reprise en V1.1) ajoutait « un profil de base minimal
+(nom d'affichage) ». Mesuré au 27/09/2026 : aucune des six routes `/v1` ne rend de nom —
+`/v1/dependent-access` rend l'identifiant seul, et le jeton d'accès ne porte aucun nom (`sub`,
+`sid`). Un programme n'obtient donc aucun nom de User-Core : sur `/v1/dependent-access`, c'est
+**lui qui le fournit** ; sur `/v1/grants`, il agit sur un identifiant qu'il **détient déjà**
+(rendu à l'ouverture, ou dicté au guichet — §2.3). Si
+l'intégration d'un programme montre un besoin réel de **lire** un nom, c'est une demande de
+frontière (ci-dessous) — et elle ouvrirait un **deuxième chemin de divulgation vers un tiers**, qui
+n'arrive qu'après son mur (CLAUDE.md §3.14, dette de divulgation).
 
 **C'est tout.** Un besoin qui n'entre dans aucune de ces lignes n'est pas une demande
 d'intégration : c'est une demande de frontière, et elle se tranche avec l'Auditeur.
@@ -106,6 +119,11 @@ Deux politiques, **parce que deux situations diffèrent** — ce n'est pas une i
    (invitation active, non supprimée, non expirée, **ligne prouvée** de l'appelant) et dans une
    **fenêtre bornée**. Jamais la date de naissance, jamais les composantes du nom, jamais le
    numéro.
+   ⚠️ *Précisé le 27/09/2026 — un tableau de vérité incomplet est un mensonge poli : les quatre
+   conditions sont tenues **en base** ; le « jamais la date de naissance, jamais les
+   composantes » est tenu, lui, par le **service** — la base rend le blob entier et le service
+   n'en garde que le nom d'affichage. Le refus est réel aujourd'hui ; son **mur** est une dette
+   nommée (CLAUDE.md §3.14, dette de divulgation).*
 6. **Une donnée de verticale**, quelle qu'elle soit — garde CI bloquante (CLAUDE.md §3.7).
 
 ## 4. Le catalogue des programmes — **liste OUVERTE** (décision Kevin, 14/07/2026)
