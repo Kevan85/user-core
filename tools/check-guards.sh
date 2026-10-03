@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NB : ce fichier vit dans tools/, HORS du périmètre des gardes (db/ src/
 # scripts/) — il contient les motifs, il se ferait attraper lui-même.
-# Les NEUF gardes contractuelles (CLAUDE.md §3.7, §3.8 + motifs H et I), jouées sur l'INDEX
+# Les DIX gardes contractuelles (CLAUDE.md §3.7, §3.8 + motifs H, I et J), jouées sur l'INDEX
 # git — exactement comme la CI les jouera sur le commit poussé. Les motifs
 # sont recopiés VERBATIM de .github/workflows/ci.yml : si l'un des deux
 # fichiers change, l'autre suit dans le même commit.
@@ -106,5 +106,33 @@ else
   echo "        mets ce motif à jour AVANT de continuer (il refuse de chercher un nom mort)"
   status=1
 fi
+
+# ---------------------------------------------------------------------------
+# MOTIF J — UN SEUL POINT DE LECTURE DE L'ADRESSE CLIENTE (lot déploiement,
+# étape 2 ; gravure au socle par l'Auditeur après merge).
+#
+# Derrière un aiguilleur, l'adresse de la socket est la SIENNE pour tous les
+# clients : un plafond « par adresse » lu ailleurs qu'au point unique redevient
+# un plafond GLOBAL (trop peu de confiance) ou un plafond que tout client
+# contourne en écrivant l'en-tête de son choix (trop). Le point unique
+# (src/client-address/client-address.ts) est le SEUL chemin exclu — et il
+# contient lui-même 'proxy-addr' : déplacé hors de l'exclusion, il devient son
+# propre contrevenant (fermé par construction).
+#
+# HORS DU POINT UNIQUE, AUCUN IDENTIFIANT ip, ips NI forwarded : le nom maison
+# d'une adresse cliente est clientIp. Le motif mord la lecture (req.ip,
+# req['ip'], req.headers.forwarded), la déstructuration ({ ip } = req) et les
+# noms d'en-tête ENTRE GUILLEMETS ; insensible à la casse, req.get('X-Forwarded-For')
+# mord comme req.headers['x-forwarded-for']. La prose de doctrine (« l'en-tête
+# X-Forwarded-For ») vit. Périmètre src/ scripts/ : un script d'exploitation est
+# un chemin d'appel comme un autre ; tests/ est hors périmètre, forger des
+# requêtes est leur métier.
+#
+# CE QUE LE MOTIF NE FAIT PAS : une déstructuration écrite sur plusieurs lignes,
+# Reflect.get(req, 'ip') et tout accès dynamique, un nom d'en-tête assemblé à
+# l'exécution, une bibliothèque tierce dont le nom n'est pas listé ici.
+run_guard "Motif J (un seul point de lecture de l'adresse cliente)" -rniE \
+  "\bremoteAddress\b|['\"](x-forwarded-for|forwarded|x-real-ip)['\"]|\.(ips?|forwarded)\b|\[\s*['\"]ips?['\"]\s*\]|[{,]\s*(ips?|forwarded)\s*[,}:]|@Ip\(|['\"]trust proxy['\"]|['\"]proxy-addr['\"]" \
+  -- src/ scripts/ ':!src/client-address/client-address.ts'
 
 exit $status

@@ -12,8 +12,9 @@ import { captureError } from '../observability/sentry';
  * plafonds « par adresse » de l'inscription, de la connexion, du rafraîchissement
  * et du jeton de programme deviennent des plafonds GLOBAUX — le levier de déni de
  * service que login-throttle.ts interdit en toutes lettres. Tout usage de la
- * référence vit ici, et le motif J (étape 5 de ce lot) refusera hors de ce
- * fichier toute forme de code qui lit l'adresse. Le cinquième site existe déjà en
+ * référence vit ici, et le motif J (tools/check-guards.sh et son job CI) refuse
+ * hors de ce fichier toute forme de code qui lit l'adresse — hors d'ici, une
+ * adresse cliente s'appelle clientIp. Le cinquième site existe déjà en
  * germe : emancipation.service.ts exige une adresse cliente, et seul le 501 de
  * 031 l'empêche de la recevoir.
  *
