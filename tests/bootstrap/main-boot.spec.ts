@@ -104,6 +104,14 @@ function boot(env: NodeJS.ProcessEnv): Boot {
   return { child, output: () => output, exitCode: () => exitCode };
 }
 
+async function exitWithin(running: Boot, ms: number): Promise<number | null> {
+  const deadline = Date.now() + ms;
+  while (running.exitCode() === null && Date.now() < deadline) {
+    await new Promise((done) => setTimeout(done, 200));
+  }
+  return running.exitCode();
+}
+
 describe('main.ts — le vrai point d’entrée démarre et sert /health', () => {
   let running: Boot | undefined;
 
@@ -153,13 +161,23 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     delete env.DATABASE_URL;
     running = boot(env);
 
-    const deadline = Date.now() + 45_000;
-    while (running.exitCode() === null && Date.now() < deadline) {
-      await new Promise((done) => setTimeout(done, 200));
-    }
-
-    expect(running.exitCode()).not.toBeNull();
-    expect(running.exitCode()).not.toBe(0);
+    const exitCode = await exitWithin(running, 45_000);
+    expect(exitCode).not.toBeNull();
+    expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('DATABASE_URL manquant');
+  }, 60_000);
+
+  test('LE MUR DE L’AIGUILLEUR EST APPELÉ AU DÉMARRAGE — « 1 » refuse le boot, même en murs relâchés', async () => {
+    // Leçon ⑮ : en murs relâchés, l'ABSENCE de la variable passe en silence — si
+    // l'appel du mur disparaissait de bootstrap(), aucun autre test ne rougirait.
+    // Une valeur DÉCLARÉE, elle, est validée dans tous les modes : « 1 » (l'habitude
+    // Express d'un saut, que la référence lirait comme 0.0.0.1) doit arrêter le
+    // vrai main.ts, avec une sortie qui nomme la variable.
+    running = boot({ ...constructedEnv(await freePort()), USER_CORE_TRUSTED_PROXIES: '1' });
+
+    const exitCode = await exitWithin(running, 45_000);
+    expect(exitCode).not.toBeNull();
+    expect(exitCode).not.toBe(0);
+    expect(running.output()).toContain('USER_CORE_TRUSTED_PROXIES');
   }, 60_000);
 });

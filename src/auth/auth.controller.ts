@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { CLIENT_ADDRESS, type ClientAddress } from '../client-address/client-address';
 import { AUTH_SERVICE } from './authentication-provider';
 import type { AuthService } from './auth.service';
 
@@ -26,7 +27,10 @@ const GENERIC_FAILURE = 'identifiants invalides';
 
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AUTH_SERVICE) private readonly auth: AuthService) {}
+  constructor(
+    @Inject(AUTH_SERVICE) private readonly auth: AuthService,
+    @Inject(CLIENT_ADDRESS) private readonly clientAddress: ClientAddress,
+  ) {}
 
   @Post('login')
   @HttpCode(200)
@@ -43,10 +47,12 @@ export class AuthController {
     if (typeof identifier !== 'string' || identifier === '' || typeof secret !== 'string' || secret === '') {
       throw new BadRequestException('identifier et secret sont requis');
     }
-    // V1 sans proxy de confiance déclaré : l'adresse de la socket fait foi.
-    // Le jour d'un reverse proxy, le patron payment-core (liste d'IP de
-    // confiance en config) s'applique — jamais un x-forwarded-for cru.
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
+    // L'adresse cliente vient du point unique : derrière un aiguilleur DÉCLARÉ
+    // dans USER_CORE_TRUSTED_PROXIES, celle qu'il a vue ; sinon la socket. Un
+    // en-tête X-Forwarded-For venu d'ailleurs n'est jamais cru — et ce n'est plus
+    // une promesse de commentaire : le mur, sa référence et ses tests vivent dans
+    // src/client-address/client-address.ts.
+    const clientIp = this.clientAddress.of(req, 'PUBLIC');
 
     const result = await this.auth.login(identifier, secret, clientIp);
     if (result.outcome === 'THROTTLED') {

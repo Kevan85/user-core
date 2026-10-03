@@ -13,6 +13,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { CLIENT_ADDRESS, type ClientAddress } from '../client-address/client-address';
 import { AUTH_PROVIDER, type AuthenticationProvider } from './authentication-provider';
 import { SESSION_SERVICE, type SessionService } from './session.service';
 
@@ -30,6 +31,7 @@ export class SessionController {
   constructor(
     @Inject(SESSION_SERVICE) private readonly sessions: SessionService,
     @Inject(AUTH_PROVIDER) private readonly provider: AuthenticationProvider,
+    @Inject(CLIENT_ADDRESS) private readonly clientAddress: ClientAddress,
   ) {}
 
   @Post('refresh')
@@ -42,7 +44,7 @@ export class SessionController {
     if (typeof refreshToken !== 'string' || refreshToken === '') {
       throw new BadRequestException('refreshToken requis');
     }
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
+    const clientIp = this.clientAddress.of(req, 'PUBLIC');
 
     const result = await this.sessions.refresh(refreshToken, clientIp);
     if (result.outcome === 'THROTTLED') {

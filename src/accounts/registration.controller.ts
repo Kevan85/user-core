@@ -10,6 +10,7 @@ import {
   Req,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { CLIENT_ADDRESS, type ClientAddress } from '../client-address/client-address';
 import { REGISTRATION_SERVICE, type RegistrationService } from './registration.service';
 
 interface RegisterBody {
@@ -20,6 +21,7 @@ interface RegisterBody {
 export class RegistrationController {
   constructor(
     @Inject(REGISTRATION_SERVICE) private readonly registration: RegistrationService,
+    @Inject(CLIENT_ADDRESS) private readonly clientAddress: ClientAddress,
   ) {}
 
   /** L'inscription publique : l'identifiant est GÉNÉRÉ, jamais choisi. */
@@ -37,9 +39,9 @@ export class RegistrationController {
     if (typeof body.secret !== 'string' || body.secret === '') {
       throw new BadRequestException('secret requis');
     }
-    // Même règle que le login : l'adresse de la socket fait foi (V1 sans
-    // proxy de confiance déclaré).
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
+    // L'adresse cliente vient du point unique : derrière un aiguilleur DÉCLARÉ,
+    // celle qu'il a vue ; sinon la socket (src/client-address/client-address.ts).
+    const clientIp = this.clientAddress.of(req, 'PUBLIC');
 
     const result = await this.registration.register(body.secret, clientIp);
     if (result.outcome === 'THROTTLED') {
