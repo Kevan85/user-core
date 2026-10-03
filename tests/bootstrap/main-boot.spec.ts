@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'child_process';
+import { randomUUID } from 'crypto';
 import { createServer, get, request as httpRequest } from 'http';
 import type { AddressInfo } from 'net';
 import { join } from 'path';
@@ -93,9 +94,15 @@ function boot(env: NodeJS.ProcessEnv): Boot {
   return { child, output: () => output, exitCode: () => exitCode };
 }
 
-function post(port: number, path: string, type?: string, body?: string): Promise<number | null> {
+function post(
+  port: number,
+  path: string,
+  type?: string,
+  body?: string,
+  extra: Record<string, string> = {},
+): Promise<number | null> {
   return new Promise((done) => {
-    const headers: Record<string, string> = type === undefined ? {} : { 'content-type': type };
+    const headers: Record<string, string> = { ...(type === undefined ? {} : { 'content-type': type }), ...extra };
     const req = httpRequest({ host: '127.0.0.1', port, path, method: 'POST', headers }, (res) => {
       res.resume();
       done(res.statusCode ?? null);
@@ -217,4 +224,59 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('USER_CORE_TRUSTED_PROXIES');
   }, BOOT_TEST_TIMEOUT_MS);
+});
+
+/**
+ * LE CÂBLAGE DU POINT UNIQUE DANS LE VRAI main.ts (bloc A-2026-10-03-2, D2).
+ *
+ * Le harnais HTTP (api-harness.ts) RECOPIE le câblage de main.ts : il ne voit donc
+ * pas main.ts:241-245, où le point unique reçoit la confiance déclarée. Jusqu'ici,
+ * aucun test ne l'interrogeait — le test du « 1 » prouve que le mur est APPELÉ, pas
+ * que son résultat est BRANCHÉ. Ici, le vrai processus, un aiguilleur déclaré
+ * (127.0.0.1), un budget de connexion réduit à 2, un identifiant neuf par requête :
+ * seule l'adresse peut refuser.
+ *
+ * ⚠️ LIMITE NOMMÉE : armed et signal (main.ts:243-244) ne sont PAS prouvés. Armer le
+ * vrai main.ts exige tous les murs de production (secrets, observabilité, doublures)
+ * — hors de portée d'un test de démarrage.
+ *
+ * ORDRE DÉLIBÉRÉ : (2) avant (1). Les deux partagent un démarrage. Si le résolveur ne
+ * croyait personne, (1) épuiserait le budget de la socket, et (2) rougirait pour une
+ * raison qui n'est pas la sienne ; dans cet ordre, chaque défaut ne fait rougir que
+ * son témoin.
+ */
+describe('main.ts BRANCHE le point unique sur la déclaration — un démarrage, aiguilleur 127.0.0.1', () => {
+  let shared: Boot | undefined;
+  let port = 0;
+
+  const login = (forwarded: string): Promise<number | null> =>
+    post(port, '/auth/login', 'application/json', JSON.stringify({ identifier: randomUUID(), secret: 'faux-secret' }), {
+      'x-forwarded-for': forwarded,
+    });
+
+  beforeAll(async () => {
+    port = await freePort();
+    shared = boot({ ...bootEnv(port), USER_CORE_TRUSTED_PROXIES: '127.0.0.1', AUTH_THROTTLE_MAX_ATTEMPTS: '2' });
+    const status = await healthyWithin(shared, port, BOOT_DEADLINE_MS);
+    if (status !== 200) {
+      throw new Error(`démarrage raté (sortie ${String(shared.exitCode())}) :\n${shared.output().slice(-1500)}`);
+    }
+  }, BOOT_TEST_TIMEOUT_MS);
+
+  afterAll(() => {
+    shared?.child.kill();
+  });
+
+  test('(2) un client écrit son propre en-tête devant un aiguilleur qui AJOUTE : un seul budget, celui de l’adresse ajoutée', async () => {
+    const statuses = [];
+    for (let i = 1; i <= 3; i += 1) {
+      statuses.push(await login(`192.0.2.${i}, 203.0.113.9`));
+    }
+    expect(statuses).toEqual([401, 401, 429]);
+  });
+
+  test('(1) deux clients derrière l’aiguilleur déclaré : deux budgets — A refusé, B passe encore', async () => {
+    expect([await login('203.0.113.1'), await login('203.0.113.1'), await login('203.0.113.1')]).toEqual([401, 401, 429]);
+    expect(await login('198.51.100.1')).toBe(401);
+  });
 });
