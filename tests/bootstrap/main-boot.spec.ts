@@ -30,6 +30,19 @@ import { fullKeyringEnv } from '../helpers/keyring-env';
  *   pas le .env du poste par son propre import de dotenv.
  */
 const ROOT = resolve(__dirname, '..', '..');
+/**
+ * L'ÉCHÉANCE D'UN DÉMARRAGE — mesurée, pas devinée (03/10/2026, poste Windows du
+ * dépôt) : 2,9 à 15,4 s à chaud ; à FROID, juste après un npm ci, quand chaque
+ * fichier neuf de node_modules est lu pour la première fois : 49,2 s puis 34,6 s.
+ * L'ancienne échéance de 45 s tombait ENTRE les deux mesures à froid : elle a fait
+ * rougir un démarrage sain, et un rouge qui n'est pas une régression apprend à
+ * ignorer le rouge. La borne est posée au-dessus de la population légitime
+ * mesurée (≈ 2,4 fois le maximum). La CONDITION, elle, ne bouge pas : /health doit
+ * répondre 200, ou le refus doit nommer sa cause. Un processus qui MEURT est vu
+ * tout de suite — seule l'attente d'un démarrage figé va jusqu'à la borne.
+ */
+const BOOT_DEADLINE_MS = 120_000;
+const BOOT_TEST_TIMEOUT_MS = BOOT_DEADLINE_MS + 15_000;
 const SYSTEM_VARIABLES = ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'windir', 'TEMP', 'TMP', 'HOME', 'USERPROFILE'];
 
 function systemOnly(): NodeJS.ProcessEnv {
@@ -151,20 +164,12 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     const port = await freePort();
     running = boot(constructedEnv(port));
 
-    let status: number | null = null;
-    const deadline = Date.now() + 45_000;
-    while (status !== 200 && running.exitCode() === null && Date.now() < deadline) {
-      status = await healthStatus(port);
-      if (status !== 200) {
-        await new Promise((done) => setTimeout(done, 300));
-      }
-    }
-
+    const status = await healthyWithin(running, port, BOOT_DEADLINE_MS);
     if (status !== 200) {
       throw new Error(`démarrage raté (sortie ${String(running.exitCode())}) :\n${running.output().slice(-1500)}`);
     }
     expect(status).toBe(200);
-  }, 60_000);
+  }, BOOT_TEST_TIMEOUT_MS);
 
   test('ISOLEMENT (héritage) — rien de l’environnement de Jest ne passe à l’enfant, hors liste système', () => {
     // Le chemin de fuite n°1 : passer process.env à l'enfant. Jest y a chargé le
@@ -188,11 +193,11 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     delete env.DATABASE_URL;
     running = boot(env);
 
-    const exitCode = await exitWithin(running, 45_000);
+    const exitCode = await exitWithin(running, BOOT_DEADLINE_MS);
     expect(exitCode).not.toBeNull();
     expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('DATABASE_URL manquant');
-  }, 60_000);
+  }, BOOT_TEST_TIMEOUT_MS);
 
   test('JSON SEULEMENT (étape 3bis) — chaque corps reçoit un refus PROPRE, jamais un 500', async () => {
     // Mesuré le 03/10/2026 avant cette étape : formulaire 401 (ses champs lus par
@@ -201,7 +206,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // volonté. Les deux routes sans corps prouvent qu'aucune n'a été cassée.
     const port = await freePort();
     running = boot(constructedEnv(port));
-    expect(await healthyWithin(running, port, 45_000)).toBe(200);
+    expect(await healthyWithin(running, port, BOOT_DEADLINE_MS)).toBe(200);
 
     const login = JSON.stringify({ identifier: 'inconnu', secret: 'faux-secret' });
     expect({
@@ -221,7 +226,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
       deconnexionSansCorps: 401,
       revocationSansCorps: 401,
     });
-  }, 60_000);
+  }, BOOT_TEST_TIMEOUT_MS);
 
   test('LE MUR DE L’AIGUILLEUR EST APPELÉ AU DÉMARRAGE — « 1 » refuse le boot, même en murs relâchés', async () => {
     // Leçon ⑮ : en murs relâchés, l'ABSENCE de la variable passe en silence — si
@@ -231,9 +236,9 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // vrai main.ts, avec une sortie qui nomme la variable.
     running = boot({ ...constructedEnv(await freePort()), USER_CORE_TRUSTED_PROXIES: '1' });
 
-    const exitCode = await exitWithin(running, 45_000);
+    const exitCode = await exitWithin(running, BOOT_DEADLINE_MS);
     expect(exitCode).not.toBeNull();
     expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('USER_CORE_TRUSTED_PROXIES');
-  }, 60_000);
+  }, BOOT_TEST_TIMEOUT_MS);
 });
