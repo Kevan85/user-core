@@ -33,24 +33,27 @@ export interface TrustedProxies {
   /** Les aiguilleurs déclarés ; vide = aucun, la socket fait foi. */
   readonly declared: readonly string[];
   readonly trust: TrustFunction;
+  /** productionWallsArmed(), dérivé ICI une seule fois (F1bis) — le résolveur le reçoit, il ne le re-déduit pas. */
+  readonly armed: boolean;
 }
 
-function compiled(entries: readonly string[]): TrustedProxies {
+function compiled(entries: readonly string[], armed: boolean): TrustedProxies {
   const result = compileTrustedProxies(entries);
   if (!result.ok) {
     throw new ConfigViolations(result.violations.map((violation) => `${TRUSTED_PROXIES_VARIABLE} : ${violation}`));
   }
-  return { declared: entries, trust: result.trust };
+  return { declared: entries, trust: result.trust, armed };
 }
 
 export function assembleTrustedProxiesFromEnv(env: NodeJS.ProcessEnv = process.env): TrustedProxies {
+  const armed = productionWallsArmed(env);
   const entries = (env[TRUSTED_PROXIES_VARIABLE] ?? '')
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry !== '');
 
   if (entries.length === 0) {
-    if (productionWallsArmed(env)) {
+    if (armed) {
       throw new ConfigViolations([
         `${TRUSTED_PROXIES_VARIABLE} absente ou vide sous murs de production : déclarer ` +
           `${NO_TRUSTED_PROXY} (service exposé sans aiguilleur) ou la liste des adresses des aiguilleurs. ` +
@@ -58,15 +61,15 @@ export function assembleTrustedProxiesFromEnv(env: NodeJS.ProcessEnv = process.e
           `plafond que n'importe quel client contourne`,
       ]);
     }
-    return compiled([]);
+    return compiled([], armed);
   }
   if (!entries.includes(NO_TRUSTED_PROXY)) {
-    return compiled(entries);
+    return compiled(entries, armed);
   }
   if (entries.some((entry) => entry !== NO_TRUSTED_PROXY)) {
     throw new ConfigViolations([
       `${TRUSTED_PROXIES_VARIABLE} : ${NO_TRUSTED_PROXY} mêlé à des adresses — contradiction, rien n'est déclaré`,
     ]);
   }
-  return compiled([]);
+  return compiled([], armed);
 }

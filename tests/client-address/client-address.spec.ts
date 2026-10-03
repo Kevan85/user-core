@@ -1,4 +1,13 @@
-import { compileTrustedProxies, type TrustFunction } from '../../src/client-address/client-address';
+import type { IncomingMessage } from 'http';
+import {
+  ClientAddress,
+  clientAddressSignalName,
+  compileTrustedProxies,
+  reportClientAddressSignal,
+  type ClientAddressSignal,
+  type TrustFunction,
+} from '../../src/client-address/client-address';
+import * as observability from '../../src/observability/sentry';
 
 /**
  * Le point unique de l'adresse cliente — étape 1 : ce qui fait d'une liste
@@ -105,5 +114,162 @@ describe('ce que la liste compilée croit — les cas mesurés', () => {
     for (const candidate of ['203.0.113.7', '8.8.8.8', '::ffff:8.8.8.8']) {
       expect(trust(candidate, 0)).toBe(false);
     }
+  });
+});
+
+// --- Étape 2 : la résolution et ses deux signaux -----------------------------
+
+const A3: ClientAddressSignal = 'DECLARED_PROXY_WITHOUT_CLIENT';
+const A3BIS: ClientAddressSignal = 'FORWARDED_FROM_UNDECLARED_LOCAL_SOURCE';
+
+/** Une requête telle que la voit la référence : l'adresse de la socket et l'en-tête. */
+function request(socket: string | undefined, forwardedFor?: string): IncomingMessage {
+  const headers = forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor };
+  return { socket: { remoteAddress: socket }, connection: { remoteAddress: socket }, headers } as unknown as IncomingMessage;
+}
+
+function resolver(declared: string[], armed = true): { address: ClientAddress; signals: ClientAddressSignal[] } {
+  const signals: ClientAddressSignal[] = [];
+  const address = new ClientAddress({ trust: trustOf(declared), armed, signal: (s) => signals.push(s) });
+  return { address, signals };
+}
+
+describe('la résolution — une requête devient une adresse cliente', () => {
+  test('aucun aiguilleur : un X-Forwarded-For forgé est ignoré, la socket fait foi', () => {
+    expect(resolver([]).address.of(request('203.0.113.9', '1.2.3.4'), 'PUBLIC')).toBe('203.0.113.9');
+  });
+
+  test('aiguilleur déclaré : l’adresse qu’il a vue, même reçu sous la forme double pile', () => {
+    expect(resolver(['127.0.0.1']).address.of(request('::ffff:127.0.0.1', '203.0.113.7'), 'PUBLIC')).toBe('203.0.113.7');
+  });
+
+  test('une entrée forgée à GAUCHE ne passe pas : seule compte celle que l’aiguilleur a écrite', () => {
+    expect(resolver(['127.0.0.1']).address.of(request('::ffff:127.0.0.1', '1.2.3.4, 203.0.113.7'), 'PUBLIC')).toBe(
+      '203.0.113.7',
+    );
+  });
+
+  test('deux sauts de confiance : le client derrière les deux', () => {
+    const { address } = resolver(['127.0.0.1', '10.0.0.0/8']);
+    expect(address.of(request('127.0.0.1', '203.0.113.7, 10.0.0.5'), 'PUBLIC')).toBe('203.0.113.7');
+  });
+
+  test('jamais une clé que le client fabrique : une entrée non-IP retombe sur la socket', () => {
+    expect(resolver(['127.0.0.1']).address.of(request('::ffff:127.0.0.1', 'pas-une-ip'), 'PUBLIC')).toBe('127.0.0.1');
+  });
+
+  test('un client, une clé : ::ffff:a.b.c.d est normalisée', () => {
+    expect(resolver([]).address.of(request('::ffff:198.51.100.4'), 'PUBLIC')).toBe('198.51.100.4');
+  });
+
+  test('socket déjà détruite : « unknown », exactement comme avant ce lot', () => {
+    expect(resolver([]).address.of(request(undefined), 'PUBLIC')).toBe('unknown');
+  });
+});
+
+describe('A3 — un aiguilleur DÉCLARÉ qui ne transmet aucune adresse cliente', () => {
+  test('site public, murs armés : un signal — un seul par processus — et aucun refus', () => {
+    const { address, signals } = resolver(['127.0.0.1']);
+    expect(address.of(request('::ffff:127.0.0.1'), 'PUBLIC')).toBe('127.0.0.1');
+    expect(address.of(request('::ffff:127.0.0.1'), 'PUBLIC')).toBe('127.0.0.1');
+    expect(signals).toEqual([A3]);
+  });
+
+  test('CONTRÔLE NÉGATIF — site PROGRAMME : un programme du même serveur arrive légitimement sans en-tête', () => {
+    const { address, signals } = resolver(['127.0.0.1']);
+    address.of(request('::ffff:127.0.0.1'), 'PROGRAM');
+    expect(signals).toEqual([]);
+  });
+
+  test('CONTRÔLE NÉGATIF — murs relâchés : aucun signal', () => {
+    const { address, signals } = resolver(['127.0.0.1'], false);
+    address.of(request('::ffff:127.0.0.1'), 'PUBLIC');
+    expect(signals).toEqual([]);
+  });
+
+  test('CONTRÔLE NÉGATIF — un aiguilleur qui transmet le client : aucun signal', () => {
+    const { address, signals } = resolver(['127.0.0.1']);
+    address.of(request('::ffff:127.0.0.1', '203.0.113.7'), 'PUBLIC');
+    expect(signals).toEqual([]);
+  });
+});
+
+describe('A3bis — un X-Forwarded-For venu d’une source locale ou privée NON déclarée', () => {
+  test('le cas du conteneur : 127.0.0.1 déclaré, la requête arrive de la passerelle 172.18.0.1 avec un en-tête', () => {
+    // L'aiguilleur de l'hôte joint un port publié ; le conteneur le voit arriver
+    // depuis la passerelle de son réseau, pas depuis 127.0.0.1. L'en-tête est
+    // ignoré (la source n'est pas déclarée) : sans ce signal, le plafond global
+    // reviendrait en silence. Aucun refus : la requête est servie.
+    const { address, signals } = resolver(['127.0.0.1']);
+    expect(address.of(request('172.18.0.1', '203.0.113.7'), 'PUBLIC')).toBe('172.18.0.1');
+    expect(signals).toEqual([A3BIS]);
+  });
+
+  test('la boucle locale non déclarée compte aussi', () => {
+    const { address, signals } = resolver(['10.0.0.1']);
+    address.of(request('::1', '203.0.113.7'), 'PUBLIC');
+    expect(signals).toEqual([A3BIS]);
+  });
+
+  test('CONTRÔLE NÉGATIF — la même requête venue d’une adresse DÉCLARÉE ne lève rien', () => {
+    const { address, signals } = resolver(['172.18.0.1']);
+    expect(address.of(request('172.18.0.1', '203.0.113.7'), 'PUBLIC')).toBe('203.0.113.7');
+    expect(signals).toEqual([]);
+  });
+
+  test('CONTRÔLE NÉGATIF — venue d’une adresse PUBLIQUE non déclarée : ignorée, pas signalée', () => {
+    const { address, signals } = resolver(['127.0.0.1']);
+    expect(address.of(request('203.0.113.9', '1.2.3.4'), 'PUBLIC')).toBe('203.0.113.9');
+    expect(signals).toEqual([]);
+  });
+
+  test('CONTRÔLE NÉGATIF — une source locale SANS en-tête (une sonde de santé) : rien', () => {
+    const { address, signals } = resolver(['10.0.0.1']);
+    address.of(request('127.0.0.1'), 'PUBLIC');
+    expect(signals).toEqual([]);
+  });
+
+  test('CONTRÔLE NÉGATIF — site programme, ou murs relâchés : rien', () => {
+    const programme = resolver(['127.0.0.1']);
+    programme.address.of(request('172.18.0.1', '203.0.113.7'), 'PROGRAM');
+    const relache = resolver(['127.0.0.1'], false);
+    relache.address.of(request('172.18.0.1', '203.0.113.7'), 'PUBLIC');
+    expect([...programme.signals, ...relache.signals]).toEqual([]);
+  });
+
+  test('un signal par processus ET par signature : deux signatures, deux signaux, jamais plus', () => {
+    const { address, signals } = resolver(['127.0.0.1']);
+    for (let i = 0; i < 3; i += 1) {
+      address.of(request('::ffff:127.0.0.1'), 'PUBLIC');
+      address.of(request('172.18.0.1', '203.0.113.7'), 'PUBLIC');
+    }
+    expect(signals).toEqual([A3, A3BIS]);
+  });
+});
+
+describe('le puits de production — le signal SURVIT au filtre d’observabilité (leçon ⑨)', () => {
+  test.each([[A3], [A3BIS]])('%s : le vrai scrubEvent relaie le NOM au lieu de le réduire à « Error »', (signal) => {
+    const name = clientAddressSignalName(signal);
+    const event = { type: undefined, exception: { values: [{ type: name, value: 'message' }] } };
+    const scrubbed = observability.scrubEvent(event as Parameters<typeof observability.scrubEvent>[0], undefined);
+    expect(scrubbed.exception?.values?.[0]?.type).toBe(name);
+  });
+
+  test('reportClientAddressSignal : une erreur nommée part, un avertissement sans adresse', () => {
+    const captured: unknown[] = [];
+    const warned: string[] = [];
+    const capture = jest.spyOn(observability, 'captureError').mockImplementation((err) => void captured.push(err));
+    const warn = jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => void warned.push(args.join(' ')));
+    try {
+      reportClientAddressSignal(A3BIS);
+    } finally {
+      capture.mockRestore();
+      warn.mockRestore();
+    }
+    expect(captured).toHaveLength(1);
+    expect((captured[0] as Error).name).toBe(clientAddressSignalName(A3BIS));
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toContain(A3BIS);
+    expect(warned[0]).not.toMatch(/[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+/);
   });
 });

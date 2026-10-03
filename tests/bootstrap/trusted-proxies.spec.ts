@@ -44,6 +44,7 @@ describe('sous murs armés, aucun des deux défauts n’est sûr : le défaut es
     expect(proxies.declared).toEqual([]);
     expect(proxies.trust('127.0.0.1', 0)).toBe(false);
     expect(proxies.trust('::ffff:127.0.0.1', 0)).toBe(false);
+    expect(proxies.armed).toBe(true);
   });
 
   test('NONE mêlé à des adresses ⇒ refus : contradiction', () => {
@@ -85,6 +86,7 @@ describe('CONTRÔLE NÉGATIF — murs relâchés', () => {
   test.each(['development', 'test'])('%s : variable absente ⇒ aucun aiguilleur, en silence', (NODE_ENV) => {
     const proxies = assembleTrustedProxiesFromEnv({ NODE_ENV });
     expect(proxies.declared).toEqual([]);
+    expect(proxies.armed).toBe(false);
     expect(proxies.trust('127.0.0.1', 0)).toBe(false);
   });
 

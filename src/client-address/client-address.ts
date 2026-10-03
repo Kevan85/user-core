@@ -1,5 +1,7 @@
+import type { IncomingMessage } from 'http';
 import { isIP } from 'net';
 import proxyaddr from 'proxy-addr';
+import { captureError } from '../observability/sentry';
 
 /**
  * LE POINT UNIQUE DE L'ADRESSE CLIENTE (lot déploiement — la compilation de la
@@ -108,4 +110,109 @@ export function compileTrustedProxies(entries: readonly string[]): CompiledTrust
     };
   }
   return { ok: true, trust };
+}
+
+export const CLIENT_ADDRESS = 'CLIENT_ADDRESS';
+
+/** Qui appelle : le PUBLIC (inscription, connexion, rafraîchissement) ou un PROGRAMME (/v1/token). */
+export type Surface = 'PUBLIC' | 'PROGRAM';
+
+/**
+ * Les deux signatures d'un aiguilleur mal déclaré. Un signal par processus et par
+ * signature, aucune donnée personnelle, aucun refus de requête.
+ * - A3 : un aiguilleur DÉCLARÉ n'a transmis aucune adresse cliente — chaque
+ *   plafond par adresse redevient global, sans bruit.
+ * - A3bis : un X-Forwarded-For arrive d'une source NON déclarée qui est locale ou
+ *   privée — la signature d'un aiguilleur vu sous une autre adresse que celle
+ *   déclarée (la passerelle d'un réseau de conteneurs, typiquement), donc ignoré.
+ */
+export type ClientAddressSignal = 'DECLARED_PROXY_WITHOUT_CLIENT' | 'FORWARDED_FROM_UNDECLARED_LOCAL_SOURCE';
+
+export interface ClientAddressOptions {
+  readonly trust: TrustFunction;
+  /** productionWallsArmed(), dérivé UNE fois à l'assemblage (F1bis) — jamais re-déduit ici. */
+  readonly armed: boolean;
+  readonly signal: (signal: ClientAddressSignal) => void;
+}
+
+// La boucle locale, le lien local et les plages privées, au sens de la référence —
+// jamais d'une liste recopiée. Aucun client d'Internet n'arrive d'une de ces
+// adresses : c'est ce qui rend A3bis presque muet sur le sain.
+const LOCAL_OR_PRIVATE: TrustFunction = proxyaddr.compile(['loopback', 'linklocal', 'uniquelocal']);
+
+// ::ffff:a.b.c.d — une adresse IPv4 vue par une écoute double pile : un client, une clé.
+const IPV4_MAPPED = /^::ffff:([0-9]{1,3}(?:[.][0-9]{1,3}){3})$/i;
+
+function normalized(address: string): string {
+  return IPV4_MAPPED.exec(address)?.[1] ?? address;
+}
+
+/**
+ * LA RÉSOLUTION — le seul endroit où une requête devient une adresse cliente.
+ *
+ * La SURFACE est un paramètre OBLIGATOIRE (condition c de l'Auditeur) : le site
+ * /v1/token ne peut pas lever un signal public par oubli. Un programme hébergé sur
+ * le même serveur qui appelle directement le port arrive légitimement d'une adresse
+ * de confiance, sans en-tête : sur ce site, A3 crierait sur le sain — et un
+ * détecteur qui crie sur le sain finit assoupli (CLAUDE.md §3.14bis ②).
+ * Les deux signaux n'existent que sous murs armés : en développement il n'y a pas
+ * d'aiguilleur à mal déclarer.
+ */
+export class ClientAddress {
+  private readonly emitted = new Set<ClientAddressSignal>();
+
+  constructor(private readonly options: ClientAddressOptions) {}
+
+  of(req: IncomingMessage, surface: Surface): string {
+    const socket = req.socket.remoteAddress;
+    if (socket === undefined) {
+      return 'unknown'; // socket déjà détruite : le comportement d'avant ce lot, inchangé
+    }
+    const resolved = proxyaddr(req, this.options.trust);
+    if (surface === 'PUBLIC' && this.options.armed) {
+      this.watch(req, socket, resolved);
+    }
+    // Jamais une clé que le client fabrique : une entrée non-IP retombe sur la socket.
+    return normalized(isIP(resolved) === 0 ? socket : resolved);
+  }
+
+  private watch(req: IncomingMessage, socket: string, resolved: string): void {
+    const { trust } = this.options;
+    if (trust(socket, 0) && trust(resolved, 0)) {
+      this.emit('DECLARED_PROXY_WITHOUT_CLIENT');
+    } else if (!trust(socket, 0) && LOCAL_OR_PRIVATE(socket, 0) && req.headers['x-forwarded-for'] !== undefined) {
+      this.emit('FORWARDED_FROM_UNDECLARED_LOCAL_SOURCE');
+    }
+  }
+
+  private emit(signal: ClientAddressSignal): void {
+    if (!this.emitted.has(signal)) {
+      this.emitted.add(signal);
+      this.options.signal(signal);
+    }
+  }
+}
+
+/**
+ * L'observabilité ne relaie d'une erreur que son NOM (sentry.ts, liste blanche ;
+ * le message est toujours retiré) : le signal tient donc tout entier dans le nom,
+ * en caractères de mot — et un test le fait passer par le vrai filtre.
+ */
+export function clientAddressSignalName(signal: ClientAddressSignal): string {
+  return `ClientAddressSignal_${signal}`;
+}
+
+const SIGNAL_EXPLANATIONS: Record<ClientAddressSignal, string> = {
+  DECLARED_PROXY_WITHOUT_CLIENT:
+    "un aiguilleur déclaré n'a transmis aucune adresse cliente : chaque plafond par adresse redevient global",
+  FORWARDED_FROM_UNDECLARED_LOCAL_SOURCE:
+    "un X-Forwarded-For arrive d'une source locale ou privée NON déclarée : l'aiguilleur n'est pas vu sous l'adresse déclarée",
+};
+
+/** Le puits de production. Aucune adresse, jamais : le nom du signal et son explication. */
+export function reportClientAddressSignal(signal: ClientAddressSignal): void {
+  const error = new Error(signal);
+  error.name = clientAddressSignalName(signal);
+  captureError(error);
+  console.warn(`[ADRESSE CLIENTE] ${signal} — ${SIGNAL_EXPLANATIONS[signal]} (voir USER_CORE_TRUSTED_PROXIES).`);
 }

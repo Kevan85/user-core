@@ -14,6 +14,8 @@ import { SessionService } from './auth/session.service';
 import { assembleApiFromEnv, assertBridledRole, type ApiAssembly } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
 import { declareSimulatedSeam } from './bootstrap/simulation';
+import { assembleTrustedProxiesFromEnv } from './bootstrap/trusted-proxies';
+import { ClientAddress, reportClientAddressSignal } from './client-address/client-address';
 import { ObservabilityExceptionFilter } from './observability/observability.filter';
 import { assembleObservabilityFromEnv, initObservability } from './observability/sentry';
 import { CatalogService } from './catalog/catalog.service';
@@ -220,6 +222,10 @@ async function bootstrap(): Promise<void> {
   // non-collision de valeur vérifiée sur toutes les paires (dette ②).
   const cryptoConfig = assembleKeyringsFromEnv();
   const phoneConfig = assemblePhoneConfig();
+  // Les aiguilleurs de confiance : sous murs armés, la liste se DÉCLARE (NONE ou
+  // des adresses) ou le boot est refusé — trop peu de confiance fait un plafond
+  // global, trop en fait un plafond que tout client contourne.
+  const trustedProxies = assembleTrustedProxiesFromEnv();
 
   // Refus de booter sous un autre rôle que le rôle bridé — AVANT tout trafic.
   await assertBridledRole(assembly.pool);
@@ -230,9 +236,16 @@ async function bootstrap(): Promise<void> {
 
   const accountWiring = await assembleAccountWiring(assembly, authConfig, cryptoConfig, phoneConfig);
   const programWiring = assembleProgramWiring(assembly, authConfig, cryptoConfig);
+  // Le point unique de l'adresse cliente. Ses deux signaux d'aiguilleur mal déclaré
+  // (A3, A3bis) partent vers l'observabilité, sans aucune adresse.
+  const clientAddress = new ClientAddress({
+    trust: trustedProxies.trust,
+    armed: trustedProxies.armed,
+    signal: reportClientAddressSignal,
+  });
 
   const app = await NestFactory.create(
-    AppModule.register(assembly, { ...accountWiring, ...programWiring }),
+    AppModule.register(assembly, { ...accountWiring, ...programWiring, clientAddress }),
   );
 
   // Toute exception INATTENDUE part vers l'observabilité (les refus HTTP
