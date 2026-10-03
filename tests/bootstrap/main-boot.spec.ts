@@ -55,13 +55,23 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-function healthStatus(port: number): Promise<number | null> {
+function healthStatus(port: number, host = '127.0.0.1'): Promise<number | null> {
   return new Promise((done) => {
-    get({ host: '127.0.0.1', port, path: '/health' }, (res) => {
+    get({ host, port, path: '/health' }, (res) => {
       res.resume();
       done(res.statusCode ?? null);
     }).on('error', () => done(null));
   });
+}
+
+/** La boucle IPv6 répond-elle sur CETTE machine ? Un serveur jetable, écouté sur ::1, puis joint. */
+async function ipv6LoopbackAnswers(): Promise<boolean> {
+  const server = createServer((_req, res) => res.end());
+  await new Promise<void>((done) => server.listen(0, '::1', done));
+  const { port } = server.address() as AddressInfo;
+  const status = await healthStatus(port, '::1');
+  await new Promise<void>((done) => server.close(() => done()));
+  return status === 200;
 }
 
 function bootEnv(port: number): NodeJS.ProcessEnv {
@@ -223,6 +233,41 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     expect(exitCode).not.toBeNull();
     expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('USER_CORE_TRUSTED_PROXIES');
+  }, BOOT_TEST_TIMEOUT_MS);
+
+  test('LE MUR DE L’ÉCOUTE EST APPELÉ AU DÉMARRAGE — « localhost » refuse le boot, même en murs relâchés', async () => {
+    // Même raison que le « 1 » ci-dessus (leçon ⑮) : en murs relâchés, l'absence passe
+    // en silence ; une valeur DÉCLARÉE est validée dans tous les modes. « localhost »
+    // est un nom, que chaque machine résout à sa façon : il doit arrêter le vrai main.ts.
+    running = boot({ ...bootEnv(await freePort()), USER_CORE_LISTEN_HOST: 'localhost' });
+
+    const exitCode = await exitWithin(running, BOOT_DEADLINE_MS);
+    expect(exitCode).not.toBeNull();
+    expect(exitCode).not.toBe(0);
+    expect(running.output()).toContain('USER_CORE_LISTEN_HOST');
+  }, BOOT_TEST_TIMEOUT_MS);
+
+  test('L’ÉCOUTE SUIT LA DÉCLARATION — 127.0.0.1 déclaré : /health répond par la boucle IPv4, une connexion par ::1 échoue', async () => {
+    // Contre-épreuve d'abord : ::1 répond sur cette machine. Sans elle, l'échec plus bas
+    // pourrait venir d'une machine sans IPv6, et ne prouverait rien.
+    expect(await ipv6LoopbackAnswers()).toBe(true);
+    const port = await freePort();
+    running = boot({ ...bootEnv(port), USER_CORE_LISTEN_HOST: '127.0.0.1' });
+
+    expect(await healthyWithin(running, port, BOOT_DEADLINE_MS)).toBe(200);
+    expect(await healthStatus(port, '::1')).toBeNull();
+  }, BOOT_TEST_TIMEOUT_MS);
+
+  test('NON déclarée, murs relâchés : l’écoute d’avant, toutes les interfaces — ::1 répond', async () => {
+    // Le chemin « sans hôte » de main.ts, que le gabarit pourrait un jour masquer en
+    // portant une valeur : la variable est retirée exprès.
+    const port = await freePort();
+    const env = bootEnv(port);
+    delete env.USER_CORE_LISTEN_HOST;
+    running = boot(env);
+
+    expect(await healthyWithin(running, port, BOOT_DEADLINE_MS)).toBe(200);
+    expect(await healthStatus(port, '::1')).toBe(200);
   }, BOOT_TEST_TIMEOUT_MS);
 });
 

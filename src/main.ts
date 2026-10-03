@@ -13,6 +13,7 @@ import { SessionService } from './auth/session.service';
 import { createApiApplication } from './bootstrap/api-application';
 import { assembleApiFromEnv, assertBridledRole, type ApiAssembly } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import { assembleListenHostFromEnv } from './bootstrap/listen-host';
 import { declareSimulatedSeam } from './bootstrap/simulation';
 import { assembleTrustedProxiesFromEnv } from './bootstrap/trusted-proxies';
 import { ClientAddress, reportClientAddressSignal } from './client-address/client-address';
@@ -226,6 +227,9 @@ async function bootstrap(): Promise<void> {
   // des adresses) ou le boot est refusé — trop peu de confiance fait un plafond
   // global, trop en fait un plafond que tout client contourne.
   const trustedProxies = assembleTrustedProxiesFromEnv();
+  // L'adresse d'écoute : sous murs armés, elle se DÉCLARE ou le boot est refusé —
+  // écouter partout par oubli exposerait le port à côté de l'aiguilleur.
+  const listenHost = assembleListenHostFromEnv();
 
   // Refus de booter sous un autre rôle que le rôle bridé — AVANT tout trafic.
   await assertBridledRole(assembly.pool);
@@ -261,7 +265,11 @@ async function bootstrap(): Promise<void> {
   process.once('SIGTERM', () => void shutdown());
   process.once('SIGINT', () => void shutdown());
 
-  await app.listen(assembly.port);
+  if (listenHost.host === undefined) {
+    await app.listen(assembly.port);
+  } else {
+    await app.listen(assembly.port, listenHost.host);
+  }
 }
 
 bootstrap().catch((err: unknown) => {
