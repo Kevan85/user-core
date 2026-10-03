@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { request as httpRequest } from 'http';
-import type { AddressInfo } from 'net';
+import { request as httpRequest, type Server } from 'http';
+import type { AddressInfo, Socket } from 'net';
 import { IdentityService } from '../../src/accounts/identity.service';
 import { ProfileService } from '../../src/accounts/profile.service';
 import { RegistrationService } from '../../src/accounts/registration.service';
@@ -39,7 +39,13 @@ import { constructedEnv } from './constructed-env';
 
 /**
  * LE HARNAIS HTTP DE L'API (lot déploiement, étape 2, sous-étape 4) — l'application
- * de PRODUCTION, dans le processus de test, sur un port libre de la boucle locale.
+ * de PRODUCTION, dans le processus de test, sur un port libre.
+ *
+ * Elle écoute SANS HÔTE, comme main.ts : en double pile, un client IPv4 y arrive
+ * sous la forme ::ffff:127.0.0.1 — celle que la production voit, et celle qui a
+ * trompé le patron voisin (comparaison de chaînes exacte). Écouter sur 127.0.0.1
+ * aurait caché ce chemin aux tests (bloc A-2026-10-03-1, P4) ; un test regarde la
+ * forme vue par le service (remoteAddresses).
  *
  * Ce qui est RÉEL : la fabrique (createApiApplication, donc les mêmes lecteurs de
  * corps que main.ts — un test le prouve par un 415), le module (AppModule.register,
@@ -80,6 +86,8 @@ export interface HarnessOptions {
 
 export interface RunningApi {
   readonly port: number;
+  /** L'adresse de chaque connexion telle que le SERVICE l'a vue (sa socket), dans l'ordre d'arrivée. */
+  remoteAddresses(): readonly string[];
   close(): Promise<void>;
 }
 
@@ -151,10 +159,14 @@ export async function startApi(options: HarnessOptions = {}): Promise<RunningApi
       AppModule.register(assembly, { ...(await services(assembly, env)), clientAddress }),
     );
     app.useGlobalFilters(new ObservabilityExceptionFilter(app.getHttpAdapter()));
-    await app.listen(0, '127.0.0.1');
-    const { port } = app.getHttpServer().address() as AddressInfo;
+    await app.listen(0);
+    const server = app.getHttpServer() as Server;
+    const seen: string[] = [];
+    server.on('connection', (socket: Socket) => seen.push(socket.remoteAddress ?? 'socket détruite'));
+    const { port } = server.address() as AddressInfo;
     return {
       port,
+      remoteAddresses: () => [...seen],
       close: async () => {
         await app.close();
         await assembly.pool.end();

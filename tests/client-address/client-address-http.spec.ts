@@ -118,6 +118,20 @@ describe('le harnais EST l’application de production', () => {
       await api.close();
     }
   });
+
+  test('il écoute comme main.ts, sans hôte : le service voit un client IPv4 sous la forme double pile', async () => {
+    // C'est la forme que la production voit, et celle qui a trompé le patron voisin :
+    // un aiguilleur déclaré 127.0.0.1 doit être reconnu sous ::ffff:127.0.0.1. Sans ce
+    // témoin, une écoute ramenée sur 127.0.0.1 ferait passer tous les tests de budget
+    // par un chemin que la production ne prend pas, sans qu'aucun rougisse.
+    const api = await startApi();
+    try {
+      await post(api.port, '/auth/login', { body: { identifier: 'inconnu', secret: SECRET } });
+      expect(api.remoteAddresses()).toEqual(['::ffff:127.0.0.1']);
+    } finally {
+      await api.close();
+    }
+  });
 });
 
 describe('aiguilleur DÉCLARÉ (la boucle locale) : un budget PAR CLIENT', () => {
