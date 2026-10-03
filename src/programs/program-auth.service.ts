@@ -67,9 +67,12 @@ export class ProgramAuthService {
   async token(assertion: string, clientIp: string): Promise<ProgramTokenResult> {
     const parsed = this.parse(assertion);
     if (parsed === null) {
-      // Difforme : compte quand même sur le budget IP (un flot d'illisible
-      // reste un flot), puis refus sec.
-      if (!this.throttle.allowByKey(clientIp)) {
+      // Difforme : compte sur LE compteur d'adresse des assertions lisibles
+      // (allowAddress), et sur lui seul — aucun client n'est annoncé. Un flot
+      // d'illisible reste un flot, puis refus sec. Jusqu'au 03/10/2026, il avait son
+      // propre compteur (allowByKey) : une adresse disposait de deux budgets par
+      // fenêtre, un par forme d'assertion — mesuré, 60 admises au lieu de 30.
+      if (!this.throttle.allowAddress(clientIp)) {
         return { outcome: 'THROTTLED' };
       }
       return { outcome: 'REFUSED' };

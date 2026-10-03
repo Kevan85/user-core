@@ -171,6 +171,25 @@ describe('source NON déclarée : un en-tête forgé ne vaut rien', () => {
   });
 });
 
+describe('/v1/token : UN compteur par adresse, que l’assertion soit lisible ou difforme', () => {
+  test('même client : deux assertions difformes, puis une lisible (iss neuf) ⇒ la lisible est refusée', async () => {
+    // Bloc A-2026-10-03-2, D1. Jusqu'au 03/10/2026, la difforme avait son propre
+    // compteur : une adresse disposait de deux budgets par fenêtre. L'iss neuf garde
+    // le compteur par client hors du jeu — seul celui de l'adresse peut refuser.
+    const api = await startApi();
+    try {
+      const statuses = [
+        await post(api.port, '/v1/token', { body: { assertion: 'pas-une-assertion' } }),
+        await post(api.port, '/v1/token', { body: { assertion: 'toujours-pas' } }),
+        await post(api.port, '/v1/token', { body: { assertion: assertion() } }),
+      ];
+      expect(statuses).toEqual([401, 401, 429]);
+    } finally {
+      await api.close();
+    }
+  });
+});
+
 describe('la SURFACE de chaque site est regardée — murs armés, aiguilleur déclaré', () => {
   // Leçon ⑮ : sans ce test, un contrôleur public passé en PROGRAM par erreur
   // éteindrait ses signaux sans faire rougir un seul test. Une application neuve

@@ -28,4 +28,16 @@ describe('LoginThrottle (Q3 : par IP ET par identifiant visé)', () => {
     expect(throttle.allow('10.0.0.3', 'a')).toBe(false);
     expect(throttle.allow('10.0.0.4', 'b')).toBe(true);
   });
+
+  test('allowAddress compte sur LE compteur d’adresse de allow, pas sur un compteur à part', () => {
+    // Le défaut corrigé le 03/10/2026 : l'assertion difforme de /v1/token passait par
+    // un autre compteur, et une adresse disposait de deux budgets par fenêtre.
+    const throttle = new LoginThrottle(2, 60, () => 0);
+    expect(throttle.allowAddress('10.0.0.9')).toBe(true);
+    expect(throttle.allow('10.0.0.9', 'cible-a')).toBe(true);
+    expect(throttle.allowAddress('10.0.0.9')).toBe(false);
+    expect(throttle.allow('10.0.0.9', 'cible-b')).toBe(false);
+    // L'adresse voisine garde son budget entier.
+    expect(throttle.allowAddress('10.0.0.10')).toBe(true);
+  });
 });
