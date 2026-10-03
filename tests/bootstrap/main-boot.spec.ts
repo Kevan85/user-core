@@ -1,11 +1,8 @@
 import { spawn, type ChildProcess } from 'child_process';
-import { readFileSync } from 'fs';
 import { createServer, get, request as httpRequest } from 'http';
 import type { AddressInfo } from 'net';
-import { join, resolve } from 'path';
-import { ed25519KeyBase64 } from '../helpers/auth';
-import { appUrl } from '../helpers/db';
-import { fullKeyringEnv } from '../helpers/keyring-env';
+import { join } from 'path';
+import { constructedEnv, ROOT } from './constructed-env';
 
 /**
  * LE PREMIER TEST DE DÉMARRAGE DU DÉPÔT (lot déploiement, étape 2a).
@@ -18,18 +15,12 @@ import { fullKeyringEnv } from '../helpers/keyring-env';
  * main.ts d'avant la coupe, puis sur celui d'après.
  *
  * L'ENVIRONNEMENT EST CONSTRUIT, JAMAIS HÉRITÉ (leçon ⑪ : une garde qui ne
- * passe que sur le poste de celui qui la teste ne prouve rien). Jest charge le
- * .env du poste dans process.env : l'hériter ferait passer ce test ici et casser
- * en CI. L'enfant ne reçoit donc que quelques variables système, puis :
- * - les réglages du gabarit PUBLIC .env.example — si le code exige un jour une
- *   variable que le gabarit ne porte pas, ce test rougit, et le gabarit reste
- *   complet ;
- * - des secrets TIRÉS pour l'occasion (les quatre trousseaux, la clé de
- *   signature), jamais ceux d'un poste ;
- * - DOTENV_CONFIG_PATH vers un fichier inexistant, pour que main.ts ne recharge
- *   pas le .env du poste par son propre import de dotenv.
+ * passe que sur le poste de celui qui la teste ne prouve rien). Sa construction —
+ * gabarit public, secrets tirés, rôle bridé — vit dans constructed-env.ts, partagée
+ * avec le harnais HTTP. L'enfant reçoit en plus quelques variables système, et
+ * DOTENV_CONFIG_PATH vers un fichier inexistant, pour que main.ts ne recharge pas
+ * le .env du poste par son propre import de dotenv.
  */
-const ROOT = resolve(__dirname, '..', '..');
 /**
  * L'ÉCHÉANCE D'UN DÉMARRAGE — mesurée, pas devinée (03/10/2026, poste Windows du
  * dépôt) : 2,9 à 15,4 s à chaud ; à FROID, juste après un npm ci, quand chaque
@@ -55,17 +46,6 @@ function systemOnly(): NodeJS.ProcessEnv {
   return env;
 }
 
-function publicTemplate(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const line of readFileSync(join(ROOT, '.env.example'), 'utf8').split('\n')) {
-    const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.trim());
-    if (match?.[1] !== undefined && match[2] !== undefined) {
-      env[match[1]] = match[2];
-    }
-  }
-  return env;
-}
-
 async function freePort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
@@ -83,18 +63,14 @@ function healthStatus(port: number): Promise<number | null> {
   });
 }
 
-function constructedEnv(port: number): NodeJS.ProcessEnv {
+function bootEnv(port: number): NodeJS.ProcessEnv {
   return {
     ...systemOnly(),
-    ...publicTemplate(),
-    ...fullKeyringEnv(),
-    AUTH_SIGNING_KEYS: JSON.stringify({ B1: ed25519KeyBase64() }),
-    AUTH_ACTIVE_KEY_ID: 'B1',
-    DATABASE_URL: appUrl(),
-    PORT: String(port),
-    NODE_ENV: 'test',
-    DOTENV_CONFIG_PATH: join(ROOT, 'aucun-fichier-env-ici.env'),
-    TS_NODE_PROJECT: join(ROOT, 'tsconfig.json'),
+    ...constructedEnv({
+      PORT: String(port),
+      DOTENV_CONFIG_PATH: join(ROOT, 'aucun-fichier-env-ici.env'),
+      TS_NODE_PROJECT: join(ROOT, 'tsconfig.json'),
+    }),
   };
 }
 
@@ -162,7 +138,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
 
   test('démarrage réel, environnement construit, /health répond 200', async () => {
     const port = await freePort();
-    running = boot(constructedEnv(port));
+    running = boot(bootEnv(port));
 
     const status = await healthyWithin(running, port, BOOT_DEADLINE_MS);
     if (status !== 200) {
@@ -177,7 +153,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // process.env ne doit donc jamais apparaître dans l'environnement construit.
     process.env.BOOT_TEST_INHERITANCE_SENTINEL = 'fuite';
     try {
-      expect(constructedEnv(1)).not.toHaveProperty('BOOT_TEST_INHERITANCE_SENTINEL');
+      expect(bootEnv(1)).not.toHaveProperty('BOOT_TEST_INHERITANCE_SENTINEL');
     } finally {
       delete process.env.BOOT_TEST_INHERITANCE_SENTINEL;
     }
@@ -189,7 +165,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // repli) et le .env d'un poste de développement la définit : s'il était
     // relu, l'enfant démarrerait sur la base de développement, et ce test
     // rougirait. Sur une machine sans .env (la CI), il n'y a rien à fuir.
-    const env = constructedEnv(await freePort());
+    const env = bootEnv(await freePort());
     delete env.DATABASE_URL;
     running = boot(env);
 
@@ -205,7 +181,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // qui part vers l'observabilité : un client non authentifié en fabriquait à
     // volonté. Les deux routes sans corps prouvent qu'aucune n'a été cassée.
     const port = await freePort();
-    running = boot(constructedEnv(port));
+    running = boot(bootEnv(port));
     expect(await healthyWithin(running, port, BOOT_DEADLINE_MS)).toBe(200);
 
     const login = JSON.stringify({ identifier: 'inconnu', secret: 'faux-secret' });
@@ -234,7 +210,7 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     // Une valeur DÉCLARÉE, elle, est validée dans tous les modes : « 1 » (l'habitude
     // Express d'un saut, que la référence lirait comme 0.0.0.1) doit arrêter le
     // vrai main.ts, avec une sortie qui nomme la variable.
-    running = boot({ ...constructedEnv(await freePort()), USER_CORE_TRUSTED_PROXIES: '1' });
+    running = boot({ ...bootEnv(await freePort()), USER_CORE_TRUSTED_PROXIES: '1' });
 
     const exitCode = await exitWithin(running, BOOT_DEADLINE_MS);
     expect(exitCode).not.toBeNull();
