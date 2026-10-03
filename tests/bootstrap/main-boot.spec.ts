@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { readFileSync } from 'fs';
-import { createServer, get } from 'http';
+import { createServer, get, request as httpRequest } from 'http';
 import type { AddressInfo } from 'net';
 import { join, resolve } from 'path';
 import { ed25519KeyBase64 } from '../helpers/auth';
@@ -104,6 +104,33 @@ function boot(env: NodeJS.ProcessEnv): Boot {
   return { child, output: () => output, exitCode: () => exitCode };
 }
 
+function post(port: number, path: string, type?: string, body?: string): Promise<number | null> {
+  return new Promise((done) => {
+    const headers: Record<string, string> = type === undefined ? {} : { 'content-type': type };
+    const req = httpRequest({ host: '127.0.0.1', port, path, method: 'POST', headers }, (res) => {
+      res.resume();
+      done(res.statusCode ?? null);
+    });
+    req.on('error', () => done(null));
+    if (body !== undefined) {
+      req.write(body);
+    }
+    req.end();
+  });
+}
+
+async function healthyWithin(running: Boot, port: number, ms: number): Promise<number | null> {
+  let status: number | null = null;
+  const deadline = Date.now() + ms;
+  while (status !== 200 && running.exitCode() === null && Date.now() < deadline) {
+    status = await healthStatus(port);
+    if (status !== 200) {
+      await new Promise((done) => setTimeout(done, 300));
+    }
+  }
+  return status;
+}
+
 async function exitWithin(running: Boot, ms: number): Promise<number | null> {
   const deadline = Date.now() + ms;
   while (running.exitCode() === null && Date.now() < deadline) {
@@ -165,6 +192,35 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
     expect(exitCode).not.toBeNull();
     expect(exitCode).not.toBe(0);
     expect(running.output()).toContain('DATABASE_URL manquant');
+  }, 60_000);
+
+  test('JSON SEULEMENT (étape 3bis) — chaque corps reçoit un refus PROPRE, jamais un 500', async () => {
+    // Mesuré le 03/10/2026 avant cette étape : formulaire 401 (ses champs lus par
+    // qs), text/plain 500, sans corps 500. Un 500 est une exception « inattendue »
+    // qui part vers l'observabilité : un client non authentifié en fabriquait à
+    // volonté. Les deux routes sans corps prouvent qu'aucune n'a été cassée.
+    const port = await freePort();
+    running = boot(constructedEnv(port));
+    expect(await healthyWithin(running, port, 45_000)).toBe(200);
+
+    const login = JSON.stringify({ identifier: 'inconnu', secret: 'faux-secret' });
+    expect({
+      json: await post(port, '/auth/login', 'application/json', login),
+      formulaire: await post(port, '/auth/login', 'application/x-www-form-urlencoded', 'identifier=inconnu&secret=x'),
+      textePlat: await post(port, '/auth/login', 'text/plain', 'identifier=inconnu'),
+      sansCorps: await post(port, '/auth/login'),
+      jsonInvalide: await post(port, '/auth/login', 'application/json', '{pas du json'),
+      deconnexionSansCorps: await post(port, '/auth/logout'),
+      revocationSansCorps: await post(port, '/auth/sessions/revoke-all'),
+    }).toEqual({
+      json: 401,
+      formulaire: 415,
+      textePlat: 415,
+      sansCorps: 400,
+      jsonInvalide: 400,
+      deconnexionSansCorps: 401,
+      revocationSansCorps: 401,
+    });
   }, 60_000);
 
   test('LE MUR DE L’AIGUILLEUR EST APPELÉ AU DÉMARRAGE — « 1 » refuse le boot, même en murs relâchés', async () => {

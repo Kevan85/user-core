@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
 import { IdentityService } from './accounts/identity.service';
 import { ProfileService } from './accounts/profile.service';
 import { RegistrationService } from './accounts/registration.service';
@@ -11,6 +10,7 @@ import { AuthService } from './auth/auth.service';
 import { LocalAuthenticationProvider } from './auth/local-authentication-provider';
 import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
+import { createApiApplication } from './bootstrap/api-application';
 import { assembleApiFromEnv, assertBridledRole, type ApiAssembly } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
 import { declareSimulatedSeam } from './bootstrap/simulation';
@@ -244,7 +244,7 @@ async function bootstrap(): Promise<void> {
     signal: reportClientAddressSignal,
   });
 
-  const app = await NestFactory.create(
+  const app = await createApiApplication(
     AppModule.register(assembly, { ...accountWiring, ...programWiring, clientAddress }),
   );
 
