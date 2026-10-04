@@ -12,6 +12,9 @@
   qu'on a soi-même nommé). Un dump vide ou avorté est retiré, jamais conservé.
 - La planification (cron, timer systemd) appartient au déploiement ; la cible vit **hors
   de la machine de la base** (une sauvegarde qui meurt avec son serveur n'en est pas une).
+- **La pré-production (`deploy/preprod/`) n'est PAS sauvegardée** — décision de l'Auditeur
+  (C7, 04/10/2026) : elle ne porte aucune donnée réelle et sa base se recrée par les
+  migrations. `R` n'est pas touchée, elle reste à Kevin. Voir [DEPLOIEMENT.md §7](DEPLOIEMENT.md).
 
 ## 2. R — la rétention est une décision de Kevin, pas un réglage
 
