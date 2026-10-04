@@ -275,15 +275,15 @@ describe('main.ts — le vrai point d’entrée démarre et sert /health', () =>
  * LE CÂBLAGE DU POINT UNIQUE DANS LE VRAI main.ts (bloc A-2026-10-03-2, D2).
  *
  * Le harnais HTTP (api-harness.ts) RECOPIE le câblage de main.ts : il ne voit donc
- * pas main.ts:241-245, où le point unique reçoit la confiance déclarée. Jusqu'ici,
- * aucun test ne l'interrogeait — le test du « 1 » prouve que le mur est APPELÉ, pas
- * que son résultat est BRANCHÉ. Ici, le vrai processus, un aiguilleur déclaré
- * (127.0.0.1), un budget de connexion réduit à 2, un identifiant neuf par requête :
- * seule l'adresse peut refuser.
+ * pas la construction de ClientAddress dans bootstrap(), où le point unique reçoit la
+ * confiance déclarée. Jusqu'ici, aucun test ne l'interrogeait — le test du « 1 »
+ * prouve que le mur est APPELÉ, pas que son résultat est BRANCHÉ. Ici, le vrai
+ * processus, un aiguilleur déclaré (127.0.0.1), un budget de connexion réduit à 2, un
+ * identifiant neuf par requête : seule l'adresse peut refuser.
  *
- * ⚠️ LIMITE NOMMÉE : armed et signal (main.ts:243-244) ne sont PAS prouvés. Armer le
- * vrai main.ts exige tous les murs de production (secrets, observabilité, doublures)
- * — hors de portée d'un test de démarrage.
+ * ⚠️ LIMITE NOMMÉE : armed et signal, dans cette même construction, ne sont PAS
+ * prouvés. Armer le vrai main.ts exige tous les murs de production (secrets,
+ * observabilité, doublures) — hors de portée d'un test de démarrage.
  *
  * ORDRE DÉLIBÉRÉ : (2) avant (1). Les deux partagent un démarrage. Si le résolveur ne
  * croyait personne, (1) épuiserait le budget de la socket, et (2) rougirait pour une

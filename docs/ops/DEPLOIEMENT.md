@@ -139,7 +139,7 @@ n'était pas prêt — le corriger, jamais le contourner.
 
 | Fait | Relevé | Source |
 |---|---|---|
-| Machine | VPS Hostinger **partagé avec Scolaria** ; `api.scolaria.io` = `187.77.183.20`, **aucun AAAA** | prompt Exécuteur v9 §5.3 (Auditeurs Scolaria et User-Core, recoupé de l'extérieur) ; réponse Scolaria §2-3 |
+| Machine | VPS Hostinger **partagé avec Scolaria** ; `api.scolaria.io` = `187.77.183.20`, **aucun AAAA** | relevé de l'Auditeur User-Core depuis l'extérieur, 03/10/2026 16:23 : A = 187.77.183.20, aucun AAAA ; 22, 80 et 443 répondent ; 3000, 5432 et 6379 sans réponse en 4 s |
 | IPv6 globale | `2a02:4780:f:7ed4::1` : seul `sshd` y écoute | Auditeur Scolaria (`ss -ltnp`) |
 | Scolaria | en **conteneurs** (compose HORS dépôt, `/opt/scolaria/docker-compose.yml`), ports publiés sur **127.0.0.1 seulement** : **3000** (API), **5432** (Postgres), **6379** (Redis) | `DEPLOYMENT_API_VPS.md` §1 |
 | Aiguilleur | **nginx sur l'hôte**, un site par nom (`/etc/nginx/sites-enabled/…`), **IPv4 seulement**, `proxy_set_header X-Forwarded-For $remote_addr;` | idem, et réponse Scolaria |
@@ -205,8 +205,14 @@ des **propositions**, le choix est à Kevin) :
 | `id-preprod.swoi.app` | pré-production, **maintenant** (zéro utilisateur réel) | nginx de l'hôte, site dédié, 443 partagé, certificat propre au nom | `127.0.0.1:3100` | `ss -ltnp \| grep ':3100 '` → `127.0.0.1:3100` seulement |
 | `id.swoi.app` | production, **plus tard** | idem | `127.0.0.1:3101` | `ss -ltnp \| grep ':3101 '` → `127.0.0.1:3101` seulement |
 
+⚠️ **La ligne `id.swoi.app` ne vaut que SI la production vit sur cette machine — et ce
+n'est PAS décidé.** La rétention effective des sauvegardes `R` est un **critère de choix
+d'hébergeur**, à poser avant la signature ([CAHIER_DES_CHARGES.md](../CAHIER_DES_CHARGES.md)
+§9 n°5 et §10 n°17), et la résidence des données d'identité reste une question ouverte
+(§9 n°3). Seule la pré-production est prévue ici.
+
 Chaque environnement a SA base, SES secrets, SON compose (séparation dev / pré-production
-/ production, CLAUDE.md §6). Les deux noms pointent en **A** vers la machine ; **pas
+/ production, CLAUDE.md §6). Chaque nom pointe en **A** vers la machine qui le sert ; **pas
 d'AAAA** tant que nginx n'écoute qu'en IPv4.
 
 ### 6.4 Les deux vérifications BLOQUANTES — avant d'ouvrir le trafic
