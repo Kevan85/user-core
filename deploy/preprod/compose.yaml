@@ -10,7 +10,8 @@
 #    vraie donnée entre, ce n'est plus une pré-production.
 #
 # Aucune valeur secrète dans ce fichier. Les secrets naissent SUR le serveur, dans deux
-# fichiers hors dépôt (600, root), écrits par deploy/preprod/generate-secrets.sh :
+# fichiers hors dépôt (600, root), écrits par deploy/preprod/generate-secrets.sh — le DSN
+# s'y ajoute ensuite par deploy/preprod/add-sentry-dsn.sh :
 #   - admin.env   → Postgres et migrate SEULEMENT (le propriétaire de la base) ;
 #   - service.env → l'API et le worker (le rôle bridé, les trousseaux, le DSN).
 # L'API et le worker ne lisent jamais admin.env. Le répertoire par défaut est celui du

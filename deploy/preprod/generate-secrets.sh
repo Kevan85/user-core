@@ -10,7 +10,7 @@
 # variables du shell ; printf, intégré au shell, les écrit dans deux fichiers 600.
 #
 # Le DSN Sentry n'est PAS tiré ici : il vient de la console Sentry et s'ajoute à
-# service.env de fichier à fichier (docs/ops/DEPLOIEMENT.md §7).
+# service.env de fichier à fichier, par deploy/preprod/add-sentry-dsn.sh.
 #
 # REFUS si l'un des deux fichiers existe : re-tirer les secrets d'une base déjà
 # initialisée la rendrait inaccessible (mot de passe du propriétaire) et ses données
@@ -84,4 +84,4 @@ trap 'rm -f "$tmp_admin" "$tmp_service"' EXIT
 mv "$tmp_admin" "$dir/admin.env"
 mv "$tmp_service" "$dir/service.env"
 trap - EXIT
-echo "écrits : $dir/admin.env et $dir/service.env (600) — aucune valeur affichée ; le DSN reste à ajouter"
+echo "écrits : $dir/admin.env et $dir/service.env (600) — aucune valeur affichée ; le DSN reste à ajouter (add-sentry-dsn.sh)"

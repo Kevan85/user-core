@@ -18,7 +18,8 @@ COPY package.json package-lock.json ./
 # --ignore-scripts : le « prepare » du dépôt appelle git, absent de cette image. Mesuré au
 # 04/10/2026 : une seule dépendance de production a un script d'installation, argon2 — elle
 # embarque son binaire précompilé (linux-x64, glibc) et le charge au démarrage, qui le
-# prouve : le hachage de référence (C3) se calcule avant d'accepter le moindre trafic.
+# prouve : le hachage de référence (l'égalisation du chrono, LocalAuthenticationProvider.init)
+# se calcule avant d'accepter le moindre trafic.
 # CE CONSTAT EST UN MUR, PAS UNE PHRASE (C15, leçon ⑬) : la construction ÉCHOUE si les
 # paquets installés que le verrou marque « hasInstallScript » diffèrent de la liste
 # attendue, dans un sens ou dans l'autre. Sans lui, une dépendance qui télécharge ou
