@@ -330,6 +330,18 @@ jamais le poste et n'entre dans aucun dépôt ; la ligne publique porte le comme
 Kevin, à poser cette clé : un seul ajout, vérifié (une ligne de plus ; empreinte sha256 de la
 partie existante identique avant et après). Ensuite, il n'est plus jamais utilisé.
 
+La clé n'a **pas de phrase de passe**, parce que les sessions ne sont pas interactives : **sa
+protection est celle du poste**, comme pour la clé de Scolaria. Créée sur le poste le
+04/10/2026 à 21:04, empreinte `SHA256:GwrYFevh0TQ4NYD4E9zGjzQU34VYy3Nu+PzSLGYmcBA`. Elle ne
+sert que par l'alias `user-core-preprod` de `~/.ssh/config`, ajouté en fin de fichier (la
+partie existante vérifiée identique, sha256 avant et après). Cet alias porte
+`IdentitiesOnly yes` — la clé GitHub, identité PAR DÉFAUT d'ssh, n'est jamais offerte au
+serveur —, `BatchMode yes` et `StrictHostKeyChecking yes` : l'empreinte d'hôte est déjà
+connue du poste (`ED25519 SHA256:Mqu5eOxo…kp14`), aucune autre n'est acceptée. **La preuve de
+la séparation** se lit au journal d'authentification du serveur : la clé ACCEPTÉE est
+celle-ci, ni celle de Scolaria, ni celle de GitHub — empreinte et heure seulement, jamais
+l'adresse d'origine.
+
 | Relevé | Commande | Valeur |
 |---|---|---|
 | système, architecture, processeurs | `cat /etc/os-release` · `uname -m` · `nproc` | à relever à l'étape 0 |
@@ -343,6 +355,7 @@ partie existante identique avant et après). Ensuite, il n'est plus jamais utili
 | nginx | `nginx -v` · `ls -l /etc/nginx/sites-enabled/` · `nginx -T` **filtré** sur `server_name\|listen\|ssl_certificate\|ssl_protocols\|ssl_ciphers\|proxy_pass\|X-Forwarded-For` | à relever à l'étape 0 |
 | certificats | `certbot certificates` (filtré) et ses minuteries | à relever à l'étape 0 |
 | pare-feu | `ufw status verbose` | à relever à l'étape 0 |
+| tâches planifiées qui agissent sur Docker, nginx ou certbot | `crontab -l` de root et `/etc/cron.d/*`, FILTRÉS sur `docker\|nginx\|certbot` — on relève, on n'y touche pas. La procédure de Scolaria en nomme une : `docker image prune -f --filter until=24h`, qui « ne touche pas aux images taguées » (Scolaria_Api `main` @ `3845a2ff`, `docs/DEPLOYMENT_API_VPS.md` §3) | à relever à l'étape 0 |
 
 **Arrêt et rapport** si : un port est pris, un sous-réseau chevauche `172.30.0.0/24`, le
 relais userland est inactif, la méthode de certificat diffère, la mémoire ou le disque
@@ -380,8 +393,11 @@ manquent, l'architecture n'est pas celle attendue.
   plafond, cache de pages compris ; la construction tient aussi sous un plafond dur de
   512 Mio sans swap. **On retient le chiffre prudent** : sur le serveur, rien ne plafonne la
   construction, à côté de la production de Scolaria. Donc *available* ≥ 2,1 Gio à l'étape 0 →
-  construction sur le serveur. Sinon, construction **sur le poste**, depuis l'arbre EXACT du
-  SHA, puis transfert, architecture vérifiée :
+  construction sur le serveur. **C4bis** : la mémoire disponible se RE-MESURE juste avant la
+  construction, parce qu'une mise en production de Scolaria peut tomber entre l'étape 0 et
+  l'étape 3 ; moins de 2,1 Gio à cet instant ⇒ repli sur le poste, sans discussion. Le repli :
+  construction **sur le poste**, depuis l'arbre EXACT du SHA, puis transfert, architecture
+  vérifiée :
   ```bash
   git -c core.autocrlf=false archive <SHA> | tar -x -C <répertoire vide>
   # AVANT de construire : 0 fichier différent du blob. Sous core.autocrlf=true, « git archive »
@@ -443,6 +459,11 @@ entier.
 
 ### 7.6 La procédure — répétée sur le poste le 04/10/2026, à jouer à l'étape 3
 
+**L'étape 3 attend le Go de l'Auditeur**, donné après qu'il a vérifié lui-même les relevés de
+l'étape 0. C'est l'engagement pris devant Kevin le 04/10/2026 : chaque étape donne un rapport,
+vérifié avant la suivante. C'est la première fois que quelque chose s'installe sur la machine
+de production de Scolaria.
+
 🔴 **Ce serveur porte la production de Scolaria** (C1).
 - Chaque commande compose porte `-p user-core-preprod -f deploy/preprod/compose.yaml`.
 - Jamais de commande docker globale (`prune`, suppression de tous les conteneurs).
@@ -475,7 +496,9 @@ $C up -d api worker
 - `curl -s http://127.0.0.1:3100/health` → 200 ;
 - `ss -ltnp` → `127.0.0.1:3100` seulement ;
 - `docker ps` : Postgres non publié, et **les conteneurs de Scolaria identiques à l'étape 0** ;
-- les journaux portent l'aveu des deux coutures simulées (`[SIMULATION DÉCLARÉE]`).
+- les journaux portent l'aveu des deux coutures simulées (`[SIMULATION DÉCLARÉE]`) ;
+- le cron `docker image prune -f --filter until=24h` du serveur (§7.2) épargne les images
+  étiquetées ; qu'il épargne aussi l'image d'un conteneur en marche : à vérifier à l'étape 3.
 
 | Fait du déploiement | Valeur |
 |---|---|
