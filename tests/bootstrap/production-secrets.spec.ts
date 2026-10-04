@@ -168,4 +168,42 @@ describe('assertProductionSecretsNotPublic — C8', () => {
       }),
     ).not.toThrow();
   });
+
+  test('l’aiguilleur et l’écoute ne sont PAS des secrets : publiés LONGS, ils bootent — et le mur mord toujours à côté', () => {
+    // Lot déploiement (03/10/2026). Des valeurs publiées au-dessus du plancher de
+    // longueur, reprises telles quelles en production : aucun nom à signature de
+    // secret, aucune URL, rien à mordre. Contre-épreuve dans le MÊME appel : un vrai
+    // secret publié est refusé, et le refus ne nomme que lui — le mur laisse passer
+    // parce qu'il n'y a rien à mordre, pas parce qu'il est cassé.
+    const published = [
+      EXAMPLE,
+      'USER_CORE_TRUSTED_PROXIES=203.0.113.10,198.51.100.10',
+      'USER_CORE_LISTEN_HOST=2001:db8::1234:5678',
+    ].join('\n');
+    const declared = {
+      NODE_ENV: 'production',
+      USER_CORE_TRUSTED_PROXIES: '203.0.113.10,198.51.100.10',
+      USER_CORE_LISTEN_HOST: '2001:db8::1234:5678',
+    };
+    expect(() => assertProductionSecretsNotPublic(declared, () => published)).not.toThrow();
+
+    let message = '';
+    try {
+      assertProductionSecretsNotPublic({ ...declared, USER_CORE_APP_PASSWORD: 'mot_de_passe_dev_publie' }, () => published);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain('USER_CORE_APP_PASSWORD');
+    expect(message).not.toMatch(/TRUSTED_PROXIES|LISTEN_HOST/);
+  });
+
+  test('CONTRE LE VRAI FICHIER : l’aiguilleur et l’écoute aux valeurs du gabarit bootent ; un secret du gabarit, non', () => {
+    const example = readEnvExample();
+    expect(example).toMatch(/^USER_CORE_TRUSTED_PROXIES=NONE\r?$/m);
+    const declared = { NODE_ENV: 'production', USER_CORE_TRUSTED_PROXIES: 'NONE', USER_CORE_LISTEN_HOST: '127.0.0.1' };
+    expect(() => assertProductionSecretsNotPublic(declared)).not.toThrow();
+    expect(() =>
+      assertProductionSecretsNotPublic({ ...declared, USER_CORE_APP_PASSWORD: 'user_core_app_dev_only' }),
+    ).toThrow(/USER_CORE_APP_PASSWORD/);
+  });
 });

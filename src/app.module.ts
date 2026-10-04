@@ -19,6 +19,7 @@ import { SessionController } from './auth/session.controller';
 import { SESSION_SERVICE, type SessionService } from './auth/session.service';
 import type { ApiAssembly } from './bootstrap/assembly';
 import { PG_POOL } from './db/pool';
+import { CLIENT_ADDRESS, ClientAddress } from './client-address/client-address';
 import { HealthController } from './health/health.controller';
 import { AccountInvitationsController } from './invitations/account-invitations.controller';
 import {
@@ -79,6 +80,8 @@ export interface AuthWiring {
   dependentAccessService: DependentAccessService;
   programGrantsService: ProgramGrantsService;
   jwks: { keys: PublicJwk[] };
+  /** Le point unique de l'adresse cliente : requis, donc impossible à oublier dans main.ts. */
+  clientAddress: ClientAddress;
 }
 
 /**
@@ -126,6 +129,7 @@ export class AppModule {
         { provide: DEPENDENT_ACCESS_SERVICE, useValue: auth.dependentAccessService },
         { provide: PROGRAM_GRANTS_SERVICE, useValue: auth.programGrantsService },
         { provide: PROGRAM_JWKS, useValue: auth.jwks },
+        { provide: CLIENT_ADDRESS, useValue: auth.clientAddress },
       ],
     };
   }

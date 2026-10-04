@@ -24,9 +24,20 @@ export class LoginThrottle {
 
   /** Consomme une tentative sur les DEUX compteurs ; false = refuser. */
   allow(clientIp: string, identifier: string): boolean {
-    const ipAllowed = this.consume(`ip:${clientIp}`);
+    const ipAllowed = this.allowAddress(clientIp);
     const idAllowed = this.consume(`id:${identifier}`);
     return ipAllowed && idAllowed;
+  }
+
+  /**
+   * L'ADRESSE SEULE, sur LE compteur d'adresse de allow() — jamais un compteur à
+   * part. Pour une requête qui n'annonce aucune cible (l'assertion difforme de
+   * /v1/token) : elle consomme le budget des requêtes lisibles de la même adresse,
+   * et rien d'autre. allow() passe par ici, pour que la clé de l'adresse n'ait
+   * qu'une définition.
+   */
+  allowAddress(clientIp: string): boolean {
+    return this.consume(`ip:${clientIp}`);
   }
 
   /**

@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { CLIENT_ADDRESS, type ClientAddress } from '../client-address/client-address';
 import { PROGRAM_JWKS, type PublicJwk } from './jwks';
 import { PROGRAM_AUTH_SERVICE, type ProgramAuthService } from './program-auth.service';
 
@@ -27,6 +28,7 @@ export class ProgramAuthController {
   constructor(
     @Inject(PROGRAM_AUTH_SERVICE) private readonly programAuth: ProgramAuthService,
     @Inject(PROGRAM_JWKS) private readonly jwks: { keys: PublicJwk[] },
+    @Inject(CLIENT_ADDRESS) private readonly clientAddress: ClientAddress,
   ) {}
 
   /** L'échange assertion signée → jeton court de programme. */
@@ -39,7 +41,9 @@ export class ProgramAuthController {
     if (typeof body.assertion !== 'string' || body.assertion === '') {
       throw new UnauthorizedException(GENERIC_FAILURE);
     }
-    const clientIp = req.socket.remoteAddress ?? 'unknown';
+    // Surface PROGRAMME : un programme hébergé sur le même serveur appelle
+    // légitimement le port sans aiguilleur ni en-tête — aucun signal public ici.
+    const clientIp = this.clientAddress.of(req, 'PROGRAM');
     const result = await this.programAuth.token(body.assertion, clientIp);
     if (result.outcome === 'THROTTLED') {
       throw new HttpException('trop de tentatives, réessayer plus tard', HttpStatus.TOO_MANY_REQUESTS);

@@ -65,6 +65,24 @@ personne ne la range dans le coffre par ressemblance de nom.
 - **motif H** — le nom ne se termine ni par `_KEYS` ni par `_ACTIVE_KEY_ID` : la garde du
   point d'assemblage unique des trousseaux ne le vise pas, et n'a pas à être amendée.
 
+`USER_CORE_TRUSTED_PROXIES` et `USER_CORE_LISTEN_HOST` (lot déploiement,
+[DEPLOIEMENT.md §6](DEPLOIEMENT.md)) sont dans le même cas : des **déclarations** —
+quelles adresses d'aiguilleur croire, sur quelle adresse écouter — sans valeur sensible,
+sans rotation ni cycle de vie. L'inventaire reste à **10**. Elles sont pourtant des
+**murs de démarrage** (§3, n°8 et n°9) : non secrètes ne veut pas dire facultatives.
+
+**Les deux mêmes gardes, jouées le 03/10/2026, avec contre-épreuve :**
+- **mur C8** — aucun des deux noms ne porte de signature de secret, et aucune des deux
+  valeurs n'est une URL : `.env.example` publie `USER_CORE_TRUSTED_PROXIES=NONE` (et
+  `USER_CORE_LISTEN_HOST` en commentaire), et un déploiement qui pose ces valeurs en
+  production démarre. **Contre-épreuve dans le même appel** : `USER_CORE_APP_PASSWORD`
+  portant la valeur publiée est toujours refusé, et le refus ne nomme qu'elle. Cette
+  preuve est désormais un **test permanent** (`tests/bootstrap/production-secrets.spec.ts`),
+  contre le vrai fichier et contre des valeurs publiées longues.
+- **motif H** — aucun des deux noms ne se termine par `_KEYS` ni par `_ACTIVE_KEY_ID` :
+  la garde passe sur la branche qui les porte, et mord toujours un `USER_CORE_X_KEYS`
+  synthétique.
+
 ## 3. Les murs de boot (état livré à l'étape 3)
 
 Le service **refuse de démarrer** si :
@@ -80,13 +98,23 @@ Le service **refuse de démarrer** si :
 6. murs armés, **le transport Sentry ne s'est pas armé après `init()`** (G1, étape 6) :
    la vérité se demande au SDK, jamais à la présence du DSN — un DSN illisible ferait
    partir le service aveugle en croyant être surveillé ;
-7. murs armés, **une couture simulée n'est pas DÉCLARÉE** (motif I, 21/08/2026) : deux des
+7. murs armés, **une couture simulée n'est pas DÉCLARÉE** (motif I, posé le 21/08/2026) : deux des
    trois coutures n'ont qu'un implémenteur, un simulateur qui accuse réception et n'envoie
    rien pendant que le registre enregistre un succès. Le mode simulé se déclare couture par
    couture dans `USER_CORE_SIMULATED_SEAMS`, ou le service refuse de démarrer **en disant
    laquelle**. Une entrée inconnue est un refus, jamais un silence.
    *(Le mur vaut pour l'API ET le worker ; une garde CI refuse qu'un troisième point
    d'assemblage naisse sans lui.)*
+8. murs armés, **les aiguilleurs ne sont pas DÉCLARÉS** (`USER_CORE_TRUSTED_PROXIES`
+   absente ou vide — lot déploiement, posé le 03/10/2026) : `NONE` (aucun aiguilleur) ou
+   la liste de leurs adresses. Toute valeur déclarée est validée **dans tous les modes** :
+   notation canonique, jamais « 1 » (l'habitude Express d'un saut, lue 0.0.0.1), jamais
+   une liste qui croirait une moitié d'Internet. Trop peu de confiance ferait de chaque
+   plafond par adresse un plafond global ; trop, un plafond que tout client contourne
+   ([DEPLOIEMENT.md §6](DEPLOIEMENT.md)) ;
+9. murs armés, **l'adresse d'écoute n'est pas DÉCLARÉE** (`USER_CORE_LISTEN_HOST`, posé le
+   03/10/2026) : un littéral IP seulement, « localhost » refusé dans tous les modes.
+   Écouter partout par oubli exposerait le port du service à côté de l'aiguilleur.
 
 **⚠️ Ce que l'observabilité NE couvre PAS** (écrit ici pour que « Sentry est branché » ne
 soit jamais lu comme « couverture totale ») : `defaultIntegrations: false` retire aussi

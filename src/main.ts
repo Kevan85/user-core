@@ -1,27 +1,30 @@
 import 'dotenv/config';
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
 import { IdentityService } from './accounts/identity.service';
 import { ProfileService } from './accounts/profile.service';
 import { RegistrationService } from './accounts/registration.service';
-import { AppModule } from './app.module';
-import { assembleAuthFromEnv } from './auth/auth-config';
+import { AppModule, type AuthWiring } from './app.module';
+import { assembleAuthFromEnv, type AuthAssembly } from './auth/auth-config';
 import { AccountInvitationsService } from './invitations/account-invitations.service';
 import { AuthService } from './auth/auth.service';
 import { LocalAuthenticationProvider } from './auth/local-authentication-provider';
 import { LoginThrottle } from './auth/login-throttle';
 import { SessionService } from './auth/session.service';
-import { assembleApiFromEnv, assertBridledRole } from './bootstrap/assembly';
+import { createApiApplication } from './bootstrap/api-application';
+import { assembleApiFromEnv, assertBridledRole, type ApiAssembly } from './bootstrap/assembly';
 import { assertProductionSecretsNotPublic } from './bootstrap/production-secrets';
+import { assembleListenHostFromEnv } from './bootstrap/listen-host';
 import { declareSimulatedSeam } from './bootstrap/simulation';
+import { assembleTrustedProxiesFromEnv } from './bootstrap/trusted-proxies';
+import { ClientAddress, reportClientAddressSignal } from './client-address/client-address';
 import { ObservabilityExceptionFilter } from './observability/observability.filter';
 import { assembleObservabilityFromEnv, initObservability } from './observability/sentry';
 import { CatalogService } from './catalog/catalog.service';
 import { EmancipationService } from './persons/emancipation.service';
 import { ErasureService } from './persons/erasure.service';
 import { ResponsibilitiesService } from './persons/responsibilities.service';
-import { assembleKeyringsFromEnv } from './crypto/keyring';
-import { assemblePhoneConfig, assertFingerprintKeyAligned } from './phone/phone-config';
+import { assembleKeyringsFromEnv, type KeyringAssembly } from './crypto/keyring';
+import { assemblePhoneConfig, assertFingerprintKeyAligned, type PhoneConfig } from './phone/phone-config';
 import { PhoneService } from './phone/phone.service';
 import { buildJwks } from './programs/jwks';
 import { DependentAccessService } from './programs/dependent-access.service';
@@ -32,29 +35,26 @@ import { assembleProgramOperationsFromEnv } from './programs/program-operations-
 import { ProgramRequestAuth } from './programs/program-request-auth';
 import { LyingProver } from './proving/simulator/lying-prover';
 
-// Le service ne migre JAMAIS la base au démarrage : les migrations sont un
-// acte d'exploitation séparé (npm run migrate), pas un effet de bord d'un boot.
-async function bootstrap(): Promise<void> {
-  // En production, un secret publié par .env.example refuse de démarrer —
-  // AVANT toute autre lecture de config (étape 3, arbitrage C8).
-  assertProductionSecretsNotPublic();
-  // L'observabilité s'assemble AVANT tout trafic : murs armés sans DSN = un
-  // déploiement aveugle, refusé (C2). Dev sans DSN : coupée, simplement.
-  initObservability(assembleObservabilityFromEnv());
-  const assembly = assembleApiFromEnv();
-  const authConfig = assembleAuthFromEnv();
-  // Les QUATRE trousseaux d'un bloc : violations listées d'un coup, et la
-  // non-collision de valeur vérifiée sur toutes les paires (dette ②).
-  const cryptoConfig = assembleKeyringsFromEnv();
-  const codeKeyring = cryptoConfig.proofCode;
-  const phoneConfig = assemblePhoneConfig();
+type AccountWiring = Pick<
+  AuthWiring,
+  'authService' | 'sessionService' | 'provider' | 'phoneService' | 'catalogService' | 'registrationService' | 'profileService' | 'identityService' | 'responsibilitiesService' | 'emancipationService' | 'erasureService' | 'accountInvitationsService'
+>;
+type ProgramWiring = Pick<AuthWiring, 'programAuthService' | 'programRequestAuth' | 'dependentAccessService' | 'programGrantsService' | 'jwks'>;
 
-  // Refus de booter sous un autre rôle que le rôle bridé — AVANT tout trafic.
-  await assertBridledRole(assembly.pool);
-  // Refus de booter si le trousseau d'empreinte du service diverge de la
-  // référence gravée en base : sinon chaque déclaration de numéro serait
-  // rejetée en production, une à une, sans cause visible.
-  await assertFingerprintKeyAligned(assembly.pool, cryptoConfig);
+/**
+ * Les services des COMPTES. Extraits de bootstrap() le 03/10/2026 pour R2
+ * (bootstrap mesurait 125 lignes de code, plafond 100) : DÉPLACEMENT PUR, dans
+ * l'ordre d'avant — le démarrage réel le prouve (tests/bootstrap/main-boot.spec.ts,
+ * vu vert avant ET après la coupe). Les murs restent dans bootstrap(), avant cet
+ * appel : rien ici ne s'exécute avant eux.
+ */
+async function assembleAccountWiring(
+  assembly: ApiAssembly,
+  authConfig: AuthAssembly,
+  cryptoConfig: KeyringAssembly,
+  phoneConfig: PhoneConfig,
+): Promise<AccountWiring> {
+  const codeKeyring = cryptoConfig.proofCode;
 
   // Assemblage explicite (K2) : le hash de référence C3 se calcule AVANT
   // d'accepter le moindre login — jamais un premier appelant plus rapide.
@@ -148,6 +148,28 @@ async function bootstrap(): Promise<void> {
   // unique. Le service reçoit donc le trousseau.
   const accountInvitationsService = new AccountInvitationsService(assembly.pool, cryptoConfig);
 
+  return {
+    authService,
+    sessionService,
+    provider,
+    phoneService,
+    catalogService,
+    registrationService,
+    profileService,
+    identityService,
+    responsibilitiesService,
+    emancipationService,
+    erasureService,
+    accountInvitationsService,
+  };
+}
+
+/** Les services des PROGRAMMES (/v1) — même déplacement pur, même preuve. */
+function assembleProgramWiring(
+  assembly: ApiAssembly,
+  authConfig: AuthAssembly,
+  cryptoConfig: KeyringAssembly,
+): ProgramWiring {
   // LOT 4 — la porte des programmes : assertion signée Ed25519 → jeton court
   // (pid = LA frontière de /v1), throttle dédié par IP et par client visé.
   const programAuthConfig = assembleProgramAuthFromEnv();
@@ -183,26 +205,51 @@ async function bootstrap(): Promise<void> {
   );
   const programGrantsService = new ProgramGrantsService(assembly.pool);
 
-  const app = await NestFactory.create(
-    AppModule.register(assembly, {
-      authService,
-      sessionService,
-      provider,
-      phoneService,
-      catalogService,
-      registrationService,
-      profileService,
-      identityService,
-      responsibilitiesService,
-      emancipationService,
-      erasureService,
-      accountInvitationsService,
-      programAuthService,
-      programRequestAuth,
-      dependentAccessService,
-      programGrantsService,
-      jwks,
-    }),
+  return { programAuthService, programRequestAuth, dependentAccessService, programGrantsService, jwks };
+}
+
+// Le service ne migre JAMAIS la base au démarrage : les migrations sont un
+// acte d'exploitation séparé (npm run migrate), pas un effet de bord d'un boot.
+async function bootstrap(): Promise<void> {
+  // En production, un secret publié par .env.example refuse de démarrer —
+  // AVANT toute autre lecture de config (étape 3, arbitrage C8).
+  assertProductionSecretsNotPublic();
+  // L'observabilité s'assemble AVANT tout trafic : murs armés sans DSN = un
+  // déploiement aveugle, refusé (C2). Dev sans DSN : coupée, simplement.
+  initObservability(assembleObservabilityFromEnv());
+  const assembly = assembleApiFromEnv();
+  const authConfig = assembleAuthFromEnv();
+  // Les QUATRE trousseaux d'un bloc : violations listées d'un coup, et la
+  // non-collision de valeur vérifiée sur toutes les paires (dette ②).
+  const cryptoConfig = assembleKeyringsFromEnv();
+  const phoneConfig = assemblePhoneConfig();
+  // Les aiguilleurs de confiance : sous murs armés, la liste se DÉCLARE (NONE ou
+  // des adresses) ou le boot est refusé — trop peu de confiance fait un plafond
+  // global, trop en fait un plafond que tout client contourne.
+  const trustedProxies = assembleTrustedProxiesFromEnv();
+  // L'adresse d'écoute : sous murs armés, elle se DÉCLARE ou le boot est refusé —
+  // écouter partout par oubli exposerait le port à côté de l'aiguilleur.
+  const listenHost = assembleListenHostFromEnv();
+
+  // Refus de booter sous un autre rôle que le rôle bridé — AVANT tout trafic.
+  await assertBridledRole(assembly.pool);
+  // Refus de booter si le trousseau d'empreinte du service diverge de la
+  // référence gravée en base : sinon chaque déclaration de numéro serait
+  // rejetée en production, une à une, sans cause visible.
+  await assertFingerprintKeyAligned(assembly.pool, cryptoConfig);
+
+  const accountWiring = await assembleAccountWiring(assembly, authConfig, cryptoConfig, phoneConfig);
+  const programWiring = assembleProgramWiring(assembly, authConfig, cryptoConfig);
+  // Le point unique de l'adresse cliente. Ses deux signaux d'aiguilleur mal déclaré
+  // (A3, A3bis) partent vers l'observabilité, sans aucune adresse.
+  const clientAddress = new ClientAddress({
+    trust: trustedProxies.trust,
+    armed: trustedProxies.armed,
+    signal: reportClientAddressSignal,
+  });
+
+  const app = await createApiApplication(
+    AppModule.register(assembly, { ...accountWiring, ...programWiring, clientAddress }),
   );
 
   // Toute exception INATTENDUE part vers l'observabilité (les refus HTTP
@@ -218,7 +265,11 @@ async function bootstrap(): Promise<void> {
   process.once('SIGTERM', () => void shutdown());
   process.once('SIGINT', () => void shutdown());
 
-  await app.listen(assembly.port);
+  if (listenHost.host === undefined) {
+    await app.listen(assembly.port);
+  } else {
+    await app.listen(assembly.port, listenHost.host);
+  }
 }
 
 bootstrap().catch((err: unknown) => {

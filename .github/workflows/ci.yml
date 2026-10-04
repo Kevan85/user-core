@@ -250,6 +250,33 @@ jobs:
           fi
           echo "OK : toute doublure assemblée passe par le mur (motif I)"
 
+  garde-adresse-cliente-unique:
+    name: "Garde motif J : UN SEUL point de lecture de l'adresse cliente"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: L'adresse cliente ne se lit que dans src/client-address/client-address.ts
+        # Derrière un aiguilleur, l'adresse de la socket est la SIENNE pour tous
+        # les clients : un plafond par adresse lu ailleurs qu'au point unique
+        # redevient un plafond GLOBAL, ou un plafond que tout client contourne en
+        # écrivant l'en-tête de son choix. Le point unique est le SEUL chemin
+        # exclu, et il contient lui-même 'proxy-addr' : déplacé hors de
+        # l'exclusion, il devient son propre contrevenant.
+        # Hors du point unique, AUCUN identifiant ip, ips ni forwarded : le nom
+        # maison est clientIp. Insensible à la casse (req.get('X-Forwarded-For')
+        # mord) ; les noms d'en-tête ne mordent qu'entre guillemets, pour que la
+        # prose de doctrine vive. scripts/ est dans le périmètre : un script
+        # d'exploitation est un chemin d'appel.
+        # Ne fait pas : une déstructuration sur plusieurs lignes, Reflect.get et
+        # tout accès dynamique, un nom d'en-tête assemblé à l'exécution.
+        run: |
+          if git grep -rniE "\bremoteAddress\b|['\"](x-forwarded-for|forwarded|x-real-ip)['\"]|\.(ips?|forwarded)\b|\[\s*['\"]ips?['\"]\s*\]|[{,]\s*(ips?|forwarded)\s*[,}:]|@Ip\(|['\"]trust proxy['\"]|['\"]proxy-addr['\"]" -- src/ scripts/ \
+               ':!src/client-address/client-address.ts'; then
+            echo "ÉCHEC : adresse cliente lue hors du point unique (motif J) — passer par ClientAddress.of()"
+            exit 1
+          fi
+          echo "OK : un seul point de lecture de l'adresse cliente (motif J)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
