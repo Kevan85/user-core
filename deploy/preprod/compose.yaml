@@ -1,0 +1,124 @@
+# User-Core — la PRÉ-PRODUCTION, sur le serveur partagé avec Scolaria
+# (lot déploiement, étape 3 ; docs/ops/DEPLOIEMENT.md §6 et §7).
+#
+# 🔴 CE SERVEUR PORTE LA PRODUCTION DE SCOLARIA. Toute commande porte
+#    « -p user-core-preprod -f deploy/preprod/compose.yaml ». Aucune commande docker
+#    globale (prune, suppression de tous les conteneurs), aucune retouche du démon :
+#    les limites de journaux et de mémoire vivent ICI, service par service.
+#
+# 🔴 AUCUNE DONNÉE PERSONNELLE RÉELLE, numéros des testeurs compris (C6) : le jour où une
+#    vraie donnée entre, ce n'est plus une pré-production.
+#
+# Aucune valeur secrète dans ce fichier. Les secrets naissent SUR le serveur, dans deux
+# fichiers hors dépôt (600, root), écrits par deploy/preprod/generate-secrets.sh :
+#   - admin.env   → Postgres et migrate SEULEMENT (le propriétaire de la base) ;
+#   - service.env → l'API et le worker (le rôle bridé, les trousseaux, le DSN).
+# L'API et le worker ne lisent jamais admin.env. Le répertoire par défaut est celui du
+# serveur ; une répétition sur un poste le désigne par USER_CORE_PREPROD_SECRETS_DIR.
+#
+# Une image, trois usages : construite par le service api (« build api »), reprise telle
+# quelle par migrate et worker, qui ne la tirent jamais d'un registre.
+
+name: user-core-preprod
+
+x-journaux: &journaux
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-node: &node
+  image: user-core-preprod:local
+  networks: [user-core]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging: *journaux
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    # Épinglée par empreinte, relevée le 04/10/2026 à 16:21 (15.19) — la même version
+    # majeure que la CI (« Tests d'invariants (Postgres 15 réel) »).
+    image: postgres:15@sha256:724292da1f2e50bdccfc3302ce75bbba7f4a6076701b588cc795fcac65683550
+    restart: unless-stopped
+    env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/admin.env"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    networks: [user-core]
+    # AUCUN port publié, même sur 127.0.0.1 : l'API et le worker la joignent par le réseau
+    # du compose, l'exploitation passe par « run --rm migrate » et « exec -T postgres ».
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    memswap_limit: 512m
+    logging: *journaux
+
+  # L'outil des migrations, lancé à la demande — jamais par « up » (profil « outil ») :
+  #   docker compose -p user-core-preprod -f deploy/preprod/compose.yaml run --rm migrate
+  # Le service ne migre jamais au démarrage (DEPLOIEMENT.md §1).
+  migrate:
+    <<: *node
+    pull_policy: never
+    profiles: [outil]
+    restart: "no"
+    command: ["node", "dist/scripts/migrate.js"]
+    env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/admin.env"]
+    mem_limit: 256m
+    memswap_limit: 256m
+
+  api:
+    <<: *node
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/src/main.js"]
+    env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/service.env"]
+    environment:
+      PORT: "3000"
+      # En conteneur : toutes les interfaces DU CONTENEUR ; la restriction est la
+      # publication sur la boucle locale de l'hôte, ci-dessous (DEPLOIEMENT.md §6.3).
+      USER_CORE_LISTEN_HOST: "0.0.0.0"
+      # La PASSERELLE du réseau figé ci-dessous — nginx joint le port publié et le
+      # conteneur le voit arriver d'elle, jamais de 127.0.0.1. ⚠️ Une valeur à MESURER
+      # sur le serveur (conteneur d'écho, étape 3) puis à PROUVER (deux sources, deux
+      # budgets, DEPLOIEMENT.md §6.4) : si la mesure diffère, on s'arrête.
+      USER_CORE_TRUSTED_PROXIES: "172.30.0.1"
+      # Les deux coutures n'ont qu'un simulateur : ce serveur n'envoie RIEN pour de vrai.
+      # Retirer une couture de cette liste EST l'acte de passage en production (§2bis).
+      USER_CORE_SIMULATED_SEAMS: "PROVING,DISPATCH"
+    ports:
+      # 127.0.0.1 OBLIGATOIRE : un port publié par Docker contourne UFW (§6.2).
+      - "127.0.0.1:3100:3000"
+    mem_limit: 512m
+    memswap_limit: 512m
+
+  worker:
+    <<: *node
+    pull_policy: never
+    restart: unless-stopped
+    command: ["node", "dist/src/worker.js"]
+    env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/service.env"]
+    environment:
+      USER_CORE_SIMULATED_SEAMS: "PROVING,DISPATCH"
+    mem_limit: 256m
+    memswap_limit: 256m
+
+networks:
+  user-core:
+    # Sous-réseau et passerelle FIGÉS : recréé sans eux, le réseau en tirerait d'autres et
+    # la déclaration de l'aiguilleur mentirait (DEPLOIEMENT.md §6.3). Proposition à
+    # vérifier sans chevauchement sur le serveur (étape 0).
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+
+volumes:
+  # Gardé par « down » ; le supprimer est une décision à part (DEPLOIEMENT.md §7).
+  pgdata:
