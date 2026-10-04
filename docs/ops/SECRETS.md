@@ -91,10 +91,14 @@ Le service **refuse de démarrer** si :
 3. deux clés de trousseau partagent une valeur, ou un trousseau manque (dette ②) ;
 4. la clé d'empreinte active diverge de la référence gravée en base
    (`assertFingerprintKeyAligned`, fail-closed P0112) ;
-5. **`NODE_ENV=production` et un secret porte une valeur publiée par `.env.example`**
-   (mur C8, étape 3) : le fichier versionné est public par construction — égalité sur les
-   noms à signature de secret, recherche en sous-chaîne pour les mots de passe d'URL,
-   et refus fail-closed si `.env.example` est illisible en production ;
+5. murs armés, **un secret porte une valeur publiée par `.env.example`** (mur C8,
+   étape 3) : le fichier versionné est public par construction — égalité sur les noms à
+   signature de secret, recherche en sous-chaîne pour les mots de passe d'URL, et refus
+   fail-closed si `.env.example` est illisible sous murs armés. *(Corrigé le 04/10/2026 :
+   cette ligne disait « `NODE_ENV=production` », formulation périmée depuis F1 — le mur
+   s'arme sur `productionWallsArmed()`, et l'absence de `NODE_ENV` est justement le cas
+   d'un déploiement réel ou d'une pré-production. `457047b`, le 29/07/2026, n'avait
+   corrigé que le §4.)* ;
 6. murs armés, **le transport Sentry ne s'est pas armé après `init()`** (G1, étape 6) :
    la vérité se demande au SDK, jamais à la présence du DSN — un DSN illisible ferait
    partir le service aveugle en croyant être surveillé ;
