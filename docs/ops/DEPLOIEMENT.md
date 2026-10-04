@@ -330,6 +330,14 @@ jamais le poste et n'entre dans aucun dépôt ; la ligne publique porte le comme
 Kevin, à poser cette clé : un seul ajout, vérifié (une ligne de plus ; empreinte sha256 de la
 partie existante identique avant et après). Ensuite, il n'est plus jamais utilisé.
 
+**La pose passe par `deploy/preprod/add-authorized-key.sh`**, joué côté serveur depuis son
+BLOB (`git show <SHA>:…`, jamais la copie de travail, qui peut être en CRLF), la ligne
+publique sur l'entrée standard. Le script refuse si sshd ne lit pas `.ssh/authorized_keys`.
+Il mesure AVANT : lignes, octets, sha256, droits et propriétaire. 🔴 **Il contrôle la fin de
+ligne finale d'`authorized_keys` AVANT l'ajout** : sans elle, la clé se COLLERAIT à la
+dernière clé existante — peut-être celle de Scolaria — et la casserait. Si elle manque, il
+l'ajoute. Il mesure APRÈS, et chaque contrôle est une égalité exigée.
+
 La clé n'a **pas de phrase de passe**, parce que les sessions ne sont pas interactives : **sa
 protection est celle du poste**, comme pour la clé de Scolaria. Créée sur le poste le
 04/10/2026 à 21:04, empreinte `SHA256:GwrYFevh0TQ4NYD4E9zGjzQU34VYy3Nu+PzSLGYmcBA`. Elle ne
@@ -557,7 +565,12 @@ l'équipe Scolaria part avant tout geste sur nginx.
 3. optionnel : `certbot delete --cert-name id-preprod.swoi.app` ;
 4. le DNS : côté Kevin ;
 5. vérifier ensuite que les conteneurs de Scolaria sont identiques à l'étape 0, et que
-   Scolaria répond.
+   Scolaria répond ;
+6. **la révocation de l'accès de User-Core** — une décision à part, comme le volume, et en
+   DERNIER, parce qu'après elle User-Core n'a plus aucun accès au serveur. Retirer de
+   `/root/.ssh/authorized_keys` la seule ligne qui se termine par `user-core-preprod`, en
+   vérifiant que toutes les autres lignes restent identiques. Puis, sur le poste, retirer
+   l'alias `user-core-preprod` de `~/.ssh/config` et les deux fichiers de la clé.
 
 ### 7.10 Ce que ce runbook ne prévoyait pas (i)
 
