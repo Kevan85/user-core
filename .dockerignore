@@ -1,0 +1,16 @@
+# Le contexte de construction est FERMÉ PAR DÉFAUT : rien n'y entre, sauf ce qui est
+# nommé ci-dessous. Un fichier secret posé un jour à la racine — un .env, une clé, un
+# dump — ne voyage donc jamais vers le démon de construction (leçon ⑩ : le mode
+# permissif se déclare, jamais l'inverse). Restent dehors, entre autres : .env, .git,
+# node_modules, dist, coverage, tests, docs.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!scripts/
+!db/
+!.env.example
+# Ceinture : aucun fichier d'environnement, même sous un dossier admis.
+**/.env*
+!.env.example
