@@ -365,6 +365,14 @@ l'adresse d'origine.
 | pare-feu | `ufw status verbose` | à relever à l'étape 0 |
 | tâches planifiées qui agissent sur Docker, nginx ou certbot | `crontab -l` de root et `/etc/cron.d/*`, FILTRÉS sur `docker\|nginx\|certbot` — on relève, on n'y touche pas. La procédure de Scolaria en nomme une : `docker image prune -f --filter until=24h`, qui « ne touche pas aux images taguées » (Scolaria_Api `main` @ `3845a2ff`, `docs/DEPLOYMENT_API_VPS.md` §3) | à relever à l'étape 0 |
 
+**Les relevés se jouent par `deploy/preprod/server-readings.sh`**, depuis son blob
+(`git show <SHA>:deploy/preprod/server-readings.sh | sh`). Ils ouvrent une connexion par
+relevé, par l'alias dédié, et n'écrivent rien sur le serveur. L'adresse d'origine ne
+s'affiche jamais, et un masque d'appoint couvre le cron et `daemon.json`. Le filtre de
+`nginx -T` est celui du tableau, plus les en-têtes `# configuration file`, qui disent quel
+fichier porte quoi. En plus du tableau : le shell de connexion de root, les outils de
+l'étape 3 (`openssl`, `git`…), et l'absence de `/opt/user-core`.
+
 **Arrêt et rapport** si : un port est pris, un sous-réseau chevauche `172.30.0.0/24`, le
 relais userland est inactif, la méthode de certificat diffère, la mémoire ou le disque
 manquent, l'architecture n'est pas celle attendue.
