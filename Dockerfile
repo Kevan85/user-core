@@ -15,11 +15,31 @@
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS dependances-production
 WORKDIR /app
 COPY package.json package-lock.json ./
-# --ignore-scripts : le « prepare » du dépôt appelle git, absent de cette image, et aucune
-# dépendance de production n'a besoin de son script d'installation — argon2 embarque son
-# binaire précompilé (linux-x64, glibc) et le charge au démarrage, qui le prouve : le
-# hachage de référence (C3) se calcule avant d'accepter le moindre trafic.
-RUN npm ci --omit=dev --ignore-scripts
+# --ignore-scripts : le « prepare » du dépôt appelle git, absent de cette image. Mesuré au
+# 04/10/2026 : une seule dépendance de production a un script d'installation, argon2 — elle
+# embarque son binaire précompilé (linux-x64, glibc) et le charge au démarrage, qui le
+# prouve : le hachage de référence (C3) se calcule avant d'accepter le moindre trafic.
+# CE CONSTAT EST UN MUR, PAS UNE PHRASE (C15, leçon ⑬) : la construction ÉCHOUE si les
+# paquets installés que le verrou marque « hasInstallScript » diffèrent de la liste
+# attendue, dans un sens ou dans l'autre. Sans lui, une dépendance qui télécharge ou
+# compile son binaire à l'installation serait cassée dans l'image, et rien ne rougirait
+# avant le déploiement. Un écart se TRANCHE — jamais en allongeant la liste par réflexe.
+RUN npm ci --omit=dev --ignore-scripts \
+ && node -e " \
+      const fs = require('fs'); \
+      const attendus = ['node_modules/argon2']; \
+      const installes = Object.entries(require('./package-lock.json').packages) \
+        .filter(([chemin, p]) => chemin !== '' && p.hasInstallScript === true && fs.existsSync(chemin)) \
+        .map(([chemin]) => chemin).sort(); \
+      const ecart = installes.filter((c) => !attendus.includes(c)) \
+        .concat(attendus.filter((c) => !installes.includes(c))); \
+      if (ecart.length > 0) { \
+        console.error('REFUS — paquets de production à script d’installation : ' \
+          + (installes.join(', ') || 'aucun') + ' ; attendus : ' + attendus.join(', ') \
+          + ' ; écart : ' + ecart.join(', ')); \
+        process.exit(1); \
+      } \
+      console.log('contrôle C15 : ' + installes.join(', ') + ' — conforme');"
 
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS construction
 WORKDIR /app
