@@ -1,4 +1,4 @@
-# User-Core — Contrat d'intégration des programmes (V1.2)
+# User-Core — Contrat d'intégration des programmes (V1.3)
 
 > **Ce document dit ce qu'un programme a le droit de demander à User-Core, et ce qui lui est
 > refusé pour toujours.** Il est la contrepartie du cahier des charges : le CDC dit ce que
@@ -6,7 +6,9 @@
 > Payment-Core. Rédigé le 14/07/2026 · **amendé le 21/07/2026 (V1.1) — les personnes (LOT 5)
 > et les opérations métier `/v1` : le droit d'accès porte sur la PERSONNE, pas le compte.** ·
 > **précisé le 27/09/2026 (V1.2) — la ligne 3 promettait un nom que rien ne rendait ; le refus
-> n°8 dit ce qui est tenu en base et ce qui ne l'est pas.**
+> n°8 dit ce qui est tenu en base et ce qui ne l'est pas.** ·
+> **précisé le 04/10/2026 (V1.3) — JSON seulement ; un programme appelle par le nom public,
+> jamais par le port.**
 >
 > **La règle qui gouverne tout le reste** : *Scolaria est un client externe comme un autre.*
 > Le jour où un programme obtient un privilège « juste pour cette fois », l'abstraction
@@ -22,6 +24,16 @@
   une trace d'appel. Un programme compromis se **révoque** sans toucher aux autres.
 - **Versionnement** : aucune rupture de contrat sans une nouvelle version ; une version
   dépréciée est annoncée, jamais éteinte par surprise.
+- **JSON seulement** *(précisé le 04/10/2026)* : une requête qui porte un corps l'envoie en
+  `application/json`. Un corps non vide d'un autre type reçoit **415**, sans qu'aucun champ soit
+  lu ; une requête sans corps est traitée comme un corps vide, et la route rend son propre refus si
+  elle attend des champs. Aucun formulaire, aucun envoi de fichier. Le jour où un fournisseur devra
+  rappeler User-Core en formulaire, un lecteur s'ouvrira pour **sa seule route**.
+- **Par le nom public, jamais par le port** *(précisé le 04/10/2026)* : un programme — même hébergé
+  sur la même machine — appelle User-Core par son adresse publique, à travers l'aiguilleur HTTPS.
+  Un appel direct au port du service arriverait de l'adresse de l'aiguilleur, sans en-tête : il
+  partagerait son plafond par adresse avec tout autre appelant direct (CLAUDE.md §8.6,
+  `docs/ops/DEPLOIEMENT.md` §6.5).
 - **Zéro cycle** : User-Core **n'appelle jamais** un programme de manière synchrone. S'il doit
   l'informer (compte désactivé, droit d'accès révoqué), c'est un **événement sortant signé**,
   publié via l'outbox — jamais une dépendance de User-Core vers une verticale.
