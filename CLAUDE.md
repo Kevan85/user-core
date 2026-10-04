@@ -51,6 +51,15 @@ Format des réponses de l'Auditeur : deux blocs — **« 📨 À TRANSMETTRE À 
 (copiable verbatim : Go/corrections numérotées, preuves fichier:ligne, tests exigés) +
 **« 💬 Message Kevin »** (vulgarisé non-dev, chemins absolus, jamais de jargon non expliqué).
 
+**Le protocole des blocs numérotés** (posé le 03/10/2026) : Kevin relaie les messages à la main, et
+deux se sont perdus du 27/09 au 03/10/2026 — un bloc de l'Auditeur, un rapport de l'Exécuteur.
+Chaque bloc de l'Auditeur commence par `BLOC A-AAAA-MM-JJ-n` (n = rang dans la journée) ; chaque
+rapport de l'Exécuteur commence par `RAPPORT E-AAAA-MM-JJ-n`, puis la ligne `Blocs reçus : …`.
+**Un trou dans une séquence = un bloc perdu** : on le dit avant tout le reste, on ne suppose
+jamais son contenu, et l'émetteur le redit. *(Éprouvé dès sa première journée : le rapport
+`E-2026-10-03-1` s'est perdu, a été déclaré, puis redit.)* Le bon réflexe existait déjà — mais une
+discipline ne tient que si elle est mécanique (leçon ①).
+
 **Calibrage de la sévérité** (un auditeur qui crie au loup perd le pouvoir de signaler un
 vrai incendie) : 🔴 = sécurité, argent ou intégrité d'un registre en jeu **et c'est DÉMONTRÉ**
 (fichier:ligne, scénario reproductible) · 🟠 = défaut réel, conséquence bornée · 📌 =
@@ -179,15 +188,34 @@ check REQUIS depuis le 10/09/2026), périmètre `src/` SEULEMENT :** tout fichie
 importe depuis un chemin `simulator/` (apostrophes
 simples **ou** guillemets doubles ; import statique, dynamique ou `require`) doit appeler
 `declareSimulatedSeam` (`src/bootstrap/simulation.ts`). C'est le **premier motif de PRÉSENCE** —
-les huit autres exigent zéro ligne. Il vérifie **d'abord** que la fonction de mur existe encore à
+les autres exigent zéro ligne. Il vérifie **d'abord** que la fonction de mur existe encore à
 son emplacement : renommée, déplacée ou supprimée, **le motif rougit et force sa propre mise à
 jour** — il ne passe jamais en silence en cherchant un nom mort. `tests/` est hors périmètre : les
 simulateurs sont leur métier.
 
-Les huit premiers motifs doivent retourner **zéro ligne** (hors exemples `metadata`), le motif I
-exige une **présence** ; sinon la CI échoue. **Ils sont NEUF** — A, B, D, E, F, G, H, I et
-l'anti-abonnement de §3.8 — joués par `tools/check-guards.sh`, et **tous les neuf sont des checks
-REQUIS** de `main` (§4).
+**Motif J — UN SEUL point de lecture de l'adresse cliente (lot déploiement ; posé le 03/10/2026,
+check REQUIS depuis le 04/10/2026), périmètre `src/ scripts/`, INSENSIBLE à la casse :**
+```
+git grep -rniE "\bremoteAddress\b|['\"](x-forwarded-for|forwarded|x-real-ip)['\"]|\.(ips?|forwarded)\b|\[\s*['\"]ips?['\"]\s*\]|[{,]\s*(ips?|forwarded)\s*[,}:]|@Ip\(|['\"]trust proxy['\"]|['\"]proxy-addr['\"]" -- src/ scripts/ ':!src/client-address/client-address.ts'
+```
+
+Les motifs A, B, D, E, F, G, H, J et l'anti-abonnement de §3.8 doivent retourner **zéro ligne**
+(hors exemples `metadata`), le motif I exige une **présence** ; sinon la CI échoue. **Ils sont
+DIX**, joués par `tools/check-guards.sh`, et **tous les dix sont des checks REQUIS** de `main`
+(§4) — douze checks requis en tout avec le lint et les tests d'invariants (protection relue à la
+source le 04/10/2026).
+
+⚠️ **DETTE NOMMÉE (04/10/2026) — une garde qui PLANTE passe au VERT.** Les neuf gardes à zéro ligne
+ont la forme `if git grep …; then ÉCHEC; else OK` (`run_guard` dans `tools/check-guards.sh`, et
+chacun de leurs jobs CI) : si `git grep` échoue — motif invalide, chemin refusé, sortie 128 —, la
+garde affiche **OK**. Démontré le 04/10/2026 avec la forme exacte de `run_guard` et une parenthèse
+non fermée (« fatal: … Unmatched ( », puis « OK ») ; vécu une fois par l'Exécuteur pendant une
+preuve, et vu seulement parce qu'il lisait le code de sortie. **Aucune exposition au 04/10/2026** :
+chaque motif est valide et a déjà été vu rougir. Mais une faute de frappe dans une retouche
+désarmerait la garde **en silence** — une forme de plus de la leçon ② : une garde peut échouer sans
+rougir. **Remède au lot du mécanisme des règles de structure (R7, « incalculable = rouge »)** :
+0 = échec, 1 = OK, toute autre sortie = échec qui le dit, et un cas « motif invalide ⇒ rouge »
+dans l'auto-test. **Si un motif doit changer avant ce lot, ce remède passe d'abord.**
 
 ⚠️ **Pourquoi le motif F existe** — c'est la leçon la plus dure du dépôt. `phone_hmac` (qui
 verrouille la ligne) et `phone_encrypted` (qu'on appellera) peuvent **mentir l'un sur l'autre** :
@@ -225,6 +253,25 @@ empêche qu'un **troisième point d'assemblage** naisse sans lui — exactement 
 est morte (leçon ①). Et il couvre ce qu'**aucun test ne couvre** : les tests prouvent la fonction,
 pas le **câblage** — retirer l'appel de `main.ts` ne fait rougir que le motif.
 
+⚠️ **Pourquoi le motif J existe — le motif F, une quatrième fois, sur l'ADRESSE CLIENTE.** Derrière
+un aiguilleur (le relais HTTPS placé devant le service), l'adresse de la socket est la SIENNE pour
+tous les clients. Mesuré le 27/09/2026 : quatre sites lisaient `req.socket.remoteAddress`, et avec
+`.env.example` les plafonds par adresse devenaient **GLOBAUX** — 5 inscriptions par heure pour le
+monde entier ; le correctif naïf (`trust proxy` sans liste) en aurait fait des plafonds que tout
+client contourne en écrivant l'en-tête de son choix. Le point unique
+(`src/client-address/client-address.ts`, §8.6) résout l'adresse par la référence, sur une liste
+DÉCLARÉE ; le motif J empêche un cinquième site de naître hors de lui — et le germe existe :
+`emancipation.service.ts` exige une adresse cliente, porte fermée par `031`. **Fermé par
+construction** : le point unique contient lui-même `'proxy-addr'` ; déplacé hors de l'exclusion,
+il devient son propre contrevenant. **Hors du point unique, aucun identifiant `ip`, `ips` ni
+`forwarded`** : le nom maison est `clientIp`. Les noms d'en-tête ne mordent qu'**entre
+guillemets**, pour que la prose de doctrine vive (« l'en-tête X-Forwarded-For »).
+📌 **Ce que le motif J ne fait PAS** : une déstructuration écrite sur plusieurs lignes (`git grep`
+lit des lignes), `Reflect.get` et tout accès dynamique, un nom d'en-tête assemblé à l'exécution,
+une bibliothèque tierce dont le nom n'est pas listé. *(La forme d'abord proposée laissait passer
+`const { ip } = req`, `req.headers.forwarded` et `req['ip']` ; l'extension a été testée sur onze
+formes, sous Windows ET sous Linux, avant gravure — leçon ⑦.)*
+
 ⚠️ **Pourquoi le motif D est sensible à la casse** (arbitrage tranché le 14/07/2026, contre la
 forme d'abord demandée par l'Auditeur — l'Exécuteur a refusé **avec preuve**, et il avait
 raison) : la forme insensible à la casse ne matchait **que des commentaires de doctrine** —
@@ -255,7 +302,9 @@ discutent pas) : les mots-clés SQL s'écrivent en **MAJUSCULES** (`ORDER BY`, j
 vit dans « **cart**e SIM » et « é**cart** » ; `order` vit dans « acc**order** » ; et `tenant` vit
 dans « main**tenant** » — celui-là a mordu au LOT effacement, sur la phrase même qui énonce le
 choix de Kevin (« ma décision s'applique **maintenant** » → reformulée en « tout de suite »).
-**Cinq fois déjà**, la garde a rougi sur de la prose parfaitement légitime. **La réponse est
+**Six fois déjà** — sept morsures en tout, dont une sur du code (ci-dessous) —, la garde a
+rougi sur de la prose parfaitement légitime ; la dernière au lot de l'aiguilleur (03/10/2026),
+sur « é**cart** ». **La réponse est
 TOUJOURS de reformuler le commentaire, JAMAIS d'affaiblir le motif** : la forme « évidente »
 `\border\b` **laisserait passer `order_id`** — en regex, `_` est un caractère de mot, donc
 `order_id` n'a pas de frontière après `order` (vérifié). On perdrait la colonne qu'on voulait
@@ -553,8 +602,8 @@ pas).
 
 ## 8. Décisions verrouillées (ne pas rouvrir sans Kevin)
 
-Voir [docs/CAHIER_DES_CHARGES.md §10](docs/CAHIER_DES_CHARGES.md) — les 13 décisions,
-notamment : construire mince derrière couture · téléphone jamais en clair · possession =
+Voir [docs/CAHIER_DES_CHARGES.md §10](docs/CAHIER_DES_CHARGES.md) — les décisions verrouillées
+(18 au 04/10/2026), notamment : construire mince derrière couture · téléphone jamais en clair · possession =
 SMS/appel uniquement · preuve fraîche gagne · jamais d'OTP de routine · un seul patron de
 session · catalogue = droit d'accès · **personnes / ayants droit dès la V1** (amendé le
 15/07/2026 — l'enfant existe comme personne de l'écosystème dès le départ, PERSONNE ≠ COMPTE).
@@ -759,6 +808,63 @@ condition**. Ce qui ne se redémontre plus :
   ici ne vit en base, et c'est structurel : Postgres n'a aucune notion du processus qui s'y
   connecte ni du fournisseur qu'il appelle.
 
+### 8.6 Ce que le lot DÉPLOIEMENT a gravé — étape 2, l'aiguilleur de confiance (fabriqué du 27/09 au 04/10/2026, livré le 04/10/2026 — PR #42)
+
+Le service écoute en HTTP ; HTTPS viendra d'un aiguilleur (nginx) placé devant lui. Ce qui ne se
+redémontre plus :
+
+- **Derrière un aiguilleur, l'adresse cliente ne se lit qu'au POINT UNIQUE**
+  (`src/client-address/client-address.ts`, motif J). Défaut fermé (🟠, trouvé par l'Auditeur le
+  27/09/2026) : quatre sites lisaient la socket, et les plafonds par adresse devenaient globaux —
+  5 inscriptions par heure pour le monde entier avec `.env.example`. 3ᵉ instance de la leçon ⑬ :
+  `auth.controller.ts` nommait le cas sans mur. Le calcul est confié à la référence (`proxy-addr`,
+  celle d'Express), **épinglée exacte en 2.0.8** : la 2.0.7 croyait des IPv4 publiques depuis une
+  déclaration purement IPv6 (CVE-2026-90711) — épinglage de l'Exécuteur **contre** l'arbitrage
+  validé, preuve à l'appui.
+- **La liste des aiguilleurs se DÉCLARE** (`USER_CORE_TRUSTED_PROXIES`, mur de démarrage n°8) :
+  sous murs armés, absente ou vide ⇒ boot refusé ; **`NONE` est un acte, le vide n'en est pas
+  un** ; notation canonique seulement — « 1 », l'habitude Express d'un saut, se lirait 0.0.0.1 ;
+  un détecteur de largeur refuse une liste qui croirait une moitié d'Internet. C'est un détecteur
+  de fumée : une plage étroite mais fausse passe, et seule la vérification après déploiement
+  prouve la liste.
+- **La SURFACE est un paramètre OBLIGATOIRE** (`PUBLIC` / `PROGRAM`). Les signaux d'aiguilleur
+  mal déclaré (A3, A3bis) ne parlent que sur les sites publics et sous murs armés : sur
+  `/v1/token`, un programme co-hébergé arrive légitimement sans en-tête, et **un détecteur qui
+  crie sur le sain finit assoupli** (§3.14bis ②). Le signal tient dans le NOM d'erreur : le
+  filtre Sentry ne garde que lui.
+- **L'adresse d'écoute se DÉCLARE** (`USER_CORE_LISTEN_HOST`, mur n°9), un littéral IP seulement —
+  et **pas `HOST`** : un nom générique arrive hérité du shell ou de la plateforme, et satisferait
+  le mur sans que personne l'ait déclaré (leçon ⑩).
+- **JSON SEULEMENT** (`src/bootstrap/api-application.ts`, la fabrique unique de `main.ts` et des
+  tests) : un corps non JSON reçoit 415 sans être lu ; une requête sans corps reçoit `{}`.
+  **Avant, un client anonyme fabriquait des 500 à volonté** (`text/plain`, requête sans corps),
+  chacun une exception « inattendue » vers l'observabilité — trouvé par l'Exécuteur dans du code
+  vert. NestJS installe ses lecteurs dans `init()`, APRÈS la règle de bord : seul un test
+  **structurel** voit un lecteur de formulaires revenir.
+- **`/v1/token` compte UN budget par adresse.** Depuis le 15/07/2026, l'assertion difforme avait
+  son propre compteur : 60 essais par minute passaient au lieu de 30 — trouvé par l'Exécuteur en
+  écrivant les tests.
+- **Les preuves de câblage** : le premier test de démarrage du dépôt (le vrai `main.ts`, un
+  environnement CONSTRUIT, jamais hérité) ; des tests HTTP à travers la fabrique de production,
+  qui écoute sans hôte comme `main.ts` (un client IPv4 y arrive en `::ffff:127.0.0.1`, la forme
+  qui trompait le patron de payment-core) ; un démarrage qui prouve que `main.ts` BRANCHE la
+  déclaration. ⚠️ **Limites nommées** : `armed` et `signal` ne sont prouvés par aucun test (armer
+  le vrai `main.ts` exige tous les murs de production) ; le harnais HTTP **recopie** le câblage
+  des services — il passe dans un module importable le jour où un deuxième point d'entrée
+  assemble les mêmes services.
+- **Deux vérifications BLOQUANTES avant d'ouvrir le trafic** (`docs/ops/DEPLOIEMENT.md` §6.4) :
+  deux sources différentes ⇒ deux budgets ; le port du service injoignable de l'extérieur. En
+  conteneur, l'aiguilleur arrive depuis la **passerelle** Docker, jamais `127.0.0.1` : elle se
+  MESURE sur le serveur.
+- **11ᵉ garde mécanique : le motif J** (§3.7), check REQUIS n°12 depuis le 04/10/2026.
+- **Ce que le lot NE fait PAS** (leçon ⑫ ; détail au `DEPLOIEMENT.md` §6.5) : rien n'est
+  déployé · un aiguilleur qui retransmet l'en-tête du client tel quel rend la dernière entrée
+  forgeable, et aucun code ne peut le voir · le partage d'adresse des opérateurs mobiles (CGNAT)
+  reste une inconnue de terrain : les seuils sont des paramètres · sur un serveur partagé, croire
+  la boucle locale ou une passerelle revient à croire tout programme du serveur · les compteurs
+  vivent en mémoire, par processus · **la machine de la production n'est pas décidée** (`R` est un
+  critère de choix d'hébergeur, CDC §9 n°5).
+
 ## 9. Où est quoi
 
 ```
@@ -775,7 +881,8 @@ user-core/
 │       ├── ROTATION.md          ← une procédure par trousseau ; rotation = redéploiement
 │       ├── SAUVEGARDES.md       ← R appartient à Kevin ; « effacé » = « effacé à J+R » ;
 │       │                           dump + trousseau HMAC = toute la base
-│       ├── DEPLOIEMENT.md       ← migrations PUIS boot ; le service ne migre jamais au démarrage
+│       ├── DEPLOIEMENT.md       ← migrations PUIS boot ; le service ne migre jamais au démarrage ;
+│       │                           l'aiguilleur et l'écoute (§6) : deux vérifications BLOQUANTES
 │       ├── INCIDENT.md          ← fuite de PII, compromission de clé, révocation, restauration
 │       │                           (dont : une restauration RÉ-INTRODUIT des effacés)
 │       └── EFFACEMENT.md        ← le circuit, les deux compteurs du worker, et le TABLEAU DES
@@ -908,7 +1015,10 @@ la personne poserait SON secret sur son dos dès que le compte meurt* » — pui
 variante d'à côté** (l'absence de code), en laissant ouverte celle qu'il venait de décrire.
 **Un commentaire qui nomme un risque donne au lecteur suivant le sentiment que le risque est
 traité.** *(Deuxième instance, mesurée le 21/08/2026 : `worker.ts` disait « le dispatcher de
-simulation tant qu'aucun fournisseur réel n'est branché » — sans mur, §8.5.)* Devant toute preuve,
+simulation tant qu'aucun fournisseur réel n'est branché » — sans mur, §8.5. Troisième, mesurée
+le 27/09/2026 : `auth.controller.ts` disait « le jour d'un reverse proxy, le patron payment-core
+(liste d'IP de confiance en config) s'applique — jamais un x-forwarded-for cru » — sans mur non
+plus : derrière l'aiguilleur, les plafonds devenaient globaux, §8.6.)* Devant toute preuve,
 demander : **QUEL FAIT exactement établit-elle — et est-ce celui dont le mur a besoin ?** *(Corollaire : un identifiant conçu pour être **dicté au guichet** est
 une DÉSIGNATION ; l'employer comme seule désignation d'une cible dans un acte **irréversible**
 transforme une commodité de guichet en surface d'attaque.)*
@@ -938,6 +1048,13 @@ rougir. La parade est un test qui **prouve le mur POUR LUI-MÊME** (`permission 
 bridé), et elle a été écrite **sans qu'on la demande**. **Devant toute protection, demander :
 quel test rougirait si je la retirais ce soir ?** Si la réponse est « aucun », elle n'est pas
 protégée — elle est seulement présente.
+📌 **Et un test doit prouver qu'il a TRAVERSÉ ce qu'il regarde** *(03/10/2026)*. Le test de surface
+vérifie qu'une requête sur `/v1/token` ne lève **aucun** signal — mais le refus d'avant le point
+unique (assertion absente) est lui aussi un 401 : « aucun signal » était vrai même pour une requête
+arrêtée avant lui. Le remède de l'Auditeur (envoyer une assertion non vide) rendait le test juste
+**aujourd'hui** ; celui de l'Exécuteur le rend juste **à chaque exécution** : budget + 1 requêtes,
+et un 429 exigé — le compteur qui refuse est clé par le résultat du point unique, donc la requête
+l'a traversé. **Un témoin d'absence doit porter la preuve de son passage.**
 
 **⑯ Dans `db/schema/`, un COMMENTAIRE est aussi IMMUABLE que le SQL — et la leçon ⑤ n'y a pas de
 remède.** ⑤ ordonne : *quand une décision change, le commentaire qui la porte change dans le même
@@ -963,3 +1080,8 @@ recevoir la correction.)*
 au », « posé le », « livré le ». Une date nue entre parenthèses en porte deux possibles : le socle
 datait le motif I de sa **gravure** (10/09), les runbooks de sa **fabrication** (21/08), et les deux
 étaient vrais. **Un lecteur qui voit deux dates pour un même objet conclut à une contradiction.**
+Et **un chiffre d'audit se date à la MINUTE** *(03/10/2026)* : « 27 ou 28 paquets exigent Jest 30 »
+— les deux comptes étaient vrais, à quelques heures d'écart, parce que la base d'avis avait bougé
+entre-temps ; même la répartition par cible avait changé. L'Auditeur contestait le compte de
+l'Exécuteur avec un relevé du matin ; son recompte du soir lui a donné raison. **Une mesure
+d'audit sans heure n'est pas une mesure.**

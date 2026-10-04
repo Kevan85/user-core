@@ -484,7 +484,8 @@ paramètre (config/env), on ne fige pas une hypothèse.
       **définitive** (P0113). **Un tiers détruit sans retour le lien de tutelle d'un mineur** — le
       domaine même où « le système ne tranche pas à la place d'un juge » (§8.1).
     - 🟢 **Exposition réelle au 03/08/2026 : NULLE** — `LyingProver` est le seul implémenteur
-      (`src/main.ts:86,117`), aucun fournisseur réel n'est câblé, la bascule Scolaria n'a pas eu
+      (les deux `new LyingProver()` de `src/main.ts` — lignes 86 et 117 au 03/08/2026), aucun
+      fournisseur réel n'est câblé, la bascule Scolaria n'a pas eu
       lieu. **Dette de sécurité à solder AVANT la mise en service**, pas incident.
     - **LA DÉCISION** : la coordonnée du défi est **LUE au registre, jamais reçue de l'appelant**.
       Pour l'ayant droit — qui n'a **rien** à lire — **le responsable enregistre à l'avance la
