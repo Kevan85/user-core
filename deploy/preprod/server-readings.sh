@@ -20,9 +20,16 @@ hote=user-core-preprod
 masque='s#(://[^:/@ ]+:)[^@ ]+@#\1<masqué>@#g; s#((pass(word|phrase)?|secret|token|pwd|key)[A-Za-z_]*"?[ ]*[=: ][ ]*"?)[^ ",]+#\1<masqué>#Ig'
 
 # ssh -n : aucun relevé ne lit l'entrée standard (ce script peut arriver par un tube).
+# ARRÊT au premier échec de connexion (255) : des tentatives refusées en série pourraient
+# faire bannir l'adresse du poste — et avec elle l'accès de Scolaria depuis ce poste.
 releve() {
   printf '\n### %s\n' "$1"
   ssh -n -o BatchMode=yes "$hote" "$2"'; echo "(code de sortie côté serveur : $?)"'
+  code=$?
+  if [ "$code" -eq 255 ]; then
+    echo "ARRÊT : la connexion par l'alias dédié a échoué (code 255) — aucun autre relevé n'est tenté"
+    exit 1
+  fi
 }
 
 echo "relevés — début, heure du poste : $(date '+%Y-%m-%d %H:%M:%S %z')"
