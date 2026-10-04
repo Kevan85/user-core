@@ -27,6 +27,9 @@ x-journaux: &journaux
     max-size: "10m"
     max-file: "3"
 
+# Pas de bloc « environment » dans l'ancre : la fusion « << » est SUPERFICIELLE — mesuré le
+# 04/10/2026, le bloc d'un service REMPLACE celui de l'ancre au lieu de s'y ajouter. Une
+# variable commune (NO_COLOR) s'écrit donc dans chaque service.
 x-node: &node
   image: user-core-preprod:local
   networks: [user-core]
@@ -68,6 +71,8 @@ services:
     restart: "no"
     command: ["node", "dist/scripts/migrate.js"]
     env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/admin.env"]
+    environment:
+      NO_COLOR: "1"
     mem_limit: 256m
     memswap_limit: 256m
 
@@ -80,6 +85,8 @@ services:
     command: ["node", "dist/src/main.js"]
     env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/service.env"]
     environment:
+      # Des journaux sans codes de couleur : Nest les retire quand NO_COLOR est non vide.
+      NO_COLOR: "1"
       PORT: "3000"
       # En conteneur : toutes les interfaces DU CONTENEUR ; la restriction est la
       # publication sur la boucle locale de l'hôte, ci-dessous (DEPLOIEMENT.md §6.3).
@@ -105,6 +112,7 @@ services:
     command: ["node", "dist/src/worker.js"]
     env_file: ["${USER_CORE_PREPROD_SECRETS_DIR:-/opt/user-core/preprod/secrets}/service.env"]
     environment:
+      NO_COLOR: "1"
       USER_CORE_SIMULATED_SEAMS: "PROVING,DISPATCH"
     mem_limit: 256m
     memswap_limit: 256m
